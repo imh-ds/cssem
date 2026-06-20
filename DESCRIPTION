@@ -7,12 +7,16 @@ Authors@R: person(
     "Im",
     email = "hohjini@uci.edu",
     role = c("aut", "cre")
-)
+    )
 Description: Research implementation of the measurement foundation for CS-SEM.
     It estimates theory-declared manifestation constructs with scale-aware,
     cross-fitted construct states and reports recovery, stability, and
     measurement diagnostics. Structural and causal modeling are intentionally
-    outside version 0.1.
+    outside version 0.1. A narrow associational structural layer estimates
+    cross-validated linear or low-complexity smooth effects on locked scores;
+    it does not make causal claims.
+Imports:
+    rpart
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

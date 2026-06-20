@@ -2,9 +2,10 @@
 
 CS-SEM v0.1 is a research implementation of cross-fitted construct-state
 measurement. It estimates theory-declared, one-dimensional manifestation
-constructs from ordinal, binary, and continuous indicators. It intentionally
-does **not** fit structural paths, causal effects, formative constructs, or
-global SEM fit indices.
+constructs from ordinal, binary, and continuous indicators. Its narrow
+structural layer fits theory-declared **associational** effects on locked scores
+only; it does **not** fit causal effects, formative constructs, or global SEM
+fit indices.
 
 The public model contract is deliberately language-neutral: a construct has a
 name, ordered indicator names, scale declarations, and item keys. The R API
@@ -19,6 +20,17 @@ model <- cssem_model(list(
 fit <- cssem_fit(model, survey_data, seed = 42)
 cssem_construct_card(fit, "trust")
 ```
+
+```r
+structure <- cssem_structure(list(loyalty = "trust"))
+association <- cssem_associate(fit, structure)
+cssem_specification_gap(association)
+```
+
+Structural reports include a temporally admissible shadow benchmark and an
+unrestricted same-wave network benchmark. Positive specification gaps mean the
+declared model predicts better than the corresponding shallow-tree benchmark;
+they do not establish causal direction.
 
 See `docs/method-spec.md` for the v0.1 contract and `inst/scripts/` for the
 deterministic simulation benchmark. The benchmark reports a predeclared

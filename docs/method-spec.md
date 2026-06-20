@@ -25,4 +25,12 @@ Version 0.1 reports held-out decoder log loss/RMSE, fold stability, item
 warnings, exploratory leave-one-item-out residual dependence, and construct
 redundancy. Residual dependence is returned as a diagnostic table, not an
 automatic warning, until the simulation study calibrates its false-positive
-rate. It is a measurement method, not evidence for structural or causal claims.
+rate.
+
+The initial structural extension is deliberately associational. A
+`cssem_structure` declares which locked construct states predict each outcome;
+`cssem_associate()` cross-validates linear against low-complexity additive
+smooth effects and reports temporal and unrestricted shadow-model specification
+gaps. These effects are not causal claims and do not provide mediation,
+adjustment, or treatment-effect estimates. See
+`docs/associational-structure.md`.

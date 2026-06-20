@@ -13,6 +13,11 @@
 /*.Rcheck/
 /.Rlib/
 /local_r_lib/
+
+# Reproducible walkthrough outputs (the two sample input RDS files are tracked)
+/tests/internal/measurement_fit.rds
+/tests/internal/locked_scores.rds
+/tests/internal/associational_structure.rds
 /revdep/
 
 # Coverage, profiling, and rendered local output
