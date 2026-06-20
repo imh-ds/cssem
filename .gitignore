@@ -18,6 +18,7 @@
 /tests/internal/measurement_fit.rds
 /tests/internal/locked_scores.rds
 /tests/internal/associational_structure.rds
+/tests/internal/validation_results/
 /revdep/
 
 # Coverage, profiling, and rendered local output

@@ -34,3 +34,7 @@ smooth effects and reports temporal and unrestricted shadow-model specification
 gaps. These effects are not causal claims and do not provide mediation,
 adjustment, or treatment-effect estimates. See
 `docs/associational-structure.md`.
+
+Latent uncertainty draws are experimental simulation aids in v0.2. They are
+not calibrated confidence intervals and must not be reported as confirmatory
+uncertainty until coverage validation is complete.

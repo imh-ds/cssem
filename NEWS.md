@@ -1,3 +1,9 @@
+# cssem 0.2.0
+
+* Adds deterministic measurement and associational-structure validation suites.
+* Adds temporal and unrestricted shadow-gap release gates and a supported
+  operating-envelope report.
+
 # cssem 0.1.1
 
 * Initial research release of the CS-SEM measurement foundation.

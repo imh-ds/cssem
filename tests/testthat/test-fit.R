@@ -9,3 +9,12 @@ test_that("fit locks scores and scoring rejects schema mismatch", {
   expect_error(cssem_score(f, d[paste0("a", 4:1)]))
   expect_error(cssem_score(f, d[paste0("a", 1:3)]))
 })
+
+test_that("cross-fitting retains a rare ordinal category schema", {
+  d <- simulate_cssem_data(n = 45, seed = 12)
+  d$a1 <- 2L
+  d$a1[1] <- 1L
+  m <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), folds = 3)
+  expect_silent(f <- cssem_fit(m, d, seed = 8, iterations = 2, diagnostics = FALSE))
+  expect_true(all(is.finite(f$locked_scores$A)))
+})

@@ -26,3 +26,6 @@ the exact same simulated data, seeds, metrics, and scenario grid. Report the
 package versions, convergence failures, and all scenarios—not only favorable
 ones. The current package does not label its built-in proxy comparators as full
 DWLS CFA or production PLS-SEM.
+
+For the v0.2 measurement/structural simulation protocol and release gates, see
+`docs/validation-v02.md`.

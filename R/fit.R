@@ -37,9 +37,11 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   metric_list <- list(); stability <- numeric(length(full)); names(stability) <- names(full)
   for (nm in names(model$constructs)) {
     spec <- model$constructs[[nm]]; fold_scores <- matrix(NA_real_, n, model$folds)
+    category_levels <- Map(function(x, scale, key) .prepare_item(x, scale, key)$levels,
+      data[spec$indicators], spec$scales, spec$keys)
     for (k in seq_len(model$folds)) {
       train <- data[fold != k, spec$indicators, drop = FALSE]; test <- data[fold == k, spec$indicators, drop = FALSE]
-      enc <- .fit_encoder(train, spec, iterations); locked[fold == k, nm] <- .predict_encoder(enc, test)
+      enc <- .fit_encoder(train, spec, iterations, category_levels); locked[fold == k, nm] <- .predict_encoder(enc, test)
       fold_scores[fold == k, k] <- locked[fold == k, nm]
       metric_list[[paste(nm, k)]] <- cbind(construct = nm, fold = k, .item_metrics(enc, test))
     }

@@ -1,12 +1,12 @@
 .safe_scale <- function(x) { s <- stats::sd(x, na.rm = TRUE); if (!is.finite(s) || s == 0) 1 else s }
 
-.prepare_item <- function(x, scale, key) {
+.prepare_item <- function(x, scale, key, levels = NULL) {
   if (scale == "continuous") {
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(list(y = y, levels = NULL))
   }
   raw <- if (is.factor(x) || is.character(x)) as.integer(factor(x, ordered = TRUE)) else as.integer(x)
-  lev <- sort(unique(raw[!is.na(raw)]))
+  lev <- if (is.null(levels)) sort(unique(raw[!is.na(raw)])) else levels
   if (length(lev) < 2L) stop("Ordinal indicators need at least two observed categories.", call. = FALSE)
   y <- match(raw, lev); if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(lev) + 1L - y)
   list(y = y, levels = lev)
@@ -42,9 +42,9 @@
   c(tau[1L], log(pmax(diff(tau), .05)))
 }
 
-.ordinal_em_nll <- function(par, nodes, y, posterior, ridge = .02) {
+.ordinal_em_nll <- function(par, nodes, y, posterior, k, ridge = .02) {
   a <- exp(par[1L]); tau <- cumsum(c(par[2L], exp(par[-c(1L, 2L)])))
-  p <- .ordinal_probability(a, tau, nodes, max(y, na.rm = TRUE))
+  p <- .ordinal_probability(a, tau, nodes, k)
   keep <- !is.na(y)
   likelihood <- p[, y[keep], drop = FALSE]
   # likelihood is node x respondent; posterior is respondent x node.
@@ -64,18 +64,18 @@
   unnorm / rowSums(unnorm)
 }
 
-.fit_ordinal_mml <- function(Y, iterations = 30L, nodes = seq(-4, 4, length.out = 31L)) {
+.fit_ordinal_mml <- function(Y, k, iterations = 30L, nodes = seq(-4, 4, length.out = 31L)) {
   prior_weights <- stats::dnorm(nodes); prior_weights <- prior_weights / sum(prior_weights)
   starter <- apply(Y, 2L, function(y) (y - mean(y, na.rm = TRUE)) / .safe_scale(y))
   z <- rowMeans(starter, na.rm = TRUE); z[!is.finite(z)] <- 0; z <- as.numeric(scale(z))
-  encoders <- lapply(seq_len(ncol(Y)), function(j) .fit_ordinal(z, Y[, j]))
+  encoders <- lapply(seq_len(ncol(Y)), function(j) .fit_ordinal(z, Y[, j], k[j]))
   converged <- FALSE
   for (step in seq_len(iterations)) {
     posterior <- .eap_posterior(encoders, Y, nodes, prior_weights)
     next_encoders <- lapply(seq_along(encoders), function(j) {
       old <- encoders[[j]]; y <- Y[, j]
       start <- c(log(old$a), .threshold_parameters(old$tau))
-      opt <- stats::optim(start, .ordinal_em_nll, nodes = nodes, y = y, posterior = posterior,
+      opt <- stats::optim(start, .ordinal_em_nll, nodes = nodes, y = y, posterior = posterior, k = old$k,
         method = "BFGS", control = list(maxit = 100L))
       list(type = "ordinal", a = exp(opt$par[1L]),
         tau = cumsum(c(opt$par[2L], exp(opt$par[-c(1L, 2L)]))), k = old$k,
@@ -94,9 +94,10 @@
     converged = converged, iterations = step, estimator = "marginal_graded_response")
 }
 
-.fit_ordinal <- function(z, y) {
-  keep <- !is.na(y); yy <- y[keep]; zz <- z[keep]; k <- max(yy)
-  probs <- pmin(pmax(cumsum(tabulate(yy, k)) / length(yy), .02), .98)
+.fit_ordinal <- function(z, y, k = NULL) {
+  keep <- !is.na(y); yy <- y[keep]; zz <- z[keep]; k <- if (is.null(k)) max(yy) else k
+  counts <- tabulate(yy, k) + .5
+  probs <- pmin(pmax(cumsum(counts) / sum(counts), .02), .98)
   tau <- stats::qlogis(probs[-k])
   delta <- c(tau[1], log(pmax(diff(tau), .05)))
   opt <- stats::optim(c(log(1), delta), .ordinal_nll, z = zz, y = yy, method = "BFGS", control = list(maxit = 100))
@@ -140,11 +141,12 @@
   drop(p %*% seq_len(encoder$k))
 }
 
-.fit_encoder <- function(data, spec, iterations = 6L) {
-  items <- Map(.prepare_item, data[spec$indicators], spec$scales, spec$keys)
+.fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL) {
+  if (is.null(category_levels)) category_levels <- vector("list", length(spec$indicators))
+  items <- Map(.prepare_item, data[spec$indicators], spec$scales, spec$keys, category_levels)
   Y <- do.call(cbind, lapply(items, `[[`, "y")); colnames(Y) <- spec$indicators
   if (all(spec$scales == "ordinal")) {
-    fitted <- .fit_ordinal_mml(Y, iterations = max(8L, iterations * 2L))
+    fitted <- .fit_ordinal_mml(Y, k = vapply(items, function(x) length(x$levels), integer(1)), iterations = max(8L, iterations * 2L))
     return(c(fitted, list(indicators = spec$indicators, scales = spec$scales, keys = spec$keys,
       levels = lapply(items, `[[`, "levels"))))
   }
@@ -152,7 +154,7 @@
   z <- rowMeans(starter, na.rm = TRUE); z[!is.finite(z)] <- 0; z <- as.numeric(scale(z))
   enc <- NULL
   for (step in seq_len(iterations)) {
-    enc <- Map(function(y, sc) if (sc == "ordinal") .fit_ordinal(z, y) else .fit_continuous(z, y), as.data.frame(Y), spec$scales)
+    enc <- Map(function(y, sc, lev) if (sc == "ordinal") .fit_ordinal(z, y, length(lev)) else .fit_continuous(z, y), as.data.frame(Y), spec$scales, lapply(items, `[[`, "levels"))
     z <- .score_rows(enc, Y); z <- (z - mean(z)) / .safe_scale(z)
   }
   list(encoders = enc, indicators = spec$indicators, scales = spec$scales, keys = spec$keys,
@@ -174,7 +176,7 @@
   z <- .predict_encoder(encoder, data[, encoder$indicators, drop = FALSE])
   out <- vector("list", length(encoder$encoders))
   for (j in seq_along(out)) {
-    y <- .prepare_item(data[[encoder$indicators[j]]], encoder$scales[j], encoder$keys[j])$y; e <- encoder$encoders[[j]]
+    y <- .prepare_item(data[[encoder$indicators[j]]], encoder$scales[j], encoder$keys[j], encoder$levels[[j]])$y; e <- encoder$encoders[[j]]
     if (e$type == "continuous") out[[j]] <- data.frame(item = encoder$indicators[j], metric = "rmse", value = sqrt(mean((y - e$intercept - e$slope * z)^2, na.rm = TRUE)))
     else {
       # row-wise category probability is calculated directly to avoid recycling ambiguity
