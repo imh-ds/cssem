@@ -11,7 +11,8 @@ cssem_run_measurement_validation(
   folds = 3L,
   iterations = 8L,
   max_iterations = 16L,
-  diagnostics = FALSE
+  diagnostics = FALSE,
+  workers = 1L
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ cssem_run_measurement_validation(
 \item{max_iterations}{Retry budget used if the initial fit has not converged.}
 
 \item{diagnostics}{Whether to calculate exploratory diagnostics.}
+
+\item{workers}{Number of independent replications to run concurrently. Use
+\code{1} for sequential execution; PSOCK workers are supported on Windows.}
 }
 \value{
 A machine-readable data frame with recovery, loss, stability,

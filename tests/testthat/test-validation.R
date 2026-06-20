@@ -2,7 +2,7 @@ test_that("validation manifests are deterministic and expose required scenarios"
   measurement <- cssem_measurement_validation_manifest("screening")
   structural <- cssem_structural_validation_manifest("screening")
   expect_true(all(c("clean", "moderate_missing", "sparse_categories") %in% measurement$scenario))
-  expect_true(all(c("linear", "smooth", "interaction", "omitted", "downstream") %in% structural$scenario))
+  expect_true(all(c("linear", "smooth_subtle", "smooth_strong", "interaction", "omitted", "downstream") %in% structural$scenario))
   expect_equal(cssem_supported_envelope()$minimum_n, 200)
 })
 
@@ -19,7 +19,7 @@ test_that("release report applies the declared gap sign convention", {
     sparse = FALSE, overlap = 0, converged = TRUE, cssem_recovery = .90, ordinal_factor_proxy_recovery = .90, composite_proxy_recovery = .90)
   structural <- rbind(
     data.frame(scenario = "linear", outcome = "Quality", selected_shape = "linear", temporal_gap = 0, unrestricted_minus_temporal = 0),
-    data.frame(scenario = "smooth", outcome = "Quality", selected_shape = "smooth", temporal_gap = 0, unrestricted_minus_temporal = 0),
+    data.frame(scenario = "smooth_strong", outcome = "Quality", selected_shape = "smooth_df3", temporal_gap = 0, unrestricted_minus_temporal = 0),
     data.frame(scenario = "omitted", outcome = "Quality", selected_shape = "linear", temporal_gap = -.04, unrestricted_minus_temporal = 0),
     data.frame(scenario = "downstream", outcome = "Quality", selected_shape = "linear", temporal_gap = 0, unrestricted_minus_temporal = -.04)
   )

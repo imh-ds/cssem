@@ -4,7 +4,11 @@
 the measurement fit's locked construct states. For each declared outcome it
 compares an additive linear model with a low-complexity additive natural-spline
 model using structural-fold cross-validation. A smooth model is used only when
-it improves cross-validated RMSE by the declared minimum gain.
+its average paired foldwise loss improvement exceeds one cross-fold standard
+error. This replaces a fixed RMSE cutoff and makes shape selection responsive
+to validation uncertainty. The default candidate library is linear plus
+natural splines with 3 and 4 degrees of freedom; CS-SEM reports the chosen
+smooth candidate and its foldwise improvement uncertainty.
 
 The output is explicitly **associational**. It estimates neither causal effects
 nor mediation, adjustment, endogeneity correction, heterogeneous treatment

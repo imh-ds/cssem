@@ -54,6 +54,41 @@
   list(fit = fit, converged = converged, attempts = attempts)
 }
 
+.validation_map <- function(jobs, fun, workers) {
+  workers <- as.integer(workers)
+  if (is.na(workers) || workers < 1L) stop("workers must be a positive integer.", call. = FALSE)
+  if (workers == 1L || length(jobs) == 1L) return(lapply(jobs, fun))
+  workers <- min(workers, length(jobs))
+  cluster <- parallel::makePSOCKcluster(workers)
+  on.exit(parallel::stopCluster(cluster), add = TRUE)
+  parallel::clusterEvalQ(cluster, suppressPackageStartupMessages(library(cssem)))
+  parallel::parLapply(cluster, jobs, fun)
+}
+
+.measurement_validation_one <- function(job) {
+  setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
+  data <- .measurement_validation_data(setting$n, setting$loading, setting$missing,
+    setting$local_dependence, setting$cross_loading, setting$overlap, setting$sparse, job$seed)
+  truth <- attr(data, "truth")
+  model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
+    B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = job$folds)
+  elapsed <- system.time(validation_fit <- .validation_fit(model, data, job$seed, job$folds, job$iterations, job$max_iterations, job$diagnostics))["elapsed"]
+  fit <- validation_fit$fit
+  proxy <- .proxy_recovery(data, truth)
+  residual_max <- if (nrow(fit$residual_dependence)) max(abs(fit$residual_dependence$residual_correlation), na.rm = TRUE) else NA_real_
+  cbind(data.frame(scenario = setting$scenario, replication = job$replication), setting[, setdiff(names(setting), "scenario"), drop = FALSE],
+    data.frame(cssem_recovery = mean(abs(diag(stats::cor(fit$locked_scores, truth)))),
+      ordinal_factor_proxy_recovery = proxy[["ordinal_factor_proxy"]], composite_proxy_recovery = proxy[["composite_proxy"]],
+      held_out_loss = mean(fit$item_metrics$value), stability = mean(fit$stability),
+      converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
+      runtime_seconds = unname(elapsed), automatic_warning_count = nrow(fit$warnings),
+      sparse_warning_detected = any(fit$warnings$type == "sparse_category"), residual_dependence_max = residual_max,
+      diagnostic_true_positive = isTRUE(setting$sparse) && any(fit$warnings$type == "sparse_category"),
+      diagnostic_false_positive = !isTRUE(setting$sparse) && nrow(fit$warnings) > 0L,
+      diagnostic_status = if (job$diagnostics) "exploratory" else "not_run",
+      worker_pid = Sys.getpid(), stringsAsFactors = FALSE))
+}
+
 #' Return the v0.2 supported operating envelope
 #'
 #' @return A one-row data frame describing the initial supported conditions.
@@ -106,6 +141,8 @@ cssem_measurement_validation_manifest <- function(tier = c("screening", "full"))
 #' @param iterations Marginal-IRT iterations per fit.
 #' @param max_iterations Retry budget used if the initial fit has not converged.
 #' @param diagnostics Whether to calculate exploratory diagnostics.
+#' @param workers Number of independent replications to run concurrently. Use
+#'   `1` for sequential execution; PSOCK workers are supported on Windows.
 #' @return A machine-readable data frame with recovery, loss, stability,
 #'   convergence, runtime, and diagnostic metrics.
 #' @examples
@@ -115,41 +152,27 @@ cssem_measurement_validation_manifest <- function(tier = c("screening", "full"))
 #' @export
 cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
                                              folds = 3L, iterations = 8L,
-                                             max_iterations = 16L, diagnostics = FALSE) {
+                                             max_iterations = 16L, diagnostics = FALSE,
+                                             workers = 1L) {
   required <- c("scenario", "n", "loading", "missing", "local_dependence", "cross_loading", "overlap", "sparse")
   if (!is.data.frame(manifest) || !all(required %in% names(manifest))) stop("manifest is missing required measurement scenario columns.", call. = FALSE)
-  rows <- vector("list", nrow(manifest) * reps); index <- 0L
+  jobs <- vector("list", nrow(manifest) * reps); index <- 0L
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {
-    index <- index + 1L; setting <- manifest[scenario_index, ]
-    data <- .measurement_validation_data(setting$n, setting$loading, setting$missing,
-      setting$local_dependence, setting$cross_loading, setting$overlap, setting$sparse, seed + index)
-    truth <- attr(data, "truth")
-    model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
-      B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = folds)
-    elapsed <- system.time(validation_fit <- .validation_fit(model, data, seed + index, folds, iterations, max_iterations, diagnostics))["elapsed"]
-    fit <- validation_fit$fit
-    proxy <- .proxy_recovery(data, truth)
-    residual_max <- if (nrow(fit$residual_dependence)) max(abs(fit$residual_dependence$residual_correlation), na.rm = TRUE) else NA_real_
-    rows[[index]] <- cbind(data.frame(scenario = setting$scenario, replication = replication), setting[, setdiff(names(setting), "scenario"), drop = FALSE],
-      data.frame(cssem_recovery = mean(abs(diag(stats::cor(fit$locked_scores, truth)))),
-        ordinal_factor_proxy_recovery = proxy[["ordinal_factor_proxy"]], composite_proxy_recovery = proxy[["composite_proxy"]],
-        held_out_loss = mean(fit$item_metrics$value), stability = mean(fit$stability),
-        converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
-        runtime_seconds = unname(elapsed), automatic_warning_count = nrow(fit$warnings),
-        sparse_warning_detected = any(fit$warnings$type == "sparse_category"), residual_dependence_max = residual_max,
-        diagnostic_true_positive = isTRUE(setting$sparse) && any(fit$warnings$type == "sparse_category"),
-        diagnostic_false_positive = !isTRUE(setting$sparse) && nrow(fit$warnings) > 0L,
-        diagnostic_status = if (diagnostics) "exploratory" else "not_run", stringsAsFactors = FALSE))
+    index <- index + 1L
+    jobs[[index]] <- list(setting = as.list(manifest[scenario_index, , drop = FALSE]), replication = replication,
+      seed = seed + index, folds = folds, iterations = iterations, max_iterations = max_iterations, diagnostics = diagnostics)
   }
-  do.call(rbind, rows)
+  do.call(rbind, .validation_map(jobs, .measurement_validation_one, workers))
 }
 
-.structural_validation_data <- function(type, n, seed, loading = .80, missing = .05) {
+.structural_validation_data <- function(type, n, seed, loading = .80, missing = .05, items = 4L) {
   set.seed(seed)
   trust <- stats::rnorm(n)
   context <- stats::rnorm(n)
   quality <- switch(type,
     smooth = as.numeric(scale(.55 * trust + .30 * trust^3 + stats::rnorm(n, sd = .65))),
+    smooth_subtle = as.numeric(scale(.55 * trust + .30 * trust^3 + stats::rnorm(n, sd = .65))),
+    smooth_strong = as.numeric(scale(.15 * trust + 1.15 * trust^3 + stats::rnorm(n, sd = .20))),
     omitted = .35 * trust + .65 * context + stats::rnorm(n, sd = .65),
     .65 * trust + stats::rnorm(n, sd = .70)
   )
@@ -160,13 +183,13 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   )
   states <- list(Trust = trust, Quality = quality, Loyalty = loyalty)
   if (type == "omitted") states <- list(Trust = trust, Context = context, Quality = quality, Loyalty = loyalty)
-  data <- do.call(cbind, unname(Map(function(z, name) .validation_items(z, tolower(name), loading, missing), states, names(states))))
+  data <- do.call(cbind, unname(Map(function(z, name) .validation_items(z, tolower(name), loading, missing, items = items), states, names(states))))
   structure_spec <- if (type == "omitted") {
     cssem_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Context", "Quality", "Loyalty"))
   } else {
     cssem_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Quality", "Loyalty"))
   }
-  specifications <- lapply(names(states), function(name) list(indicators = paste0(tolower(name), 1:4), scales = "ordinal"))
+  specifications <- lapply(names(states), function(name) list(indicators = paste0(tolower(name), seq_len(items)), scales = "ordinal"))
   names(specifications) <- names(states)
   model <- cssem_model(specifications)
   list(data = data, truth = as.data.frame(states), model = model, structure = structure_spec)
@@ -181,9 +204,41 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
 #' @export
 cssem_structural_validation_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
-  types <- c("linear", "smooth", "interaction", "omitted", "downstream")
-  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 260L, 300L, 300L, 260L), stringsAsFactors = FALSE))
-  expand.grid(scenario = types, n = c(220L, 500L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  types <- c("linear", "smooth_subtle", "smooth_strong", "interaction", "omitted", "downstream")
+  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 260L, 350L, 300L, 300L, 260L), items = c(4L, 4L, 6L, 4L, 4L, 4L), stringsAsFactors = FALSE))
+  expand.grid(scenario = types, n = c(220L, 500L, 1000L), items = c(4L, 6L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+}
+
+.structural_validation_one <- function(job) {
+  setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
+  generated <- .structural_validation_data(setting$scenario, setting$n, job$seed, items = if ("items" %in% names(setting)) setting$items else 4L)
+  elapsed <- system.time({
+    validation_fit <- .validation_fit(generated$model, generated$data, job$seed, job$folds, job$iterations, job$max_iterations, FALSE)
+    association <- cssem_associate(validation_fit$fit, generated$structure,
+      structural_repeats = job$structural_repeats, seed = job$seed, shadow_scope = "both")
+  })["elapsed"]
+  gaps <- association$specification_gap
+  candidates <- association$candidate_metrics
+  rows <- lapply(names(association$full_models), function(outcome) {
+    selected <- candidates[candidates$outcome == outcome & candidates$selected, , drop = FALSE]
+    smooth_candidates <- candidates[candidates$outcome == outcome & candidates$candidate != "linear", , drop = FALSE]
+    best_smooth <- smooth_candidates[which.max(smooth_candidates$mean_mse_improvement), , drop = FALSE]
+    temporal <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "temporal", , drop = FALSE]
+    unrestricted <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "unrestricted", , drop = FALSE]
+    data.frame(
+      scenario = setting$scenario, replication = job$replication, n = setting$n, outcome = outcome,
+      selected_shape = selected$candidate, selected_spline_df = selected$spline_df,
+      linear_r_squared = candidates$r_squared[candidates$outcome == outcome & candidates$candidate == "linear"],
+      smooth_r_squared = best_smooth$r_squared, best_smooth_df = best_smooth$spline_df,
+      mean_mse_improvement = best_smooth$mean_mse_improvement, mse_improvement_se = best_smooth$mse_improvement_se,
+      theory_r_squared = temporal$theory_r_squared, temporal_gap = temporal$specification_gap,
+      unrestricted_gap = unrestricted$specification_gap,
+      unrestricted_minus_temporal = unrestricted$specification_gap - temporal$specification_gap,
+      measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
+      runtime_seconds = unname(elapsed), worker_pid = Sys.getpid(), stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
 }
 
 #' Run deterministic associational structural validation simulations
@@ -195,6 +250,10 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 #' @param iterations Measurement iterations.
 #' @param max_iterations Retry budget used if the initial measurement fit has
 #'   not converged.
+#' @param structural_repeats Number of repeated structural CV assignments used
+#'   for linear-versus-smooth selection.
+#' @param workers Number of independent replications to run concurrently. Use
+#'   `1` for sequential execution; PSOCK workers are supported on Windows.
 #' @return A machine-readable data frame containing model selection, R-squared,
 #'   temporal and unrestricted gaps, and runtime for every outcome.
 #' @examples
@@ -204,36 +263,17 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 #' @export
 cssem_run_structural_validation <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
-                                            max_iterations = 16L) {
+                                            max_iterations = 16L,
+                                            structural_repeats = 3L, workers = 1L) {
   if (!is.data.frame(manifest) || !all(c("scenario", "n") %in% names(manifest))) stop("manifest must contain scenario and n.", call. = FALSE)
-  rows <- list(); index <- 0L
+  jobs <- vector("list", nrow(manifest) * reps); index <- 0L
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {
-    index <- index + 1L; setting <- manifest[scenario_index, ]
-    generated <- .structural_validation_data(setting$scenario, setting$n, seed + index)
-    elapsed <- system.time({
-      validation_fit <- .validation_fit(generated$model, generated$data, seed + index, folds, iterations, max_iterations, FALSE)
-      fit <- validation_fit$fit
-      association <- cssem_associate(fit, generated$structure, shadow_scope = "both")
-    })["elapsed"]
-    gaps <- association$specification_gap
-    candidates <- association$candidate_metrics
-    for (outcome in names(association$full_models)) {
-      selected <- candidates[candidates$outcome == outcome & candidates$selected, , drop = FALSE]
-      temporal <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "temporal", , drop = FALSE]
-      unrestricted <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "unrestricted", , drop = FALSE]
-      rows[[length(rows) + 1L]] <- data.frame(
-        scenario = setting$scenario, replication = replication, n = setting$n, outcome = outcome,
-        selected_shape = selected$candidate, linear_r_squared = candidates$r_squared[candidates$outcome == outcome & candidates$candidate == "linear"],
-        smooth_r_squared = candidates$r_squared[candidates$outcome == outcome & candidates$candidate == "smooth"],
-        theory_r_squared = temporal$theory_r_squared, temporal_gap = temporal$specification_gap,
-        unrestricted_gap = unrestricted$specification_gap,
-        unrestricted_minus_temporal = unrestricted$specification_gap - temporal$specification_gap,
-        measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
-        runtime_seconds = unname(elapsed), stringsAsFactors = FALSE
-      )
-    }
+    index <- index + 1L
+    jobs[[index]] <- list(setting = as.list(manifest[scenario_index, , drop = FALSE]), replication = replication,
+      seed = seed + index, folds = folds, iterations = iterations, max_iterations = max_iterations,
+      structural_repeats = structural_repeats)
   }
-  do.call(rbind, rows)
+  do.call(rbind, .validation_map(jobs, .structural_validation_one, workers))
 }
 
 #' Evaluate v0.2 simulation release gates
@@ -254,15 +294,15 @@ cssem_validation_report <- function(measurement_results, structural_results) {
     all(measurement_results$cssem_recovery[inside] >= measurement_results$composite_proxy_recovery[inside] - .02)
   convergence_rate <- if ("converged" %in% names(measurement_results) && any(inside)) mean(measurement_results$converged[inside]) else NA_real_
   linear <- structural_results[structural_results$scenario == "linear", , drop = FALSE]
-  smooth <- structural_results[structural_results$scenario == "smooth" & structural_results$outcome == "Quality", , drop = FALSE]
+  smooth_strong <- structural_results[structural_results$scenario == "smooth_strong" & structural_results$outcome == "Quality", , drop = FALSE]
   omitted <- structural_results[structural_results$scenario == "omitted" & structural_results$outcome == "Quality", , drop = FALSE]
   downstream <- structural_results[structural_results$scenario == "downstream" & structural_results$outcome == "Quality", , drop = FALSE]
   gates <- data.frame(
-    gate = c("measurement_noninferiority", "measurement_convergence", "linear_selection", "smooth_selection", "omitted_predictor_flag", "downstream_gap_divergence"),
+    gate = c("measurement_noninferiority", "measurement_convergence", "linear_selection", "strong_smooth_selection", "omitted_predictor_flag", "downstream_gap_divergence"),
     observed = c(if (any(inside)) min(pmin(measurement_results$cssem_recovery[inside] - measurement_results$ordinal_factor_proxy_recovery[inside], measurement_results$cssem_recovery[inside] - measurement_results$composite_proxy_recovery[inside])) else NA_real_,
-      convergence_rate, mean(linear$selected_shape == "linear"), mean(smooth$selected_shape == "smooth"),
+      convergence_rate, mean(linear$selected_shape == "linear"), mean(grepl("^smooth", smooth_strong$selected_shape)),
       mean(omitted$temporal_gap < -.03), mean(downstream$unrestricted_minus_temporal < -.03)),
-    threshold = c(-.02, .95, .80, .70, .70, .70),
+    threshold = c(-.02, .95, .80, .80, .70, .70),
     comparison = c(">=", ">=", ">=", ">=", ">=", ">="), stringsAsFactors = FALSE
   )
   gates$passed <- !is.na(gates$observed) & gates$observed >= gates$threshold

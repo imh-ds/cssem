@@ -27,10 +27,12 @@ non-retrying smoke configuration solely to verify the pipeline.
 
 ## Structural suite
 
-Structural truth scenarios include linear and monotone smooth pathways,
-interaction truth, an omitted earlier construct, and downstream same-wave
-information. They evaluate linear/smooth selection, out-of-fold R-squared, and
-both shadow gaps.
+Structural truth scenarios include linear pathways, subtle and strong monotone
+smooth pathways, interaction truth, an omitted earlier construct, and
+downstream same-wave information. Strong smooth truth uses more indicators,
+larger sample size, and unmistakable monotone curvature; subtle smooth truth is
+reported descriptively. Selection compares linear with predeclared natural
+splines (df 3 and df 4) using repeated paired structural CV.
 
 The specification gap is `theory R² - shadow R²`. Positive values favor the
 declared theory model; negative values flag predictive incompleteness under the
@@ -40,6 +42,17 @@ evidence of same-wave dependence, not reverse causal direction.
 ## Release gates
 
 `cssem_validation_report()` checks measurement non-inferiority within `.02`,
-linear and smooth selection, sensitivity to an omitted eligible predictor, and
-the expected temporal/unrestricted downstream divergence. A failed gate narrows
-the operating envelope or returns the method to development; it is never hidden.
+linear selection, **strong** smooth selection, sensitivity to an omitted
+eligible predictor, and the expected temporal/unrestricted downstream
+divergence. A failed gate narrows the operating envelope or returns the method
+to development; it is never hidden.
+
+## Parallel execution
+
+Measurement and structural validation functions accept `workers`. Parallelism
+is only across independent scenario/replication jobs; a single cross-fitted
+model remains sequential. This preserves deterministic per-job seeds and avoids
+nested parallel fits. The numbered local scripts use up to four workers; CI
+uses one worker for a compact smoke run. Each result row records `worker_pid`;
+the scripts also write a small `*_run_metadata.csv` file with wall-clock time,
+requested workers, and the worker process IDs actually used.

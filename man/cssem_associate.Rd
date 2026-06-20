@@ -8,8 +8,10 @@ cssem_associate(
   fit,
   structure,
   folds = NULL,
-  spline_df = 3L,
-  min_smooth_gain = 0.01,
+  spline_df = c(3L, 4L),
+  smooth_uncertainty = 1,
+  structural_repeats = 3L,
+  seed = 1L,
   shadow_scope = c("both", "temporal", "unrestricted")
 )
 }
@@ -21,10 +23,16 @@ cssem_associate(
 \item{folds}{Optional structural validation folds. Defaults to the measurement
 cross-fitting folds stored in \code{fit}.}
 
-\item{spline_df}{Degrees of freedom for each additive natural spline.}
+\item{spline_df}{Predeclared degrees of freedom for additive natural-spline
+candidates. The default compares df 3 and df 4.}
 
-\item{min_smooth_gain}{Minimum reduction in cross-validated RMSE required to
-retain smooth rather than linear effects.}
+\item{smooth_uncertainty}{Multiplier for the paired foldwise-loss standard
+error. The default of one is a one-standard-error selection rule.}
+
+\item{structural_repeats}{Number of deterministic structural CV fold
+assignments used for shape selection.}
+
+\item{seed}{Seed used only to generate repeated structural fold assignments.}
 
 \item{shadow_scope}{Shadow benchmark scope: \code{"both"} (default),
 \code{"temporal"}, or \code{"unrestricted"}.}
@@ -35,8 +43,9 @@ selected effect summaries, out-of-fold predictions, and specification gaps.
 }
 \description{
 Compares a theory-declared linear model with a low-complexity additive spline
-model by cross-validated RMSE. A smooth model is retained only if it improves
-cross-validated RMSE by \code{min_smooth_gain}. Shadow models are shallow
+model by paired cross-validation. A smooth model is retained only if its
+average foldwise loss improvement exceeds \code{smooth_uncertainty} times its
+cross-fold standard error. Shadow models are shallow
 regression trees used as adequacy diagnostics, not discovered theory models.
 A temporal shadow uses only constructs preceding the outcome in the declared
 order; an unrestricted shadow uses all other same-wave constructs.

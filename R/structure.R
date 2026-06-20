@@ -82,6 +82,36 @@ cssem_structure <- function(effects, order = NULL) {
   prediction
 }
 
+.structural_fold_sets <- function(folds, repeats, seed) {
+  repeats <- as.integer(repeats)
+  if (is.na(repeats) || repeats < 1L) stop("structural_repeats must be at least 1.", call. = FALSE)
+  if (!is.numeric(seed) || length(seed) != 1L || !is.finite(seed))
+    stop("seed must be a finite numeric scalar.", call. = FALSE)
+  sets <- vector("list", repeats)
+  sets[[1L]] <- folds
+  if (repeats > 1L) {
+    k <- length(unique(folds))
+    for (repeat_index in 2:repeats) {
+      set.seed(seed + repeat_index)
+      sets[[repeat_index]] <- sample(rep(seq_len(k), length.out = length(folds)))
+    }
+  }
+  sets
+}
+
+.cv_candidate <- function(scores, outcome, predictors, fold_sets, shape, spline_df) {
+  predictions <- vector("list", length(fold_sets))
+  losses <- numeric()
+  for (repeat_index in seq_along(fold_sets)) {
+    predictions[[repeat_index]] <- .cv_predictions(scores, outcome, predictors, fold_sets[[repeat_index]], shape, spline_df)
+    losses <- c(losses, .foldwise_mse(scores[[outcome]], predictions[[repeat_index]], fold_sets[[repeat_index]]))
+  }
+  list(prediction = predictions[[1L]], fold_mse = losses,
+    # Keep reported candidate metrics on the primary fold assignment so they
+    # remain directly comparable with the single-pass shadow diagnostics.
+    metrics = .prediction_metrics(scores[[outcome]], predictions[[1L]]))
+}
+
 .shadow_predictions <- function(scores, outcome, predictors, folds) {
   prediction <- rep(NA_real_, nrow(scores))
   if (!length(predictors)) return(prediction)
@@ -106,6 +136,13 @@ cssem_structure <- function(effects, order = NULL) {
   c(rmse = sqrt(mean((observed[keep] - predicted[keep])^2)), r_squared = 1 - sse / sst)
 }
 
+.foldwise_mse <- function(observed, predicted, folds) {
+  vapply(sort(unique(folds)), function(fold) {
+    index <- folds == fold
+    mean((observed[index] - predicted[index])^2)
+  }, numeric(1))
+}
+
 .effect_summary <- function(model, outcome, predictors, shape, scores) {
   if (shape == "linear") {
     coefficient <- stats::coef(model)[predictors]
@@ -127,8 +164,9 @@ cssem_structure <- function(effects, order = NULL) {
 #' Fit associational structural effects on locked construct states
 #'
 #' Compares a theory-declared linear model with a low-complexity additive spline
-#' model by cross-validated RMSE. A smooth model is retained only if it improves
-#' cross-validated RMSE by `min_smooth_gain`. Shadow models are shallow
+#' model by paired cross-validation. A smooth model is retained only if its
+#' average foldwise loss improvement exceeds `smooth_uncertainty` times its
+#' cross-fold standard error. Shadow models are shallow
 #' regression trees used as adequacy diagnostics, not discovered theory models.
 #' A temporal shadow uses only constructs preceding the outcome in the declared
 #' order; an unrestricted shadow uses all other same-wave constructs.
@@ -137,9 +175,13 @@ cssem_structure <- function(effects, order = NULL) {
 #' @param structure A `cssem_structure` object.
 #' @param folds Optional structural validation folds. Defaults to the measurement
 #'   cross-fitting folds stored in `fit`.
-#' @param spline_df Degrees of freedom for each additive natural spline.
-#' @param min_smooth_gain Minimum reduction in cross-validated RMSE required to
-#'   retain smooth rather than linear effects.
+#' @param spline_df Predeclared degrees of freedom for additive natural-spline
+#'   candidates. The default compares df 3 and df 4.
+#' @param smooth_uncertainty Multiplier for the paired foldwise-loss standard
+#'   error. The default of one is a one-standard-error selection rule.
+#' @param structural_repeats Number of deterministic structural CV fold
+#'   assignments used for shape selection.
+#' @param seed Seed used only to generate repeated structural fold assignments.
 #' @param shadow_scope Shadow benchmark scope: `"both"` (default),
 #'   `"temporal"`, or `"unrestricted"`.
 #' @return An object of class `cssem_association` with candidate metrics,
@@ -149,8 +191,9 @@ cssem_structure <- function(effects, order = NULL) {
 #' #   fit, cssem_structure(list(Loyalty = c("Trust", "Satisfaction")))
 #' # )
 #' @export
-cssem_associate <- function(fit, structure, folds = NULL, spline_df = 3L,
-                             min_smooth_gain = .01,
+cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
+                             smooth_uncertainty = 1,
+                             structural_repeats = 3L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted")) {
   if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -164,20 +207,29 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = 3L,
   folds <- if (is.null(folds)) fit$folds else as.integer(folds)
   if (length(folds) != nrow(scores) || length(unique(folds)) < 2L)
     stop("folds must assign every row to at least two validation folds.", call. = FALSE)
-  spline_df <- as.integer(spline_df)
-  if (is.na(spline_df) || spline_df < 2L) stop("spline_df must be at least 2.", call. = FALSE)
+  spline_df <- unique(as.integer(spline_df))
+  if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
+  if (!is.numeric(smooth_uncertainty) || length(smooth_uncertainty) != 1L || !is.finite(smooth_uncertainty) || smooth_uncertainty < 0)
+    stop("smooth_uncertainty must be a non-negative numeric scalar.", call. = FALSE)
 
+  fold_sets <- .structural_fold_sets(folds, structural_repeats, seed)
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list()
   for (outcome in names(structure$effects)) {
     predictors <- structure$effects[[outcome]]
-    linear_prediction <- .cv_predictions(scores, outcome, predictors, folds, "linear", spline_df)
-    smooth_prediction <- .cv_predictions(scores, outcome, predictors, folds, "smooth", spline_df)
-    linear_metrics <- .prediction_metrics(scores[[outcome]], linear_prediction)
-    smooth_metrics <- .prediction_metrics(scores[[outcome]], smooth_prediction)
-    selected_shape <- if (smooth_metrics[["rmse"]] <= linear_metrics[["rmse"]] - min_smooth_gain) "smooth" else "linear"
-    selected_prediction <- if (selected_shape == "smooth") smooth_prediction else linear_prediction
-    selected_metrics <- if (selected_shape == "smooth") smooth_metrics else linear_metrics
-    formula <- .structural_formula(outcome, predictors, selected_shape, spline_df)
+    linear <- .cv_candidate(scores, outcome, predictors, fold_sets, "linear", spline_df[1L])
+    smooth <- lapply(spline_df, function(df) .cv_candidate(scores, outcome, predictors, fold_sets, "smooth", df))
+    improvement_mean <- vapply(smooth, function(candidate) mean(linear$fold_mse - candidate$fold_mse), numeric(1))
+    improvement_se <- vapply(smooth, function(candidate) {
+      difference <- linear$fold_mse - candidate$fold_mse
+      stats::sd(difference) / sqrt(length(difference))
+    }, numeric(1))
+    best_index <- which.max(improvement_mean)
+    best_smooth <- smooth[[best_index]]
+    selected_shape <- if (improvement_mean[best_index] > smooth_uncertainty * improvement_se[best_index]) "smooth" else "linear"
+    selected_df <- if (selected_shape == "smooth") spline_df[best_index] else NA_integer_
+    selected_prediction <- if (selected_shape == "smooth") best_smooth$prediction else linear$prediction
+    selected_metrics <- if (selected_shape == "smooth") best_smooth$metrics else linear$metrics
+    formula <- .structural_formula(outcome, predictors, selected_shape, if (is.na(selected_df)) spline_df[1L] else selected_df)
     model <- stats::lm(formula, data = scores)
     shadow_predictions <- list()
     shadow_rows <- list()
@@ -193,13 +245,20 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = 3L,
         theory_r_squared = selected_metrics[["r_squared"]],
         shadow_r_squared = shadow_metrics[["r_squared"]],
         specification_gap = selected_metrics[["r_squared"]] - shadow_metrics[["r_squared"]],
-        selected_shape = selected_shape, stringsAsFactors = FALSE)
+        selected_shape = selected_shape, selected_spline_df = selected_df,
+        structural_repeats = structural_repeats, stringsAsFactors = FALSE)
     }
-    candidates[[outcome]] <- data.frame(outcome = outcome, candidate = c("linear", "smooth"),
-      rmse = c(linear_metrics[["rmse"]], smooth_metrics[["rmse"]]),
-      r_squared = c(linear_metrics[["r_squared"]], smooth_metrics[["r_squared"]]),
-      selected = c(selected_shape == "linear", selected_shape == "smooth"), stringsAsFactors = FALSE)
-    effects[[outcome]] <- .effect_summary(model, outcome, predictors, selected_shape, scores)
+    candidates[[outcome]] <- rbind(
+      data.frame(outcome = outcome, candidate = "linear", spline_df = NA_integer_, rmse = linear$metrics[["rmse"]], r_squared = linear$metrics[["r_squared"]], mean_mse_improvement = NA_real_, mse_improvement_se = NA_real_, selected = selected_shape == "linear"),
+      data.frame(outcome = outcome, candidate = paste0("smooth_df", spline_df), spline_df = spline_df,
+        rmse = vapply(smooth, function(candidate) candidate$metrics[["rmse"]], numeric(1)),
+        r_squared = vapply(smooth, function(candidate) candidate$metrics[["r_squared"]], numeric(1)),
+        mean_mse_improvement = improvement_mean, mse_improvement_se = improvement_se,
+        selected = selected_shape == "smooth" & spline_df == selected_df)
+    )
+    effect_data <- .effect_summary(model, outcome, predictors, selected_shape, scores)
+    effect_data$spline_df <- selected_df
+    effects[[outcome]] <- effect_data
     predictions[[outcome]] <- as.data.frame(c(list(observed = scores[[outcome]], theory = selected_prediction), shadow_predictions))
     gaps[[outcome]] <- do.call(rbind, shadow_rows)
     models[[outcome]] <- model
@@ -207,7 +266,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = 3L,
   structure(list(structure = structure, candidate_metrics = do.call(rbind, candidates),
     effects = do.call(rbind, effects), predictions = predictions,
     specification_gap = do.call(rbind, gaps), full_models = models,
-    folds = folds, temporal_order = temporal_order, shadow_scope = scopes,
+    folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }
 

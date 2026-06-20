@@ -10,7 +10,9 @@ cssem_run_structural_validation(
   seed = 1L,
   folds = 3L,
   iterations = 8L,
-  max_iterations = 16L
+  max_iterations = 16L,
+  structural_repeats = 3L,
+  workers = 1L
 )
 }
 \arguments{
@@ -26,6 +28,12 @@ cssem_run_structural_validation(
 
 \item{max_iterations}{Retry budget used if the initial measurement fit has
 not converged.}
+
+\item{structural_repeats}{Number of repeated structural CV assignments used
+for linear-versus-smooth selection.}
+
+\item{workers}{Number of independent replications to run concurrently. Use
+\code{1} for sequential execution; PSOCK workers are supported on Windows.}
 }
 \value{
 A machine-readable data frame containing model selection, R-squared,
