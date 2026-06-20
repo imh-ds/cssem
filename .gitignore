@@ -1,0 +1,36 @@
+# R sessions and project-local state
+.Rhistory
+.RData
+.Ruserdata
+.Rprofile
+.Rproj.user/
+*.Rproj
+
+# R package build and check artefacts
+/*.tar.gz
+/cssem.Rcheck/
+/..Rcheck/
+/*.Rcheck/
+/.Rlib/
+/local_r_lib/
+/revdep/
+
+# Coverage, profiling, and rendered local output
+coverage/
+covr/
+*.gcda
+*.gcno
+*.prof
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local agent/runtime state
+.agents/
+.codex/
+
+# Additional files
+ideation.md

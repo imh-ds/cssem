@@ -1,0 +1,23 @@
+Package: cssem
+Type: Package
+Title: Cross-Fitted Construct-State Structural Equation Modeling
+Version: 0.1.1
+Authors@R: person(
+    "Hohjin",
+    "Im",
+    email = "hohjini@uci.edu",
+    role = c("aut", "cre")
+)
+Description: Research implementation of the measurement foundation for CS-SEM.
+    It estimates theory-declared manifestation constructs with scale-aware,
+    cross-fitted construct states and reports recovery, stability, and
+    measurement diagnostics. Structural and causal modeling are intentionally
+    outside version 0.1.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Suggests:
+    testthat (>= 3.0.0),
+    roxygen2
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

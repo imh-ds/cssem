@@ -1,0 +1,11 @@
+test_that("fit locks scores and scoring rejects schema mismatch", {
+  d <- simulate_cssem_data(n = 60, seed = 3)
+  m <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), folds = 3)
+  f <- cssem_fit(m, d, seed = 4, iterations = 3)
+  expect_equal(nrow(f$locked_scores), 60)
+  expect_true(all(is.finite(f$locked_scores$A)))
+  expect_identical(f$measurement_engine$A$estimator, "marginal_graded_response")
+  expect_equal(nrow(cssem_residual_diagnostics(f, "A")), 6)
+  expect_error(cssem_score(f, d[paste0("a", 4:1)]))
+  expect_error(cssem_score(f, d[paste0("a", 1:3)]))
+})

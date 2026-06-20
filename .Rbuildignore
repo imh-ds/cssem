@@ -1,0 +1,16 @@
+^\.git$
+^\.gitignore$
+^\.Rbuildignore$
+^\.agents$
+^\.codex$
+^\.Rlib$
+^local_r_lib$
+^\.Rproj\.user$
+^.*\.Rproj$
+^ideation\.md$
+^docs$
+^tests/internal$
+^CONTRIBUTING\.md$
+^CODE_OF_CONDUCT\.md$
+^\.github$
+^tools$
