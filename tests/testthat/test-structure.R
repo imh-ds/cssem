@@ -54,10 +54,46 @@ test_that("monotone candidates are constrained and selected edge by edge", {
   expect_true(all(c("edge_drop_mse_increase", "selection_frequency", "status") %in% names(cssem_effect_ledger(association))))
 })
 
+test_that("default selector retains a clear monotone-increasing edge", {
+  set.seed(144)
+  n <- 320
+  trust <- rnorm(n)
+  quality <- .85 * trust + 1.10 * pmax(trust + .20, 0) + rnorm(n, sd = .22)
+  loyalty <- .30 * trust + .55 * quality + rnorm(n, sd = .45)
+  fit <- structure(list(
+    locked_scores = data.frame(Trust = trust, Quality = quality, Loyalty = loyalty),
+    folds = sample(rep(1:3, length.out = n))
+  ), class = "cssem_fit")
+  specification <- cssem_structure(list(
+    Quality = list(Trust = cssem_effect("monotone_increasing")),
+    Loyalty = list(Trust = cssem_effect("auto"), Quality = cssem_effect("auto"))
+  ), order = c("Trust", "Quality", "Loyalty"))
+  association <- cssem_associate(fit, specification, structural_repeats = 5, seed = 144)
+  quality <- association$candidate_metrics[association$candidate_metrics$outcome == "Quality" &
+    association$candidate_metrics$predictor == "Trust" & association$candidate_metrics$selected, , drop = FALSE]
+  expect_equal(quality$shape[[1L]], "monotone_increasing")
+  expect_gte(quality$selection_frequency[[1L]], .70)
+})
+
+test_that("winner selection prefers stable monotone candidates within uncertainty band", {
+  candidate_keys <- c("Trust::monotone_increasing", "Trust::smooth_df3")
+  candidate_meta <- list(
+    `Trust::monotone_increasing` = list(predictor = "Trust", shape = "monotone_increasing"),
+    `Trust::smooth_df3` = list(predictor = "Trust", shape = "smooth_df3")
+  )
+  improvement <- c(`Trust::monotone_increasing` = .020, `Trust::smooth_df3` = .022)
+  improvement_se <- c(`Trust::monotone_increasing` = .004, `Trust::smooth_df3` = .004)
+  frequency <- c(`Trust::monotone_increasing` = .80, `Trust::smooth_df3` = 1)
+  winner <- cssem:::.pick_shape_winner(candidate_keys, candidate_meta, improvement, improvement_se,
+    frequency, smooth_uncertainty = 1, shape_stability_min = .70)
+  expect_equal(winner, "Trust::monotone_increasing")
+})
+
 test_that("monotone basis retains training-fold knots for scoring", {
   trained <- cssem:::.train_basis(c(-2, -1, 0, 1, 2), "monotone_increasing")
   scored <- cssem:::.predict_basis(c(-10, 10), trained$info)
   expect_equal(ncol(scored), ncol(trained$values))
+  expect_equal(ncol(trained$values), 4L)
   expect_false(any(trained$info$knots %in% c(-10, 10)))
 })
 

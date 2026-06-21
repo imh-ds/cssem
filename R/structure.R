@@ -109,9 +109,10 @@ cssem_structure <- function(effects, order = NULL) {
 
 .shape_kind <- function(shape) if (grepl("^smooth", shape)) "smooth" else shape
 .shape_df <- function(shape) if (grepl("^smooth_df", shape)) as.integer(sub("smooth_df", "", shape)) else NA_integer_
+.is_monotone_shape <- function(shape) shape %in% c("monotone_increasing", "monotone_decreasing")
 .shape_complexity <- function(shape) {
   if (shape == "linear") return(1L)
-  if (shape %in% c("monotone_increasing", "monotone_decreasing")) return(2L)
+  if (.is_monotone_shape(shape)) return(2L)
   2L + .shape_df(shape)
 }
 
@@ -126,7 +127,7 @@ cssem_structure <- function(effects, order = NULL) {
     basis <- splines::ns(x, df = .shape_df(shape))
     return(list(values = basis, info = list(shape = shape, knots = attr(basis, "knots"), boundary = attr(basis, "Boundary.knots"))))
   }
-  knots <- unique(as.numeric(stats::quantile(x, c(.25, .50, .75), na.rm = TRUE, names = FALSE)))
+  knots <- unique(as.numeric(stats::quantile(x, c(.20, .50, .80), na.rm = TRUE, names = FALSE)))
   knots <- knots[knots > min(x, na.rm = TRUE) & knots < max(x, na.rm = TRUE)]
   list(values = .hinge_basis(x, knots), info = list(shape = shape, knots = knots))
 }
@@ -160,9 +161,9 @@ cssem_structure <- function(effects, order = NULL) {
     built <- .train_basis(data[[predictor]], shapes[[predictor]])
     blocks[[predictor]] <- built$values; infos[[predictor]] <- built$info
     index <- seq_len(ncol(built$values)) + sum(vapply(blocks[-length(blocks)], ncol, integer(1))) + 1L
-    if (built$info$shape %in% c("monotone_increasing", "monotone_decreasing")) {
-      constrained <- c(constrained, index)
-      directions <- c(directions, rep(if (built$info$shape == "monotone_increasing") 1L else -1L, length(index)))
+    if (.is_monotone_shape(built$info$shape)) {
+      constrained <- c(constrained, index[-1L])
+      directions <- c(directions, rep(if (built$info$shape == "monotone_increasing") 1L else -1L, length(index) - 1L))
     }
   }
   design <- if (length(blocks)) cbind(`(Intercept)` = 1, do.call(cbind, blocks)) else matrix(1, nrow(data), 1L)
@@ -207,19 +208,47 @@ cssem_structure <- function(effects, order = NULL) {
     metrics = .prediction_metrics(scores[[outcome]], predictions[[1L]]))
 }
 
-.selection_frequency <- function(base, candidates, multiplier, folds_per_repeat) {
+.selection_frequency <- function(base, candidates, candidate_meta, multiplier, folds_per_repeat) {
   repeats <- as.integer(length(base$fold_mse) / folds_per_repeat)
   # Stability means that a candidate repeatedly clears the same paired
   # baseline-improvement rule; it is not a winner-take-all contest between
   # nearly equivalent nonlinear bases.
-  vapply(candidates, function(candidate) {
+  vapply(names(candidates), function(key) {
+    candidate <- candidates[[key]]
+    monotone <- .is_monotone_shape(candidate_meta[[key]]$shape)
     supported <- vapply(seq_len(repeats), function(repeat_index) {
       index <- ((repeat_index - 1L) * folds_per_repeat + 1L):(repeat_index * folds_per_repeat)
       difference <- base$fold_mse[index] - candidate$fold_mse[index]
-      mean(difference) > multiplier * stats::sd(difference) / sqrt(length(difference))
+      threshold <- if (monotone) 0 else multiplier * stats::sd(difference) / sqrt(length(difference))
+      mean(difference) > threshold
     }, logical(1))
     mean(supported)
   }, numeric(1))
+}
+
+.pick_shape_winner <- function(candidate_keys, candidate_meta, improvement, improvement_se,
+                               frequency, smooth_uncertainty, shape_stability_min) {
+  valid <- which(is.finite(improvement) & is.finite(improvement_se))
+  if (!length(valid)) return(NA_character_)
+  best <- valid[which.max(improvement[valid])]
+  best_improvement <- improvement[[candidate_keys[[best]]]]
+  indistinguishable <- valid[improvement[valid] >= improvement[[best]] - smooth_uncertainty *
+    sqrt(improvement_se[[best]]^2 + improvement_se[valid]^2)]
+  stable_monotone <- candidate_keys[indistinguishable][
+    vapply(candidate_keys[indistinguishable], function(key) {
+      meta <- candidate_meta[[key]]
+      .is_monotone_shape(meta$shape) && improvement[[key]] > 0 && frequency[[key]] >= shape_stability_min
+    }, logical(1))
+  ]
+  if (length(stable_monotone) && best_improvement <= .05) {
+    monotone_improvement <- improvement[stable_monotone]
+    monotone_complexity <- vapply(stable_monotone, function(key) .shape_complexity(candidate_meta[[key]]$shape), integer(1))
+    stable_monotone <- stable_monotone[monotone_complexity == min(monotone_complexity)]
+    return(stable_monotone[[which.max(monotone_improvement[stable_monotone])]])
+  }
+  strongest <- candidate_keys[indistinguishable][improvement[candidate_keys[indistinguishable]] == max(improvement[candidate_keys[indistinguishable]])]
+  complexity <- vapply(strongest, function(key) .shape_complexity(candidate_meta[[key]]$shape), integer(1))
+  strongest[[which.min(complexity)]]
 }
 
 .shadow_predictions <- function(scores, outcome, predictors, folds) {
@@ -296,22 +325,22 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
       candidate_meta[[key]] <- list(predictor = predictor, shape = shape, shapes = shapes)
     }
     candidate_keys <- names(nonlinear)
-    frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
+    frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, candidate_meta, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
     improvement <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) mean(baseline$fold_mse - x$fold_mse), numeric(1)), candidate_keys) else numeric()
     improvement_se <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) stats::sd(baseline$fold_mse - x$fold_mse) / sqrt(length(x$fold_mse)), numeric(1)), candidate_keys) else numeric()
     winner <- NA_character_
+    best_key <- NA_character_
     if (length(nonlinear)) {
       valid <- which(is.finite(improvement) & is.finite(improvement_se))
-      if (length(valid)) {
-        best <- valid[which.max(improvement[valid])]
-        indistinguishable <- valid[improvement[valid] >= improvement[[best]] - smooth_uncertainty *
-          sqrt(improvement_se[[best]]^2 + improvement_se[valid]^2)]
-        complexity <- vapply(candidate_keys[indistinguishable], function(key) .shape_complexity(candidate_meta[[key]]$shape), integer(1))
-        simplest <- indistinguishable[complexity == min(complexity)]
-        winner <- candidate_keys[simplest[which.max(improvement[simplest])]]
-      }
+      if (length(valid)) best_key <- candidate_keys[valid[which.max(improvement[valid])]]
+      winner <- .pick_shape_winner(candidate_keys, candidate_meta, improvement, improvement_se,
+        frequency, smooth_uncertainty, shape_stability_min)
     }
-    select_nonlinear <- length(nonlinear) && length(winner) == 1L && !is.na(winner) && improvement[[winner]] > smooth_uncertainty * improvement_se[[winner]] && frequency[[winner]] >= shape_stability_min
+    monotone_winner <- length(winner) == 1L && !is.na(winner) && .is_monotone_shape(candidate_meta[[winner]]$shape)
+    best_significant <- length(best_key) == 1L && !is.na(best_key) && improvement[[best_key]] > smooth_uncertainty * improvement_se[[best_key]]
+    select_nonlinear <- length(nonlinear) && length(winner) == 1L && !is.na(winner) && frequency[[winner]] >= shape_stability_min &&
+      (improvement[[winner]] > smooth_uncertainty * improvement_se[[winner]] ||
+        (monotone_winner && improvement[[winner]] > 0 && best_significant))
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
