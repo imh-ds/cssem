@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{cssem_supported_envelope}
 \alias{cssem_supported_envelope}
-\title{Return the v0.2 supported operating envelope}
+\title{Return the v0.3 supported operating envelope}
 \usage{
 cssem_supported_envelope()
 }
@@ -10,7 +10,7 @@ cssem_supported_envelope()
 A one-row data frame describing the initial supported conditions.
 }
 \description{
-Return the v0.2 supported operating envelope
+Return the v0.3 supported operating envelope
 }
 \examples{
 cssem_supported_envelope()

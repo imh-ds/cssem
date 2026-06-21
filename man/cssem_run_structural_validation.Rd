@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{cssem_run_structural_validation}
 \alias{cssem_run_structural_validation}
-\title{Run deterministic associational structural validation simulations}
+\title{Run deterministic v0.3 associational structural validation simulations}
 \usage{
 cssem_run_structural_validation(
   manifest,
@@ -11,7 +11,7 @@ cssem_run_structural_validation(
   folds = 3L,
   iterations = 8L,
   max_iterations = 16L,
-  structural_repeats = 3L,
+  structural_repeats = 5L,
   workers = 1L
 )
 }
@@ -30,7 +30,7 @@ cssem_run_structural_validation(
 not converged.}
 
 \item{structural_repeats}{Number of repeated structural CV assignments used
-for linear-versus-smooth selection.}
+for edge-level shape selection.}
 
 \item{workers}{Number of independent replications to run concurrently. Use
 \code{1} for sequential execution; PSOCK workers are supported on Windows.}
@@ -40,7 +40,7 @@ A machine-readable data frame containing model selection, R-squared,
 temporal and unrestricted gaps, and runtime for every outcome.
 }
 \description{
-Run deterministic associational structural validation simulations
+Run deterministic v0.3 associational structural validation simulations
 }
 \examples{
 results <- cssem_run_structural_validation(

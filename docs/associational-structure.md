@@ -1,14 +1,22 @@
 # Associational structural layer
 
 `cssem_associate()` accepts a theory-declared `cssem_structure` and uses only
-the measurement fit's locked construct states. For each declared outcome it
-compares an additive linear model with a low-complexity additive natural-spline
-model using structural-fold cross-validation. A smooth model is used only when
-its average paired foldwise loss improvement exceeds one cross-fold standard
-error. This replaces a fixed RMSE cutoff and makes shape selection responsive
-to validation uncertainty. The default candidate library is linear plus
-natural splines with 3 and 4 degrees of freedom; CS-SEM reports the chosen
-smooth candidate and its foldwise improvement uncertainty.
+the measurement fit's locked construct states. It begins with the complete
+declared linear model, then tests one declared edge at a time as nonlinear.
+At most one nonlinear edge is retained for an outcome in v0.3. This limits
+search multiplicity and makes the selected shape interpretable.
+
+The default `"auto"` edge policy compares linear, monotone increasing,
+monotone decreasing, and natural-spline (`df = 3, 4`) forms. A nonlinear
+candidate must both clear the paired one-standard-error CV rule and be
+supported in at least 70% of repeated fold assignments. Monotone curves use
+training-fold quantile knots and constrained hinge slopes; held-out records do
+not influence knots, constraints, or shape selection.
+
+When nonlinear candidates are indistinguishable within their paired CV
+uncertainty, CS-SEM prefers the lower-complexity monotone form over an
+unconstrained spline. This is a parsimony convention, not evidence that the
+effect is causal.
 
 The output is explicitly **associational**. It estimates neither causal effects
 nor mediation, adjustment, endogeneity correction, heterogeneous treatment
@@ -21,8 +29,8 @@ Declare an ordering when the theory makes one available:
 ```r
 structure <- cssem_structure(
   list(
-    Quality = "Trust",
-    Loyalty = c("Trust", "Quality")
+    Quality = list(Trust = cssem_effect("auto_monotone")),
+    Loyalty = list(Trust = cssem_effect("linear"), Quality = cssem_effect("auto"))
   ),
   order = c("Trust", "Quality", "Loyalty")
 )
@@ -57,6 +65,7 @@ replace theory or establish causal direction.
 ```r
 association <- cssem_associate(fit, structure)
 cssem_effect_card(association, "Loyalty")
+cssem_effect_ledger(association)
 cssem_specification_gap(association, "temporal")
 cssem_specification_gap(association, "unrestricted")
 ```
@@ -64,3 +73,8 @@ cssem_specification_gap(association, "unrestricted")
 If the unrestricted gap is much more negative than the temporal gap, report
 that as same-wave interdependence outside the acyclic theory model. Consider
 longitudinal or dynamic designs before assigning directional meaning.
+
+`cssem_effect_ledger()` reports each edge's selected shape, repeated-CV
+selection stability, predictive contribution when the edge is removed, and
+both shadow gaps. It is an evidence profile, not a causal verdict or a
+confirmatory confidence interval.

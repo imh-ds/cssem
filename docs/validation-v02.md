@@ -1,6 +1,6 @@
-# CS-SEM v0.2 simulation validation
+# CS-SEM v0.3 simulation validation
 
-Version 0.2 validates the measurement and associational layers with known
+Version 0.3 validates the measurement and associational layers with known
 data-generating truth. It does not validate causal effects.
 
 ## Operating envelope
@@ -27,12 +27,12 @@ non-retrying smoke configuration solely to verify the pipeline.
 
 ## Structural suite
 
-Structural truth scenarios include linear pathways, subtle and strong monotone
-smooth pathways, interaction truth, an omitted earlier construct, and
-downstream same-wave information. Strong smooth truth uses more indicators,
-larger sample size, and unmistakable monotone curvature; subtle smooth truth is
-reported descriptively. Selection compares linear with predeclared natural
-splines (df 3 and df 4) using repeated paired structural CV.
+The v0.3 structural suite includes linear, monotone increasing, monotone
+decreasing, subtle smooth, strong non-monotone smooth, null, interaction,
+omitted-predictor, and downstream-information scenarios. Selection compares
+edge-level linear, constrained monotone, and predeclared natural-spline
+candidates using repeated paired structural CV. Interaction truth is a
+negative control: v0.3 does not discover or label interactions.
 
 The specification gap is `theory R² - shadow R²`. Positive values favor the
 declared theory model; negative values flag predictive incompleteness under the
@@ -42,10 +42,11 @@ evidence of same-wave dependence, not reverse causal direction.
 ## Release gates
 
 `cssem_validation_report()` checks measurement non-inferiority within `.02`,
-linear selection, **strong** smooth selection, sensitivity to an omitted
-eligible predictor, and the expected temporal/unrestricted downstream
-divergence. A failed gate narrows the operating envelope or returns the method
-to development; it is never hidden.
+linear selection, correctly signed monotone selection, strong smooth
+selection, false nonlinear selection, sensitivity to an omitted eligible
+predictor, and temporal/unrestricted downstream divergence. A failed gate
+narrows the operating envelope or returns the method to development; it is
+never hidden.
 
 ## Parallel execution
 
@@ -56,3 +57,11 @@ nested parallel fits. The numbered local scripts use up to four workers; CI
 uses one worker for a compact smoke run. Each result row records `worker_pid`;
 the scripts also write a small `*_run_metadata.csv` file with wall-clock time,
 requested workers, and the worker process IDs actually used.
+
+## Diagnostic calibration
+
+`cssem_measurement_validation_manifest("diagnostic")` and internal script 07
+run sparse-category and local-dependence cases with diagnostics enabled. The
+result records residual-dependence signals and their simulated false/true
+positive rates. Residual correlations remain exploratory until those rates are
+acceptable; they are not promoted to automatic warnings by v0.3.

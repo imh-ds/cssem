@@ -1,4 +1,4 @@
-# Compact v0.2 associational structural validation run.
+# Compact v0.3 associational structural validation run.
 library(cssem)
 
 results_dir <- "tests/internal/validation_results"

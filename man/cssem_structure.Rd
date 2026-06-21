@@ -7,25 +7,16 @@
 cssem_structure(effects, order = NULL)
 }
 \arguments{
-\item{effects}{A named list. Each name is an endogenous construct and each
-value is a non-empty character vector of its declared predictors.}
+\item{effects}{A named list of outcomes. Each value is either a non-empty
+character vector of predictors or a named list of \code{\link[=cssem_effect]{cssem_effect()}} objects.}
 
 \item{order}{Optional character vector giving the user-declared temporal
-order of all constructs. Earlier constructs are eligible predictors in a
-temporally admissible shadow model. If omitted, CS-SEM derives an order
-from an acyclic declared graph when possible.}
+order of all constructs.}
 }
 \value{
 An object of class \code{cssem_structure}.
 }
 \description{
-Declares theory-specified associational effects among locked construct states.
-This object carries no causal interpretation: it does not accept adjustment
-sets, estimands, mediation, or causal labels.
-}
-\examples{
-structure <- cssem_structure(list(
-  Loyalty = c("Trust", "Satisfaction"),
-  Satisfaction = "Trust"
-))
+Character-vector declarations remain supported. Named edge declarations use
+\code{\link[=cssem_effect]{cssem_effect()}} to state each predictor's shape policy.
 }

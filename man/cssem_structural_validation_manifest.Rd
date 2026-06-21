@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{cssem_structural_validation_manifest}
 \alias{cssem_structural_validation_manifest}
-\title{Create a deterministic v0.2 structural validation manifest}
+\title{Create a deterministic v0.3 structural validation manifest}
 \usage{
 cssem_structural_validation_manifest(tier = c("screening", "full"))
 }
@@ -13,7 +13,7 @@ cssem_structural_validation_manifest(tier = c("screening", "full"))
 A structural scenario data frame.
 }
 \description{
-Create a deterministic v0.2 structural validation manifest
+Create a deterministic v0.3 structural validation manifest
 }
 \examples{
 cssem_structural_validation_manifest()

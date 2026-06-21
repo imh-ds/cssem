@@ -1,20 +1,20 @@
 Package: cssem
 Type: Package
 Title: Cross-Fitted Construct-State Structural Equation Modeling
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person(
     "Hohjin",
     "Im",
     email = "hohjini@uci.edu",
     role = c("aut", "cre")
     )
-Description: Research implementation of the measurement foundation for CS-SEM.
+Description: Research implementation of cross-fitted construct-state modeling for CS-SEM.
     It estimates theory-declared manifestation constructs with scale-aware,
     cross-fitted construct states and reports recovery, stability, and
-    measurement diagnostics. Structural and causal modeling are intentionally
-    outside version 0.1. A narrow associational structural layer estimates
-    cross-validated linear or low-complexity smooth effects on locked scores;
-    it does not make causal claims.
+    measurement diagnostics. The associational structural layer selects
+    declared linear, constrained monotone, or low-complexity smooth effects on
+    locked scores and reports edge-level evidence profiles. It does not make
+    causal claims.
 Imports:
     rpart
 License: GPL (>= 3)

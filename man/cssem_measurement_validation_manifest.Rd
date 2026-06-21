@@ -2,9 +2,11 @@
 % Please edit documentation in R/validation.R
 \name{cssem_measurement_validation_manifest}
 \alias{cssem_measurement_validation_manifest}
-\title{Create a deterministic v0.2 measurement validation manifest}
+\title{Create a deterministic v0.3 measurement validation manifest}
 \usage{
-cssem_measurement_validation_manifest(tier = c("screening", "full"))
+cssem_measurement_validation_manifest(
+  tier = c("screening", "diagnostic", "full")
+)
 }
 \arguments{
 \item{tier}{\code{"screening"} for a compact local suite or \code{"full"} for the
@@ -14,7 +16,7 @@ factorial confirmation manifest.}
 A scenario data frame.
 }
 \description{
-Create a deterministic v0.2 measurement validation manifest
+Create a deterministic v0.3 measurement validation manifest
 }
 \examples{
 cssem_measurement_validation_manifest("screening")

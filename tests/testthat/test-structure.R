@@ -18,10 +18,47 @@ test_that("associational layer uses locked scores and reports a shadow gap", {
   expect_equal(nrow(cssem_specification_gap(association, "temporal")), 2)
   expect_true(all(cssem_specification_gap(association)$specification_gap ==
     cssem_specification_gap(association)$theory_r_squared - cssem_specification_gap(association)$shadow_r_squared))
-  expect_equal(sum(association$candidate_metrics$selected), 2)
+  expect_equal(sum(association$candidate_metrics$selected), 3)
   expect_true(all(c("mean_mse_improvement", "mse_improvement_se") %in% names(association$candidate_metrics)))
-  expect_equal(association$structural_repeats, 3L)
+  expect_equal(association$structural_repeats, 5L)
+  expect_equal(nrow(cssem_effect_ledger(association)), 3L)
   expect_identical(association$status, "associational")
+})
+
+test_that("edge declarations support policies while preserving character vectors", {
+  declared <- cssem_structure(list(
+    Quality = list(Trust = cssem_effect("monotone_increasing")),
+    Loyalty = c("Trust", "Quality")
+  ), order = c("Trust", "Quality", "Loyalty"))
+  expect_equal(declared$effects$Quality$Trust$shape, "monotone_increasing")
+  expect_equal(declared$effects$Loyalty$Trust$shape, "auto")
+  expect_error(cssem_effect("not_a_shape"))
+})
+
+test_that("monotone candidates are constrained and selected edge by edge", {
+  set.seed(44)
+  n <- 220
+  trust <- rnorm(n)
+  quality <- .70 * trust + .85 * pmax(trust, 0) + rnorm(n, sd = .30)
+  loyalty <- .45 * trust + .35 * quality + rnorm(n, sd = .60)
+  fit <- structure(list(locked_scores = data.frame(Trust = trust, Quality = quality, Loyalty = loyalty),
+    folds = sample(rep(1:3, length.out = n))), class = "cssem_fit")
+  specification <- cssem_structure(list(
+    Quality = list(Trust = cssem_effect("auto")),
+    Loyalty = list(Trust = cssem_effect("auto"), Quality = cssem_effect("auto"))
+  ), order = c("Trust", "Quality", "Loyalty"))
+  association <- cssem_associate(fit, specification, structural_repeats = 3, seed = 44, shape_stability_min = .50)
+  quality <- association$candidate_metrics[association$candidate_metrics$outcome == "Quality", , drop = FALSE]
+  expect_true(any(quality$shape == "monotone_increasing"))
+  expect_lte(sum(association$candidate_metrics$selected & association$candidate_metrics$outcome == "Loyalty" & association$candidate_metrics$shape != "linear"), 1L)
+  expect_true(all(c("edge_drop_mse_increase", "selection_frequency", "status") %in% names(cssem_effect_ledger(association))))
+})
+
+test_that("monotone basis retains training-fold knots for scoring", {
+  trained <- cssem:::.train_basis(c(-2, -1, 0, 1, 2), "monotone_increasing")
+  scored <- cssem:::.predict_basis(c(-10, 10), trained$info)
+  expect_equal(ncol(scored), ncol(trained$values))
+  expect_false(any(trained$info$knots %in% c(-10, 10)))
 })
 
 test_that("structural repeated CV validates its repeat count", {

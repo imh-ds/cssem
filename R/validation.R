@@ -85,11 +85,14 @@
       sparse_warning_detected = any(fit$warnings$type == "sparse_category"), residual_dependence_max = residual_max,
       diagnostic_true_positive = isTRUE(setting$sparse) && any(fit$warnings$type == "sparse_category"),
       diagnostic_false_positive = !isTRUE(setting$sparse) && nrow(fit$warnings) > 0L,
+      residual_dependence_signal = is.finite(residual_max) && residual_max >= .25,
+      residual_diagnostic_true_positive = setting$local_dependence > 0 && is.finite(residual_max) && residual_max >= .25,
+      residual_diagnostic_false_positive = setting$local_dependence == 0 && is.finite(residual_max) && residual_max >= .25,
       diagnostic_status = if (job$diagnostics) "exploratory" else "not_run",
       worker_pid = Sys.getpid(), stringsAsFactors = FALSE))
 }
 
-#' Return the v0.2 supported operating envelope
+#' Return the v0.3 supported operating envelope
 #'
 #' @return A one-row data frame describing the initial supported conditions.
 #' @examples
@@ -104,7 +107,7 @@ cssem_supported_envelope <- function() {
   )
 }
 
-#' Create a deterministic v0.2 measurement validation manifest
+#' Create a deterministic v0.3 measurement validation manifest
 #'
 #' @param tier `"screening"` for a compact local suite or `"full"` for the
 #'   factorial confirmation manifest.
@@ -112,7 +115,7 @@ cssem_supported_envelope <- function() {
 #' @examples
 #' cssem_measurement_validation_manifest("screening")
 #' @export
-cssem_measurement_validation_manifest <- function(tier = c("screening", "full")) {
+cssem_measurement_validation_manifest <- function(tier = c("screening", "diagnostic", "full")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     scenario = c("clean", "moderate_missing", "weak_signal", "cross_loading", "local_dependence", "sparse_categories", "high_overlap"),
@@ -124,6 +127,12 @@ cssem_measurement_validation_manifest <- function(tier = c("screening", "full"))
     overlap = c(0, 0, 0, 0, 0, 0, .80),
     sparse = c(FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE),
     stringsAsFactors = FALSE
+  ))
+  if (tier == "diagnostic") return(data.frame(
+    scenario = c("diagnostic_clean", "diagnostic_local_dependence", "diagnostic_sparse"),
+    n = c(500L, 500L, 500L), loading = c(.80, .80, .80), missing = c(.05, .05, .05),
+    local_dependence = c(0, .35, 0), cross_loading = c(0, 0, 0), overlap = c(0, 0, 0),
+    sparse = c(FALSE, FALSE, TRUE), stringsAsFactors = FALSE
   ))
   grid <- expand.grid(n = c(200L, 500L), loading = c(.55, .80), missing = c(0, .10),
     local_dependence = c(0, .35), cross_loading = c(0, .20), overlap = c(0, .80), sparse = c(FALSE, TRUE),
@@ -170,9 +179,11 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   trust <- stats::rnorm(n)
   context <- stats::rnorm(n)
   quality <- switch(type,
-    smooth = as.numeric(scale(.55 * trust + .30 * trust^3 + stats::rnorm(n, sd = .65))),
-    smooth_subtle = as.numeric(scale(.55 * trust + .30 * trust^3 + stats::rnorm(n, sd = .65))),
-    smooth_strong = as.numeric(scale(.15 * trust + 1.15 * trust^3 + stats::rnorm(n, sd = .20))),
+    monotone_increasing = as.numeric(scale(.60 * trust + .75 * pmax(trust, 0) + stats::rnorm(n, sd = .45))),
+    monotone_decreasing = as.numeric(scale(-.60 * trust - .75 * pmax(trust, 0) + stats::rnorm(n, sd = .45))),
+    smooth_subtle = as.numeric(scale(.45 * (trust^2 - 1) + stats::rnorm(n, sd = .65))),
+    smooth_strong = as.numeric(scale(1.20 * (trust^2 - 1) + stats::rnorm(n, sd = .25))),
+    null = stats::rnorm(n),
     omitted = .35 * trust + .65 * context + stats::rnorm(n, sd = .65),
     .65 * trust + stats::rnorm(n, sd = .70)
   )
@@ -195,7 +206,7 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   list(data = data, truth = as.data.frame(states), model = model, structure = structure_spec)
 }
 
-#' Create a deterministic v0.2 structural validation manifest
+#' Create a deterministic v0.3 structural validation manifest
 #'
 #' @param tier `"screening"` or `"full"`.
 #' @return A structural scenario data frame.
@@ -204,8 +215,8 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
 #' @export
 cssem_structural_validation_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
-  types <- c("linear", "smooth_subtle", "smooth_strong", "interaction", "omitted", "downstream")
-  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 260L, 350L, 300L, 300L, 260L), items = c(4L, 4L, 6L, 4L, 4L, 4L), stringsAsFactors = FALSE))
+  types <- c("linear", "monotone_increasing", "monotone_decreasing", "smooth_subtle", "smooth_strong", "null", "interaction", "omitted", "downstream")
+  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 350L, 350L, 300L, 400L, 300L, 300L, 300L, 260L), items = c(4L, 6L, 6L, 4L, 6L, 4L, 4L, 4L, 4L), stringsAsFactors = FALSE))
   expand.grid(scenario = types, n = c(220L, 500L, 1000L), items = c(4L, 6L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
 }
 
@@ -219,21 +230,20 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
   })["elapsed"]
   gaps <- association$specification_gap
   candidates <- association$candidate_metrics
-  rows <- lapply(names(association$full_models), function(outcome) {
-    selected <- candidates[candidates$outcome == outcome & candidates$selected, , drop = FALSE]
-    smooth_candidates <- candidates[candidates$outcome == outcome & candidates$candidate != "linear", , drop = FALSE]
-    best_smooth <- smooth_candidates[which.max(smooth_candidates$mean_mse_improvement), , drop = FALSE]
-    temporal <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "temporal", , drop = FALSE]
-    unrestricted <- gaps[gaps$outcome == outcome & gaps$shadow_scope == "unrestricted", , drop = FALSE]
+  ledger <- cssem_effect_ledger(association)
+  rows <- lapply(seq_len(nrow(ledger)), function(index) {
+    selected <- ledger[index, , drop = FALSE]; outcome <- selected$outcome[[1L]]; predictor <- selected$predictor[[1L]]
+    linear <- candidates[candidates$outcome == outcome & candidates$predictor == predictor & candidates$shape == "linear", , drop = FALSE]
+    smooth_candidates <- candidates[candidates$outcome == outcome & candidates$predictor == predictor & grepl("^smooth", candidates$shape), , drop = FALSE]
+    best_smooth <- if (nrow(smooth_candidates)) smooth_candidates[which.max(smooth_candidates$mean_mse_improvement), , drop = FALSE] else data.frame(r_squared = NA_real_)
     data.frame(
-      scenario = setting$scenario, replication = job$replication, n = setting$n, outcome = outcome,
-      selected_shape = selected$candidate, selected_spline_df = selected$spline_df,
-      linear_r_squared = candidates$r_squared[candidates$outcome == outcome & candidates$candidate == "linear"],
-      smooth_r_squared = best_smooth$r_squared, best_smooth_df = best_smooth$spline_df,
-      mean_mse_improvement = best_smooth$mean_mse_improvement, mse_improvement_se = best_smooth$mse_improvement_se,
-      theory_r_squared = temporal$theory_r_squared, temporal_gap = temporal$specification_gap,
-      unrestricted_gap = unrestricted$specification_gap,
-      unrestricted_minus_temporal = unrestricted$specification_gap - temporal$specification_gap,
+      scenario = setting$scenario, replication = job$replication, n = setting$n, outcome = outcome, predictor = predictor,
+      selected_shape = selected$shape, selected_spline_df = if (grepl("^smooth_df", selected$shape)) as.integer(sub("smooth_df", "", selected$shape)) else NA_integer_,
+      linear_r_squared = linear$r_squared[[1L]], smooth_r_squared = best_smooth$r_squared[[1L]],
+      mean_mse_improvement = selected$mean_mse_improvement, mse_improvement_se = selected$mse_improvement_se,
+      selection_stability = selected$selection_frequency, edge_drop_mse_increase = selected$edge_drop_mse_increase,
+      theory_r_squared = selected$theory_r_squared, temporal_gap = selected$temporal_gap, unrestricted_gap = selected$unrestricted_gap,
+      unrestricted_minus_temporal = selected$unrestricted_gap - selected$temporal_gap,
       measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
       runtime_seconds = unname(elapsed), worker_pid = Sys.getpid(), stringsAsFactors = FALSE
     )
@@ -241,7 +251,7 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
   do.call(rbind, rows)
 }
 
-#' Run deterministic associational structural validation simulations
+#' Run deterministic v0.3 associational structural validation simulations
 #'
 #' @param manifest A manifest from [cssem_structural_validation_manifest()].
 #' @param reps Replications per structural scenario.
@@ -251,7 +261,7 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 #' @param max_iterations Retry budget used if the initial measurement fit has
 #'   not converged.
 #' @param structural_repeats Number of repeated structural CV assignments used
-#'   for linear-versus-smooth selection.
+#'   for edge-level shape selection.
 #' @param workers Number of independent replications to run concurrently. Use
 #'   `1` for sequential execution; PSOCK workers are supported on Windows.
 #' @return A machine-readable data frame containing model selection, R-squared,
@@ -264,7 +274,7 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 cssem_run_structural_validation <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
                                             max_iterations = 16L,
-                                            structural_repeats = 3L, workers = 1L) {
+                                            structural_repeats = 5L, workers = 1L) {
   if (!is.data.frame(manifest) || !all(c("scenario", "n") %in% names(manifest))) stop("manifest must contain scenario and n.", call. = FALSE)
   jobs <- vector("list", nrow(manifest) * reps); index <- 0L
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {
@@ -276,7 +286,7 @@ cssem_run_structural_validation <- function(manifest, reps = 3L, seed = 1L,
   do.call(rbind, .validation_map(jobs, .structural_validation_one, workers))
 }
 
-#' Evaluate v0.2 simulation release gates
+#' Evaluate v0.3 simulation release gates
 #'
 #' @param measurement_results Results from [cssem_run_measurement_validation()].
 #' @param structural_results Results from [cssem_run_structural_validation()].
@@ -293,19 +303,24 @@ cssem_validation_report <- function(measurement_results, structural_results) {
   measurement_pass <- all(measurement_results$cssem_recovery[inside] >= measurement_results$ordinal_factor_proxy_recovery[inside] - .02) &&
     all(measurement_results$cssem_recovery[inside] >= measurement_results$composite_proxy_recovery[inside] - .02)
   convergence_rate <- if ("converged" %in% names(measurement_results) && any(inside)) mean(measurement_results$converged[inside]) else NA_real_
-  linear <- structural_results[structural_results$scenario == "linear", , drop = FALSE]
-  smooth_strong <- structural_results[structural_results$scenario == "smooth_strong" & structural_results$outcome == "Quality", , drop = FALSE]
-  omitted <- structural_results[structural_results$scenario == "omitted" & structural_results$outcome == "Quality", , drop = FALSE]
-  downstream <- structural_results[structural_results$scenario == "downstream" & structural_results$outcome == "Quality", , drop = FALSE]
+  edge <- if ("predictor" %in% names(structural_results)) structural_results$predictor == "Trust" else TRUE
+  linear <- structural_results[structural_results$scenario == "linear" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  increasing <- structural_results[structural_results$scenario == "monotone_increasing" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  decreasing <- structural_results[structural_results$scenario == "monotone_decreasing" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  smooth_strong <- structural_results[structural_results$scenario == "smooth_strong" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  null <- structural_results[structural_results$scenario == "null" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  omitted <- structural_results[structural_results$scenario == "omitted" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
+  downstream <- structural_results[structural_results$scenario == "downstream" & structural_results$outcome == "Quality" & edge, , drop = FALSE]
   gates <- data.frame(
-    gate = c("measurement_noninferiority", "measurement_convergence", "linear_selection", "strong_smooth_selection", "omitted_predictor_flag", "downstream_gap_divergence"),
+    gate = c("measurement_noninferiority", "measurement_convergence", "linear_selection", "monotone_increasing_selection", "monotone_decreasing_selection", "strong_smooth_selection", "false_nonlinear_selection", "omitted_predictor_flag", "downstream_gap_divergence"),
     observed = c(if (any(inside)) min(pmin(measurement_results$cssem_recovery[inside] - measurement_results$ordinal_factor_proxy_recovery[inside], measurement_results$cssem_recovery[inside] - measurement_results$composite_proxy_recovery[inside])) else NA_real_,
-      convergence_rate, mean(linear$selected_shape == "linear"), mean(grepl("^smooth", smooth_strong$selected_shape)),
-      mean(omitted$temporal_gap < -.03), mean(downstream$unrestricted_minus_temporal < -.03)),
-    threshold = c(-.02, .95, .80, .80, .70, .70),
-    comparison = c(">=", ">=", ">=", ">=", ">=", ">="), stringsAsFactors = FALSE
+      convergence_rate, mean(linear$selected_shape == "linear"), mean(increasing$selected_shape == "monotone_increasing"),
+      mean(decreasing$selected_shape == "monotone_decreasing"), mean(grepl("^smooth", smooth_strong$selected_shape)),
+      mean(c(linear$selected_shape != "linear", null$selected_shape != "linear")), mean(omitted$temporal_gap < -.03), mean(downstream$unrestricted_minus_temporal < -.03)),
+    threshold = c(-.02, .95, .80, .70, .70, .70, .20, .70, .70),
+    comparison = c(">=", ">=", ">=", ">=", ">=", ">=", "<=", ">=", ">="), stringsAsFactors = FALSE
   )
-  gates$passed <- !is.na(gates$observed) & gates$observed >= gates$threshold
+  gates$passed <- !is.na(gates$observed) & ifelse(gates$comparison == ">=", gates$observed >= gates$threshold, gates$observed <= gates$threshold)
   list(envelope = envelope, gates = gates, passed = all(gates$passed),
     interpretation = "A negative gap diagnoses predictive incompleteness under its stated information set; it never establishes reverse causal direction.")
 }

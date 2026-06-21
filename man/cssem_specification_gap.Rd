@@ -9,15 +9,11 @@ cssem_specification_gap(association, scope = NULL)
 \arguments{
 \item{association}{A \code{cssem_association} object.}
 
-\item{scope}{Optional shadow scope (\code{"temporal"} or \code{"unrestricted"}).}
+\item{scope}{Optional shadow scope.}
 }
 \value{
-A data frame with theory and shadow cross-validated R-squared values,
-eligible shadow predictors, and \code{theory - shadow} specification gaps.
+A data frame of theory-minus-shadow cross-validated R-squared gaps.
 }
 \description{
 Return structural shadow-model specification gaps
-}
-\examples{
-# cssem_specification_gap(association)
 }

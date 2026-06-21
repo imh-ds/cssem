@@ -12,12 +12,8 @@ cssem_effect_card(association, outcome)
 \item{outcome}{Declared endogenous construct name.}
 }
 \value{
-A list containing selected effects, candidate metrics, and temporal
-and/or unrestricted shadow specification gaps for the outcome.
+A list of selected effects, candidates, contributions, and shadow gaps.
 }
 \description{
 Return a declared effect's associational evidence card
-}
-\examples{
-# cssem_effect_card(association, "Loyalty")
 }

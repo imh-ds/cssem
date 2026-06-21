@@ -1,4 +1,4 @@
-# Run only after reviewing the compact screening outputs from scripts 04 and 05.
+# Run only after reviewing the compact v0.3 screening outputs from scripts 04 and 05.
 library(cssem)
 
 results_dir <- "tests/internal/validation_results"

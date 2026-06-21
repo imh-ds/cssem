@@ -27,12 +27,13 @@ redundancy. Residual dependence is returned as a diagnostic table, not an
 automatic warning, until the simulation study calibrates its false-positive
 rate.
 
-The initial structural extension is deliberately associational. A
-`cssem_structure` declares which locked construct states predict each outcome;
-`cssem_associate()` cross-validates linear against low-complexity additive
-smooth effects and reports temporal and unrestricted shadow-model specification
-gaps. These effects are not causal claims and do not provide mediation,
-adjustment, or treatment-effect estimates. See
+The structural extension is deliberately associational. A `cssem_structure`
+declares locked-state predictors and may declare edge-level shape policies via
+`cssem_effect()`. `cssem_associate()` cross-validates linear, constrained
+monotone, and low-complexity smooth candidates one declared edge at a time,
+then reports temporal and unrestricted shadow-model specification gaps and an
+effect evidence ledger. These effects are not causal claims and do not provide
+mediation, adjustment, or treatment-effect estimates. See
 `docs/associational-structure.md`.
 
 Latent uncertainty draws are experimental simulation aids in v0.2. They are

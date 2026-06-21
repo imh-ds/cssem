@@ -1,4 +1,4 @@
-# Compact v0.2 measurement validation run.
+# Compact v0.3 measurement validation run.
 library(cssem)
 
 results_dir <- "tests/internal/validation_results"

@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{cssem_validation_report}
 \alias{cssem_validation_report}
-\title{Evaluate v0.2 simulation release gates}
+\title{Evaluate v0.3 simulation release gates}
 \usage{
 cssem_validation_report(measurement_results, structural_results)
 }
@@ -16,7 +16,7 @@ A list with gate-level evidence, pass/fail status, and the supported
 operating envelope.
 }
 \description{
-Evaluate v0.2 simulation release gates
+Evaluate v0.3 simulation release gates
 }
 \examples{
 # cssem_validation_report(measurement_results, structural_results)

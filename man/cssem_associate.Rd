@@ -10,48 +10,37 @@ cssem_associate(
   folds = NULL,
   spline_df = c(3L, 4L),
   smooth_uncertainty = 1,
-  structural_repeats = 3L,
+  shape_stability_min = 0.7,
+  structural_repeats = 5L,
   seed = 1L,
   shadow_scope = c("both", "temporal", "unrestricted")
 )
 }
 \arguments{
-\item{fit}{A \code{cssem_fit} object. Only \code{fit$locked_scores} are used.}
+\item{fit}{A \code{cssem_fit} object.}
 
 \item{structure}{A \code{cssem_structure} object.}
 
-\item{folds}{Optional structural validation folds. Defaults to the measurement
-cross-fitting folds stored in \code{fit}.}
+\item{folds}{Optional structural validation folds.}
 
-\item{spline_df}{Predeclared degrees of freedom for additive natural-spline
-candidates. The default compares df 3 and df 4.}
+\item{spline_df}{Degrees of freedom for low-complexity unconstrained spline
+candidates. Defaults to 3 and 4.}
 
-\item{smooth_uncertainty}{Multiplier for the paired foldwise-loss standard
-error. The default of one is a one-standard-error selection rule.}
+\item{smooth_uncertainty}{Paired foldwise-loss standard-error multiplier.}
 
-\item{structural_repeats}{Number of deterministic structural CV fold
-assignments used for shape selection.}
+\item{shape_stability_min}{Minimum repeated-CV selection frequency for a
+nonlinear candidate.}
 
-\item{seed}{Seed used only to generate repeated structural fold assignments.}
+\item{structural_repeats}{Number of deterministic structural CV assignments.}
 
-\item{shadow_scope}{Shadow benchmark scope: \code{"both"} (default),
-\code{"temporal"}, or \code{"unrestricted"}.}
+\item{seed}{Seed used only for repeated structural folds.}
+
+\item{shadow_scope}{Shadow benchmark scope.}
 }
 \value{
-An object of class \code{cssem_association} with candidate metrics,
-selected effect summaries, out-of-fold predictions, and specification gaps.
+An object of class \code{cssem_association}.
 }
 \description{
-Compares a theory-declared linear model with a low-complexity additive spline
-model by paired cross-validation. A smooth model is retained only if its
-average foldwise loss improvement exceeds \code{smooth_uncertainty} times its
-cross-fold standard error. Shadow models are shallow
-regression trees used as adequacy diagnostics, not discovered theory models.
-A temporal shadow uses only constructs preceding the outcome in the declared
-order; an unrestricted shadow uses all other same-wave constructs.
-}
-\examples{
-# association <- cssem_associate(
-#   fit, cssem_structure(list(Loyalty = c("Trust", "Satisfaction")))
-# )
+Selects at most one nonlinear declared edge per outcome. Candidate shape
+selection is repeated cross-validation only; it does not make causal claims.
 }
