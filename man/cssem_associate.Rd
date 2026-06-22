@@ -13,7 +13,8 @@ cssem_associate(
   shape_stability_min = 0.7,
   structural_repeats = 5L,
   seed = 1L,
-  shadow_scope = c("both", "temporal", "unrestricted")
+  shadow_scope = c("both", "temporal", "unrestricted"),
+  preset = c("default", "exploratory")
 )
 }
 \arguments{
@@ -36,6 +37,9 @@ nonlinear candidate.}
 \item{seed}{Seed used only for repeated structural folds.}
 
 \item{shadow_scope}{Shadow benchmark scope.}
+
+\item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight
+structural selection defaults while iterating locally.}
 }
 \value{
 An object of class \code{cssem_association}.

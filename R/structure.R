@@ -293,13 +293,22 @@ cssem_structure <- function(effects, order = NULL) {
 #' @param structural_repeats Number of deterministic structural CV assignments.
 #' @param seed Seed used only for repeated structural folds.
 #' @param shadow_scope Shadow benchmark scope.
+#' @param preset Runtime preset. Use `"exploratory"` for lighter-weight
+#'   structural selection defaults while iterating locally.
 #' @return An object of class `cssem_association`.
 #' @export
 cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
                              shape_stability_min = .70, structural_repeats = 5L, seed = 1L,
-                             shadow_scope = c("both", "temporal", "unrestricted")) {
+                             shadow_scope = c("both", "temporal", "unrestricted"),
+                             preset = c("default", "exploratory")) {
   if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
+  preset <- match.arg(preset)
+  if (preset == "exploratory") {
+    if (missing(spline_df)) spline_df <- 3L
+    if (missing(structural_repeats)) structural_repeats <- 2L
+    if (missing(shadow_scope)) shadow_scope <- "temporal"
+  }
   if (!is.numeric(smooth_uncertainty) || length(smooth_uncertainty) != 1L || !is.finite(smooth_uncertainty) || smooth_uncertainty < 0)
     stop("smooth_uncertainty must be a non-negative numeric scalar.", call. = FALSE)
   if (!is.numeric(shape_stability_min) || length(shape_stability_min) != 1L || shape_stability_min < 0 || shape_stability_min > 1)

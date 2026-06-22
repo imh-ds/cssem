@@ -10,7 +10,8 @@ cssem_fit(
   seed = 1L,
   draws = 0L,
   iterations = 6L,
-  diagnostics = TRUE
+  diagnostics = TRUE,
+  preset = c("default", "exploratory")
 )
 }
 \arguments{
@@ -27,6 +28,9 @@ zero to omit them.}
 
 \item{diagnostics}{Whether to calculate exploratory residual diagnostics and
 item warnings. Disable for high-throughput simulation benchmarks.}
+
+\item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight fitting
+defaults while iterating on a live project.}
 }
 \value{
 An object of class \code{cssem_fit} containing locked scores, full-data

@@ -18,3 +18,12 @@ test_that("cross-fitting retains a rare ordinal category schema", {
   expect_silent(f <- cssem_fit(m, d, seed = 8, iterations = 2, diagnostics = FALSE))
   expect_true(all(is.finite(f$locked_scores$A)))
 })
+
+test_that("exploratory presets lighten model and fit defaults", {
+  d <- simulate_cssem_data(n = 60, seed = 9)
+  m <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), preset = "exploratory")
+  f <- cssem_fit(m, d, seed = 5, diagnostics = FALSE, preset = "exploratory")
+  expect_equal(m$folds, 2L)
+  expect_equal(f$measurement_engine$A$iterations, 8L)
+  expect_true(all(is.finite(f$locked_scores$A)))
+})

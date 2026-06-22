@@ -113,3 +113,18 @@ test_that("temporal shadows require a valid ordering for cyclic declarations", {
   expect_error(cssem_associate(fit, cyclic, shadow_scope = "temporal"))
   expect_s3_class(cssem_associate(fit, cyclic, shadow_scope = "unrestricted"), "cssem_association")
 })
+
+test_that("exploratory preset lightens structural defaults", {
+  set.seed(21)
+  fit <- structure(list(
+    locked_scores = data.frame(Trust = rnorm(60), Quality = rnorm(60), Loyalty = rnorm(60)),
+    folds = sample(rep(1:3, length.out = 60))
+  ), class = "cssem_fit")
+  specification <- cssem_structure(list(
+    Quality = "Trust",
+    Loyalty = c("Trust", "Quality")
+  ), order = c("Trust", "Quality", "Loyalty"))
+  association <- cssem_associate(fit, specification, preset = "exploratory")
+  expect_equal(association$structural_repeats, 2L)
+  expect_identical(association$shadow_scope, "temporal")
+})

@@ -9,6 +9,8 @@
 #'   one scale or one per item (`"ordinal"` or `"continuous"`); and optional
 #'   `keys`, item directions (`1` or `-1`).
 #' @param folds Number of cross-fitting folds. Must be at least two.
+#' @param preset Runtime preset. Use `"exploratory"` for lighter-weight model
+#'   defaults while iterating locally.
 #' @return An object of class `cssem_model`.
 #' @examples
 #' model <- cssem_model(list(
@@ -16,9 +18,11 @@
 #' ))
 #' @family model specification functions
 #' @export
-cssem_model <- function(constructs, folds = 5L) {
+cssem_model <- function(constructs, folds = 5L, preset = c("default", "exploratory")) {
   if (!is.list(constructs) || is.null(names(constructs)) || any(names(constructs) == ""))
     stop("constructs must be a named list.", call. = FALSE)
+  preset <- match.arg(preset)
+  if (preset == "exploratory" && missing(folds)) folds <- 2L
   folds <- as.integer(folds)
   if (is.na(folds) || folds < 2L) stop("folds must be at least 2.", call. = FALSE)
   parsed <- lapply(constructs, function(x) {

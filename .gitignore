@@ -27,6 +27,7 @@ covr/
 *.gcda
 *.gcno
 *.prof
+profiling/
 
 # Operating system and editor files
 .DS_Store

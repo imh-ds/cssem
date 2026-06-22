@@ -13,6 +13,8 @@
 #' @param iterations Maximum optimization iterations for each measurement fit.
 #' @param diagnostics Whether to calculate exploratory residual diagnostics and
 #'   item warnings. Disable for high-throughput simulation benchmarks.
+#' @param preset Runtime preset. Use `"exploratory"` for lighter-weight fitting
+#'   defaults while iterating on a live project.
 #' @return An object of class `cssem_fit` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -25,9 +27,14 @@
 #' @family measurement fitting functions
 #' @export
 cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
-                      diagnostics = TRUE) {
+                      diagnostics = TRUE, preset = c("default", "exploratory")) {
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
+  preset <- match.arg(preset)
+  if (preset == "exploratory") {
+    if (missing(iterations)) iterations <- 4L
+    if (missing(draws)) draws <- 0L
+  }
   needed <- unlist(lapply(model$constructs, `[[`, "indicators"), use.names = FALSE)
   if (!all(needed %in% names(data))) stop("data is missing declared indicators.", call. = FALSE)
   n <- nrow(data); if (n < model$folds * 4L) warning("Small folds may make construct states unstable.", call. = FALSE)

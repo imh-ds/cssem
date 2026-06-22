@@ -4,7 +4,7 @@
 \alias{cssem_model}
 \title{Declare a CS-SEM measurement model}
 \usage{
-cssem_model(constructs, folds = 5L)
+cssem_model(constructs, folds = 5L, preset = c("default", "exploratory"))
 }
 \arguments{
 \item{constructs}{A named list of construct specifications. Each specification
@@ -13,6 +13,9 @@ one scale or one per item (\code{"ordinal"} or \code{"continuous"}); and optiona
 \code{keys}, item directions (\code{1} or \code{-1}).}
 
 \item{folds}{Number of cross-fitting folds. Must be at least two.}
+
+\item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight model
+defaults while iterating locally.}
 }
 \value{
 An object of class \code{cssem_model}.
