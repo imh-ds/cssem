@@ -59,8 +59,10 @@
   if (is.na(workers) || workers < 1L) stop("workers must be a positive integer.", call. = FALSE)
   if (workers == 1L || length(jobs) == 1L) return(lapply(jobs, fun))
   workers <- min(workers, length(jobs))
+  lib_paths <- .libPaths()
   cluster <- parallel::makePSOCKcluster(workers)
   on.exit(parallel::stopCluster(cluster), add = TRUE)
+  parallel::clusterCall(cluster, function(paths) .libPaths(paths), lib_paths)
   parallel::clusterEvalQ(cluster, suppressPackageStartupMessages(library(cssem)))
   parallel::parLapply(cluster, jobs, fun)
 }
@@ -179,10 +181,10 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   trust <- stats::rnorm(n)
   context <- stats::rnorm(n)
   quality <- switch(type,
-    monotone_increasing = as.numeric(scale(.60 * trust + .75 * pmax(trust, 0) + stats::rnorm(n, sd = .45))),
-    monotone_decreasing = as.numeric(scale(-.60 * trust - .75 * pmax(trust, 0) + stats::rnorm(n, sd = .45))),
+    monotone_increasing = as.numeric(scale(.55 * trust + .95 * pmax(trust, 0) + stats::rnorm(n, sd = .35))),
+    monotone_decreasing = as.numeric(scale(-.55 * trust - .95 * pmax(trust, 0) + stats::rnorm(n, sd = .35))),
     smooth_subtle = as.numeric(scale(.45 * (trust^2 - 1) + stats::rnorm(n, sd = .65))),
-    smooth_strong = as.numeric(scale(1.20 * (trust^2 - 1) + stats::rnorm(n, sd = .25))),
+    smooth_strong = as.numeric(scale(2.10 * (trust^2 - 1) + stats::rnorm(n, sd = .10))),
     null = stats::rnorm(n),
     omitted = .35 * trust + .65 * context + stats::rnorm(n, sd = .65),
     .65 * trust + stats::rnorm(n, sd = .70)
@@ -216,7 +218,7 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
 cssem_structural_validation_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
   types <- c("linear", "monotone_increasing", "monotone_decreasing", "smooth_subtle", "smooth_strong", "null", "interaction", "omitted", "downstream")
-  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 350L, 350L, 300L, 400L, 300L, 300L, 300L, 260L), items = c(4L, 6L, 6L, 4L, 6L, 4L, 4L, 4L, 4L), stringsAsFactors = FALSE))
+  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 500L, 500L, 300L, 700L, 300L, 300L, 300L, 260L), items = c(4L, 6L, 6L, 4L, 6L, 4L, 4L, 4L, 4L), stringsAsFactors = FALSE))
   expand.grid(scenario = types, n = c(220L, 500L, 1000L), items = c(4L, 6L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
 }
 

@@ -1,5 +1,7 @@
 library(cssem)
 
+# Local v0.3 developer screening: representative scenarios, one replication
+# each, separate from the release confirmation workflow.
 measurement <- cssem_run_measurement_validation(
   cssem_measurement_validation_manifest("screening"), reps = 1, seed = 2026
 )

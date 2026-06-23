@@ -1,11 +1,12 @@
 # CS-SEM
 
-CS-SEM v0.1 is a research implementation of cross-fitted construct-state
-measurement. It estimates theory-declared, one-dimensional manifestation
-constructs from ordinal, binary, and continuous indicators. Its narrow
-structural layer fits theory-declared **associational** effects on locked scores
-only; it does **not** fit causal effects, formative constructs, or global SEM
-fit indices.
+CS-SEM v0.3.0 is a research release of cross-fitted construct-state
+measurement plus a narrow associational structural layer. It estimates
+theory-declared, one-dimensional manifestation constructs from ordinal, binary,
+and continuous indicators, locks those construct states with cross-fitting, and
+fits theory-declared **associational** linear, constrained monotone, or
+low-complexity smooth effects on the locked scores. It does **not** fit causal
+effects, formative constructs, or global SEM fit indices.
 
 The public model contract is deliberately language-neutral: a construct has a
 name, ordered indicator names, scale declarations, and item keys. The R API
@@ -32,14 +33,30 @@ unrestricted same-wave network benchmark. Positive specification gaps mean the
 declared model predicts better than the corresponding shallow-tree benchmark;
 they do not establish causal direction.
 
-See `docs/method-spec.md` for the v0.1 contract and `inst/scripts/` for the
-deterministic simulation benchmark. The benchmark reports a predeclared
-recovery criterion; it is evidence generation, not a hard-coded claim that the
-prototype has already surpassed CB-SEM or PLS-SEM.
+See `docs/method-spec.md` for the current measurement contract and
+`docs/validation-v02.md` for the v0.3 simulation validation protocol and
+release gates. Legacy benchmark helpers remain available for compatibility, but
+the primary validation workflow now uses the v0.3 measurement and structural
+validation suites directly.
 
-For a local screening run, use
-`run_measurement_benchmark(design = cssem_validation_design("screening"), reps = 3)`.
-The 32-condition, 20-replication full stress test is intentionally expensive
-and should be reserved for confirmation. The default implementation has dependency-free ordinal-factor and composite
-proxies; use the optional `lavaan` and `plspm` packages in the next comparator
-validation milestone for published CB-SEM/PLS-SEM comparisons.
+For a local v0.3 screening run, use:
+
+```r
+measurement <- cssem_run_measurement_validation(
+  cssem_measurement_validation_manifest("screening"),
+  reps = 1,
+  seed = 2026
+)
+structural <- cssem_run_structural_validation(
+  cssem_structural_validation_manifest("screening"),
+  reps = 1,
+  seed = 3026
+)
+cssem_validation_report(measurement, structural)
+```
+
+CI keeps a tiny one-rep smoke run separate from the release workflow. Release
+artifacts are generated from confirmation runs and written into
+`tests/internal/validation_results/`. The dependency-light built-in comparators
+remain recovery proxies rather than published CB-SEM or production PLS-SEM;
+use optional `lavaan` and `plspm` in the next comparator-validation milestone.
