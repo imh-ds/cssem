@@ -1,3 +1,6 @@
+source(file.path("inst", "scripts", "script-utils.R"))
+prefer_workspace_library()
+
 library(cssem)
 
 d <- simulate_cssem_data(n = 80, seed = 11)

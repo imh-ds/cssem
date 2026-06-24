@@ -21,7 +21,7 @@ skip exploratory residual diagnostics because those diagnostics do not affect
 latent recovery and otherwise dominate runtime. Production fits retain five
 folds and diagnostics by default.
 
-For a publication-grade comparison, install `lavaan` and `plspm` and retain
+For a publication-grade comparison, install `lavaan` and `seminr` and retain
 the exact same simulated data, seeds, metrics, and scenario grid. Report the
 package versions, convergence failures, and all scenarios—not only favorable
 ones. The current package does not label its built-in proxy comparators as full

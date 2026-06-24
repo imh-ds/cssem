@@ -1,0 +1,53 @@
+\name{cssem_run_structural_comparator_validation}
+\alias{cssem_run_structural_comparator_validation}
+\title{Run optional structural comparator validation on a shared associational task}
+\usage{
+cssem_run_structural_comparator_validation(
+  manifest,
+  reps = 3L,
+  seed = 1L,
+  folds = 3L,
+  iterations = 8L,
+  max_iterations = 16L,
+  structural_repeats = 5L,
+  workers = 1L
+)
+}
+\arguments{
+\item{manifest}{A structural manifest from \code{\link[=cssem_structural_validation_manifest]{cssem_structural_validation_manifest()}}.}
+
+\item{reps}{Replications per scenario.}
+
+\item{seed}{Base seed.}
+
+\item{folds}{Measurement cross-fitting folds used for the CS-SEM encoder.}
+
+\item{iterations}{Measurement iterations used for the CS-SEM encoder.}
+
+\item{max_iterations}{Retry budget used if the initial measurement fit has not converged.}
+
+\item{structural_repeats}{Number of repeated structural CV assignments used for edge-level shape selection.}
+
+\item{workers}{Number of independent scenario-replication jobs to run concurrently.}
+}
+\value{
+A data frame with one row per engine, scenario, outcome, and replication.
+Columns include \code{engine}, \code{status}, \code{selected_shape},
+\code{theory_r_squared}, \code{temporal_gap}, \code{unrestricted_gap},
+\code{selection_stability}, \code{score_coverage}, and runtime metadata.
+}
+\description{
+Runs the structural validation scenarios with a fixed CS-SEM associational
+selector while swapping only the construct-score engine. This is intended to
+show where cross-fitted locked scores help with shape selection, shadow-gap
+diagnostics, and structural robustness, rather than only latent recovery.
+}
+\examples{
+structural_comparators <- cssem_run_structural_comparator_validation(
+  cssem_structural_validation_manifest("screening")[1, ],
+  reps = 1,
+  seed = 1,
+  workers = 1
+)
+unique(structural_comparators$engine)
+}

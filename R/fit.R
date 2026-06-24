@@ -7,9 +7,11 @@
 #'
 #' @param model A `cssem_model` object.
 #' @param data A data frame containing all declared indicator columns.
-#' @param seed Integer random seed for fold assignment and uncertainty draws.
+#' @param seed Integer random seed for fold assignment and experimental
+#'   uncertainty draws.
 #' @param draws Number of exploratory latent-state uncertainty draws. Set to
-#'   zero to omit them.
+#'   zero to omit them. These draws are not release-validated inferential
+#'   outputs.
 #' @param iterations Maximum optimization iterations for each measurement fit.
 #' @param diagnostics Whether to calculate exploratory residual diagnostics and
 #'   item warnings. Disable for high-throughput simulation benchmarks.

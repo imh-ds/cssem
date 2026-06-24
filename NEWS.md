@@ -6,6 +6,15 @@
   unrestricted shadow-model specification gaps.
 * Adds supported-envelope reporting and deterministic measurement/structural
   validation suites for the associational release.
+* Adds optional `lavaan`/`seminr` comparator artifacts that separate latent
+  recovery from held-out downstream association-preservation benchmarks, with
+  success-rate reporting for handoff-ready summaries.
+* Adds structural comparator artifacts that hold the associational selector
+  fixed while swapping score engines, so shape-selection and shadow-gap
+  benchmarks can show where CS-SEM specifically stands out.
+* Adds a coverage-adjusted structural comparator summary so high structural
+  fit can be interpreted alongside partial score coverage in external
+  comparator handoffs.
 * Keeps the release scope explicitly non-causal: no causal claims, formative
   constructs, or global SEM fit indices are supported.
 

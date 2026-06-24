@@ -11,3 +11,9 @@ Before proposing a change:
    validation design and all convergence failures.
 4. Document every exported function with roxygen2 and run
    `roxygen2::roxygenise()` before submitting documentation changes.
+
+Repo-owned validation and release scripts use the normal active `.libPaths()`
+by default, so ordinary `devtools::install()` workflows behave the way you
+expect. If you want an isolated repo-local run, set
+`CSSEM_USE_LOCAL_R_LIB=1` before running a script, or point
+`CSSEM_R_LIB_PATH` at a specific library tree.

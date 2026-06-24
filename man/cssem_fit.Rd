@@ -19,10 +19,12 @@ cssem_fit(
 
 \item{data}{A data frame containing all declared indicator columns.}
 
-\item{seed}{Integer random seed for fold assignment and uncertainty draws.}
+\item{seed}{Integer random seed for fold assignment and experimental
+uncertainty draws.}
 
 \item{draws}{Number of exploratory latent-state uncertainty draws. Set to
-zero to omit them.}
+zero to omit them. These draws are not release-validated inferential
+outputs.}
 
 \item{iterations}{Maximum optimization iterations for each measurement fit.}
 

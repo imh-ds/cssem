@@ -1,3 +1,6 @@
+source(file.path("inst", "scripts", "script-utils.R"))
+prefer_workspace_library()
+
 library(cssem)
 
 # CI verifies the v0.3 validation pipeline end to end without attempting a

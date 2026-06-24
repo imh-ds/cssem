@@ -9,7 +9,9 @@ The initial supported envelope is one-dimensional ordinal manifestation blocks
 with at least four indicators, `n >= 200`, item signal of at least `.70`, and
 no more than 10% item missingness. Cross-loadings, strong construct overlap,
 sparse categories, and local dependence are retained as exploratory stress
-conditions and must be reported separately.
+conditions and must be reported separately. The release workflow now writes an
+evidence-backed `supported_envelope.csv` artifact from the stored confirmation
+results so the supported envelope is generated rather than hand-maintained.
 
 ## Measurement suite
 
@@ -24,6 +26,8 @@ Validation fits begin with an efficient iteration budget and automatically
 retry at a higher budget when an encoder has not converged. The release report
 requires at least 95% convergence inside the supported envelope; CI uses a
 non-retrying smoke configuration solely to verify the pipeline.
+Latent uncertainty draws remain experimental and are excluded from these
+release-validation artifacts until a dedicated coverage study exists.
 
 ## Structural suite
 

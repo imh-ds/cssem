@@ -38,3 +38,80 @@ test_that("structural validation records both shadow scopes", {
   expect_equal(nrow(result), 3)
   expect_true(all(is.finite(result$temporal_gap)))
 })
+
+test_that("comparator validation skips optional engines cleanly when unavailable", {
+  manifest <- cssem_measurement_validation_manifest("screening")[1, ]
+  result <- cssem_run_comparator_validation(manifest, reps = 1, seed = 11, folds = 2, iterations = 2, workers = 1)
+  expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls") %in% result$engine))
+  expect_true(all(c("downstream_rmse", "downstream_r_squared") %in% names(result)))
+  expect_true(all(result$status[result$engine %in% c("cssem_locked", "ordinal_factor_proxy", "composite_proxy")] == "success"))
+  expect_true(all(result$status[result$engine %in% c("lavaan_dwls", "seminr_pls")] %in% c("success", "skipped_not_installed", "error")))
+})
+
+test_that("structural comparator validation returns structural benchmark columns", {
+  manifest <- cssem_structural_validation_manifest("screening")[1, , drop = FALSE]
+  result <- cssem_run_structural_comparator_validation(
+    manifest,
+    reps = 1,
+    seed = 13,
+    folds = 2,
+    iterations = 2,
+    max_iterations = 2,
+    structural_repeats = 1,
+    workers = 1
+  )
+  expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls") %in% result$engine))
+  expect_true(all(c("selected_shape", "temporal_gap", "unrestricted_gap", "score_coverage") %in% names(result)))
+  built_in <- result$engine %in% c("cssem_locked", "ordinal_factor_proxy", "composite_proxy")
+  expect_true(all(result$status[built_in] == "success"))
+})
+
+test_that("repo-owned validation scripts use the shared library helper", {
+  scripts <- c(
+    "inst/scripts/run-v03-ci.R",
+    "inst/scripts/run-v03-screening.R",
+    "inst/scripts/generate-v03-release-artifacts.R",
+    "inst/scripts/generate-v04-comparator-artifacts.R",
+    "inst/scripts/generate-v04-structural-comparator-artifacts.R",
+    "inst/scripts/run-benchmark.R",
+    "inst/scripts/run-validation-suite.R",
+    "inst/scripts/smoke-test.R"
+  )
+  script_paths <- file.path(testthat::test_path("..", ".."), scripts)
+  lines <- lapply(script_paths, readLines, warn = FALSE)
+  expect_true(all(vapply(lines, function(x) any(grepl("script-utils.R", x, fixed = TRUE)), logical(1))))
+  expect_true(all(vapply(lines, function(x) any(grepl("prefer_workspace_library\\(", x)), logical(1))))
+})
+
+test_that("workspace library helper is opt-in", {
+  script <- file.path(testthat::test_path("..", ".."), "inst", "scripts", "script-utils.R")
+  e <- new.env(parent = globalenv())
+  source(script, local = e)
+
+  original <- .libPaths()
+  on.exit({
+    Sys.unsetenv("CSSEM_USE_LOCAL_R_LIB")
+    Sys.unsetenv("CSSEM_R_LIB_PATH")
+    .libPaths(original)
+  }, add = TRUE)
+
+  Sys.unsetenv("CSSEM_USE_LOCAL_R_LIB")
+  Sys.unsetenv("CSSEM_R_LIB_PATH")
+  e$prefer_workspace_library()
+  expect_equal(.libPaths(), original)
+
+  local_path <- file.path(tempdir(), "cssem-test-lib")
+  dir.create(local_path, recursive = TRUE, showWarnings = FALSE)
+  Sys.setenv(CSSEM_R_LIB_PATH = local_path)
+  e$prefer_workspace_library()
+  expect_equal(normalizePath(.libPaths()[1], winslash = "/", mustWork = TRUE),
+    normalizePath(local_path, winslash = "/", mustWork = TRUE))
+})
+
+test_that("public docs refer to seminr instead of plspm", {
+  files <- c("README.md", "docs/validation.md")
+  paths <- file.path(testthat::test_path("..", ".."), files)
+  lines <- unlist(lapply(paths, readLines, warn = FALSE))
+  expect_false(any(grepl("plspm", lines, fixed = TRUE)))
+  expect_true(any(grepl("seminr", lines, fixed = TRUE)))
+})

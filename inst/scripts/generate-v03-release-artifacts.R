@@ -1,5 +1,5 @@
-workspace_lib <- "local_r_lib"
-if (dir.exists(workspace_lib)) .libPaths(c(workspace_lib, .libPaths()))
+source(file.path("inst", "scripts", "script-utils.R"))
+prefer_workspace_library()
 
 library(cssem)
 
@@ -71,6 +71,33 @@ release_report <- cssem_validation_report(
 utils::write.csv(
   release_report$gates,
   file.path(output_dir, "release_gates.csv"),
+  row.names = FALSE
+)
+
+envelope <- cssem_supported_envelope()
+inside <- measurement_confirmation$n >= envelope$minimum_n &
+  measurement_confirmation$loading >= envelope$minimum_loading &
+  measurement_confirmation$missing <= envelope$maximum_missing &
+  measurement_confirmation$cross_loading == 0 &
+  measurement_confirmation$local_dependence == 0 &
+  !measurement_confirmation$sparse &
+  measurement_confirmation$overlap < .80
+
+supported_envelope <- cbind(
+  envelope,
+  data.frame(
+    confirmation_measurement_jobs = nrow(measurement_confirmation),
+    confirmation_structural_jobs = nrow(structural_confirmation),
+    confirmation_jobs_inside_envelope = sum(inside),
+    inside_envelope_convergence = mean(measurement_confirmation$converged[inside]),
+    release_gates_passed = release_report$passed,
+    exploratory_conditions = "cross_loadings,strong_overlap,sparse_categories,local_dependence",
+    stringsAsFactors = FALSE
+  )
+)
+utils::write.csv(
+  supported_envelope,
+  file.path(output_dir, "supported_envelope.csv"),
   row.names = FALSE
 )
 

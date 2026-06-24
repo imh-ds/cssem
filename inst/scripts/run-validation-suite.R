@@ -1,3 +1,6 @@
+source(file.path("inst", "scripts", "script-utils.R"))
+prefer_workspace_library()
+
 library(cssem)
 
 # Screening first: six representative conditions times three replications.

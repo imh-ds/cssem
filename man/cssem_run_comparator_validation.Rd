@@ -1,0 +1,52 @@
+\name{cssem_run_comparator_validation}
+\alias{cssem_run_comparator_validation}
+\title{Run optional comparator validation for the CS-SEM measurement suite}
+\usage{
+cssem_run_comparator_validation(
+  manifest,
+  reps = 3L,
+  seed = 1L,
+  folds = 3L,
+  iterations = 8L,
+  workers = 1L
+)
+}
+\arguments{
+\item{manifest}{A measurement manifest from \code{\link[=cssem_measurement_validation_manifest]{cssem_measurement_validation_manifest()}}.}
+
+\item{reps}{Replications per scenario.}
+
+\item{seed}{Base seed.}
+
+\item{folds}{Measurement cross-fitting folds used for the CS-SEM encoder.}
+
+\item{iterations}{Measurement iterations used for the CS-SEM encoder.}
+
+\item{workers}{Number of independent scenario-replication jobs to run concurrently.}
+}
+\value{
+A data frame with one row per engine, scenario, and replication. Columns
+include \code{engine}, \code{package_name}, \code{package_version},
+\code{available}, \code{status}, \code{converged}, \code{runtime_seconds}, and
+\code{recovery}, \code{downstream_rmse}, and \code{downstream_r_squared}.
+}
+\description{
+Runs the deterministic measurement scenarios against the current CS-SEM
+locked-score encoder, the built-in ordinal-factor and composite proxies, and
+optional external comparators when their packages are installed.
+}
+\details{
+\code{lavaan} is used for a DWLS-style CFA comparator when available, and
+\code{seminr} is used for a supported PLS-family composite comparator when
+available. Optional engines are skipped gracefully when the packages are not
+installed.
+}
+\examples{
+comparators <- cssem_run_comparator_validation(
+  cssem_measurement_validation_manifest("screening")[1, ],
+  reps = 1,
+  seed = 1,
+  workers = 1
+)
+unique(comparators$engine)
+}

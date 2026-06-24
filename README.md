@@ -57,6 +57,22 @@ cssem_validation_report(measurement, structural)
 
 CI keeps a tiny one-rep smoke run separate from the release workflow. Release
 artifacts are generated from confirmation runs and written into
-`tests/internal/validation_results/`. The dependency-light built-in comparators
-remain recovery proxies rather than published CB-SEM or production PLS-SEM;
-use optional `lavaan` and `plspm` in the next comparator-validation milestone.
+`tests/internal/validation_results/`, including an evidence-backed
+`supported_envelope.csv` summary. Comparator artifacts now distinguish
+measurement-state recovery from downstream association-preservation: use
+`comparator_validation.csv` for scenario-level rows, `comparator_summary.csv`
+for status-aware rollups, and `comparator_benchmark_matrix.csv` for the
+success-rate and success-only benchmark matrix across engines. Structural
+comparator artifacts use the same CS-SEM associational selector with different
+score engines to show where locked scores help with shape selection and
+shadow-gap diagnostics: use `structural_comparator_validation.csv`,
+`structural_comparator_summary.csv`, and
+`structural_comparator_benchmark_matrix.csv` for that benchmark family, plus
+`structural_comparator_coverage_adjusted_matrix.csv` when high structural fit
+must be interpreted together with partial score coverage. Latent
+uncertainty draws remain experimental research outputs; they are not part of
+the release-validated evidence story and must not be reported as calibrated
+inferential uncertainty. The dependency-light built-in comparators remain
+measurement and downstream task proxies rather than published CB-SEM or
+production PLS-SEM; use optional `lavaan` and `seminr` in the comparator
+validation workflow.
