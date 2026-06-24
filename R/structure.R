@@ -251,6 +251,65 @@ cssem_structure <- function(effects, order = NULL) {
   strongest[[which.min(complexity)]]
 }
 
+# Classical (Fuller) errors-in-variables correction on standardized construct
+# states. Measurement error in the predictors attenuates structural slopes; the
+# correction subtracts the predictor error covariance D_e = diag((1 - rho) * var)
+# from the predictor covariance before solving the normal equations. Error in the
+# outcome inflates residual variance but does not bias the slope, so only
+# predictor reliabilities enter. Returns naive (uncorrected) and corrected slopes.
+.eiv_coefficients <- function(scores, outcome, predictors, reliability) {
+  X <- as.matrix(scores[, predictors, drop = FALSE]); y <- scores[[outcome]]
+  keep <- stats::complete.cases(X, y); X <- X[keep, , drop = FALSE]; y <- y[keep]
+  na <- stats::setNames(rep(NA_real_, length(predictors)), predictors)
+  if (length(y) < length(predictors) + 2L) return(list(naive = na, corrected = na))
+  Xc <- sweep(X, 2L, colMeans(X), "-")
+  Szz <- crossprod(Xc) / (nrow(Xc) - 1L)
+  Szy <- crossprod(Xc, y - mean(y)) / (nrow(Xc) - 1L)
+  rel <- reliability[predictors]
+  naive <- tryCatch(drop(solve(Szz, Szy)), error = function(e) na)
+  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0)) return(list(naive = naive, corrected = na))
+  De <- diag((1 - rel) * diag(Szz), nrow = length(predictors))
+  corrected_cov <- Szz - De
+  # Guard against an ill-conditioned correction (low reliability can render the
+  # corrected predictor covariance non-positive-definite); fall back to naive.
+  pd <- tryCatch(all(eigen(corrected_cov, symmetric = TRUE, only.values = TRUE)$values > 1e-6), error = function(e) FALSE)
+  corrected <- if (pd) tryCatch(drop(solve(corrected_cov, Szy)), error = function(e) na) else na
+  list(naive = stats::setNames(naive, predictors), corrected = stats::setNames(corrected, predictors))
+}
+
+# Percentile bootstrap of the corrected slopes, resampling respondents. This
+# reflects sampling variability of the errors-in-variables estimator; the
+# reliability inputs are held fixed at their measurement-model estimates.
+.eiv_bootstrap <- function(scores, outcome, predictors, reliability, replicates, seed) {
+  if (replicates < 1L) return(NULL)
+  set.seed(seed + 4242L); n <- nrow(scores)
+  estimates <- matrix(NA_real_, replicates, length(predictors), dimnames = list(NULL, predictors))
+  for (b in seq_len(replicates)) {
+    idx <- sample.int(n, n, replace = TRUE)
+    estimates[b, ] <- .eiv_coefficients(scores[idx, , drop = FALSE], outcome, predictors, reliability)$corrected
+  }
+  estimates
+}
+
+# Corrected structural effects for one outcome. Edges whose selected shape is
+# linear or monotone are disattenuated; smooth edges are reported but not yet
+# corrected (closed-form errors-in-variables for splines is out of scope).
+.corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed) {
+  predictors <- names(selected_shapes)
+  applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in% c("linear", "monotone_increasing", "monotone_decreasing"), logical(1))
+  fit <- .eiv_coefficients(scores, outcome, predictors, reliability)
+  boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed) else NULL
+  do.call(rbind, lapply(predictors, function(p) {
+    ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p]))) stats::quantile(boot[, p], c(.025, .975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    data.frame(outcome = outcome, predictor = p,
+      naive_estimate = if (applicable[[p]]) unname(fit$naive[[p]]) else NA_real_,
+      corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
+      predictor_reliability = unname(reliability[[p]]),
+      corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
+      eiv_applicable = applicable[[p]], stringsAsFactors = FALSE)
+  }))
+}
+
 .shadow_predictions <- function(scores, outcome, predictors, folds) {
   prediction <- rep(NA_real_, nrow(scores)); if (!length(predictors)) return(prediction)
   formula <- stats::as.formula(paste(outcome, "~", paste(predictors, collapse = " + ")))
@@ -300,10 +359,13 @@ cssem_structure <- function(effects, order = NULL) {
 cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
                              shape_stability_min = .70, structural_repeats = 5L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted"),
+                             reliability = NULL, eiv_bootstrap = 0L,
                              preset = c("default", "exploratory")) {
   if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
   preset <- match.arg(preset)
+  eiv_bootstrap <- as.integer(eiv_bootstrap)
+  if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
   if (preset == "exploratory") {
     if (missing(spline_df)) spline_df <- 3L
     if (missing(structural_repeats)) structural_repeats <- 2L
@@ -318,12 +380,21 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   scores <- fit$locked_scores; all_names <- names(scores)
   declared <- unique(c(names(structure$effects), unlist(lapply(structure$effects, names), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
+  # Per-construct reliability used by the errors-in-variables correction. Defaults
+  # to the posterior reliability carried on the fit; NA where unavailable so the
+  # corrected estimate is simply omitted rather than silently wrong.
+  reliability_source <- if (is.null(reliability)) fit$reliability else reliability
+  reliability_vec <- stats::setNames(rep(NA_real_, length(all_names)), all_names)
+  if (!is.null(reliability_source)) {
+    shared <- intersect(names(reliability_source), all_names)
+    reliability_vec[shared] <- as.numeric(reliability_source[shared])
+  }
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope
   temporal_order <- if ("temporal" %in% scopes) .resolve_temporal_order(structure, all_names) else NULL
   folds <- if (is.null(folds)) fit$folds else as.integer(folds)
   if (length(folds) != nrow(scores) || length(unique(folds)) < 2L) stop("folds must assign every row to at least two validation folds.", call. = FALSE)
   fold_sets <- .structural_fold_sets(folds, structural_repeats, seed)
-  candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list()
+  candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
   for (outcome in names(structure$effects)) {
     policies <- structure$effects[[outcome]]; predictors <- names(policies); baseline_shapes <- stats::setNames(rep("linear", length(predictors)), predictors)
     baseline <- .cv_shape_candidate(scores, outcome, baseline_shapes, fold_sets)
@@ -353,6 +424,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
+    corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed)
     candidate_rows <- lapply(predictors, function(predictor) data.frame(outcome = outcome, predictor = predictor,
       candidate = "linear", shape = "linear", rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
       mean_mse_improvement = 0, mse_improvement_se = NA_real_, selection_frequency = if (select_nonlinear && candidate_meta[[winner]]$predictor == predictor) 0 else 1,
@@ -390,6 +462,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   }
   structure(list(structure = structure, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
+    corrected_effects = do.call(rbind, corrected), reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }
@@ -425,6 +498,9 @@ cssem_effect_ledger <- function(association) {
   names(temporal)[2L] <- "temporal_gap"; names(unrestricted)[2L] <- "unrestricted_gap"
   ledger <- merge(ledger, temporal, by = "outcome", all.x = TRUE, sort = FALSE)
   ledger <- merge(ledger, unrestricted, by = "outcome", all.x = TRUE, sort = FALSE)
+  if (!is.null(association$corrected_effects)) {
+    ledger <- merge(ledger, association$corrected_effects, by = c("outcome", "predictor"), all.x = TRUE, sort = FALSE)
+  }
   ledger$status <- "associational"; ledger
 }
 

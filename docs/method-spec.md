@@ -36,6 +36,23 @@ effect evidence ledger. These effects are not causal claims and do not provide
 mediation, adjustment, or treatment-effect estimates. See
 `docs/associational-structure.md`.
 
+Measurement uncertainty is now propagated rather than discarded. The marginal
+graded-response model retains each respondent's out-of-fold posterior, from
+which `cssem_fit()` reports a per-construct marginal reliability
+(`fit$reliability`) and a per-respondent posterior SD
+(`fit$score_posterior_sd`). Locked construct states carry measurement error, so
+naive structural slopes among them are attenuated exactly as composite and PLS
+scores are. For linear and monotone edges, `cssem_associate()` applies a
+classical (Fuller) errors-in-variables correction that subtracts the predictor
+error covariance `diag((1 - reliability) * var)` before solving the structural
+normal equations, recovering the disattenuated slope. A percentile bootstrap
+(`eiv_bootstrap`) reports its sampling interval. Smooth edges are reported but
+not yet corrected. The correction requires a reliability estimate; it is applied
+only when one is available (CS-SEM derives it from the posterior), so score-only
+pipelines report the naive slope unchanged. Latent-state bags are now real
+posterior draws (plausible values), replacing the earlier fixed-variance
+placeholder.
+
 Latent uncertainty draws remain experimental research aids in v0.3. They are
 not calibrated confidence intervals, are excluded from the release-validation
 story, and must not be reported as confirmatory uncertainty until coverage

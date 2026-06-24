@@ -41,8 +41,14 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   if (!all(needed %in% names(data))) stop("data is missing declared indicators.", call. = FALSE)
   n <- nrow(data); if (n < model$folds * 4L) warning("Small folds may make construct states unstable.", call. = FALSE)
   set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
-  locked <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, names(model$constructs)))
-  full <- vector("list", length(model$constructs)); names(full) <- names(model$constructs)
+  construct_names <- names(model$constructs)
+  locked <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
+  # Raw-scale out-of-fold posterior variance; NA for constructs scored without a
+  # latent grid (the experimental mixed-scale fallback).
+  oof_variance <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
+  oof_posterior <- vector("list", length(model$constructs)); names(oof_posterior) <- construct_names
+  posterior_nodes <- NULL
+  full <- vector("list", length(model$constructs)); names(full) <- construct_names
   metric_list <- list(); stability <- numeric(length(full)); names(stability) <- names(full)
   for (nm in names(model$constructs)) {
     spec <- model$constructs[[nm]]; fold_scores <- matrix(NA_real_, n, model$folds)
@@ -50,7 +56,21 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
       data[spec$indicators], spec$scales, spec$keys)
     for (k in seq_len(model$folds)) {
       train <- data[fold != k, spec$indicators, drop = FALSE]; test <- data[fold == k, spec$indicators, drop = FALSE]
-      enc <- .fit_encoder(train, spec, iterations, category_levels); locked[fold == k, nm] <- .predict_encoder(enc, test)
+      enc <- .fit_encoder(train, spec, iterations, category_levels)
+      posterior <- .encoder_posterior(enc, test)
+      if (!is.null(posterior)) {
+        if (is.null(posterior_nodes)) {
+          posterior_nodes <- enc$nodes
+          oof_posterior <- lapply(construct_names, function(x) matrix(NA_real_, n, length(posterior_nodes)))
+          names(oof_posterior) <- construct_names
+        }
+        moments <- .posterior_moments(posterior, enc$nodes)
+        locked[fold == k, nm] <- moments$mean
+        oof_variance[fold == k, nm] <- moments$variance
+        oof_posterior[[nm]][fold == k, ] <- posterior
+      } else {
+        locked[fold == k, nm] <- .predict_encoder(enc, test)
+      }
       fold_scores[fold == k, k] <- locked[fold == k, nm]
       metric_list[[paste(nm, k)]] <- cbind(construct = nm, fold = k, .item_metrics(enc, test))
     }
@@ -58,9 +78,22 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     full_score <- .predict_encoder(full[[nm]], data[, spec$indicators, drop = FALSE])
     stability[nm] <- abs(stats::cor(locked[, nm], full_score, use = "complete.obs"))
   }
-  locked <- apply(locked, 2, function(x) (x - mean(x, na.rm = TRUE)) / .safe_scale(x))
+  # Marginal EAP reliability on the raw latent scale: signal variance over signal
+  # plus mean posterior (measurement) variance. This is the disattenuation factor
+  # used by the errors-in-variables structural correction.
+  centers <- apply(locked, 2L, mean, na.rm = TRUE)
+  scales_raw <- apply(locked, 2L, .safe_scale)
+  reliability <- vapply(construct_names, function(nm) {
+    signal <- stats::var(locked[, nm], na.rm = TRUE)
+    error <- mean(oof_variance[, nm], na.rm = TRUE)
+    if (!is.finite(signal) || !is.finite(error) || signal <= 0) NA_real_ else signal / (signal + error)
+  }, numeric(1))
+  # Per-respondent posterior SD on the standardized score scale (heteroskedastic
+  # respondent information; NA where no latent grid was used).
+  score_posterior_sd <- sweep(sqrt(oof_variance), 2L, scales_raw, "/")
+  locked <- sweep(locked, 2L, centers, "-"); locked <- sweep(locked, 2L, scales_raw, "/")
   if (is.null(dim(locked))) locked <- matrix(locked, ncol = 1)
-  colnames(locked) <- names(model$constructs)
+  colnames(locked) <- construct_names
   redundancy <- stats::cor(locked, use = "pairwise.complete.obs")
   residual_dependence <- if (isTRUE(diagnostics)) .residual_dependence(model, data, iterations) else
     data.frame(construct=character(), item_a=character(), item_b=character(), residual_correlation=numeric())
@@ -68,14 +101,37 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     data.frame(type=character(), target=character(), detail=character())
   bags <- NULL
   if (draws > 0L) {
-    bags <- array(NA_real_, c(n, ncol(locked), draws), dimnames = list(NULL, colnames(locked), NULL))
-    for (b in seq_len(draws)) bags[, , b] <- locked + matrix(stats::rnorm(length(locked), 0, .04), nrow(locked), ncol(locked))
+    bags <- .plausible_values(oof_posterior, posterior_nodes, locked, centers, scales_raw, draws, seed)
   }
   structure(list(model = model, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
+    reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
     warnings = warnings, residual_dependence = residual_dependence,
     uncertainty_draws = bags, seed = seed,
     measurement_engine = lapply(full, function(x) list(estimator = x$estimator, converged = x$converged, iterations = x$iterations))), class = "cssem_fit")
+}
+
+# Build the latent-state bag from real posterior draws. Each draw samples one
+# plausible value per respondent from the construct's out-of-fold posterior,
+# standardized with the same centering and scaling used for the locked scores so
+# the draw cloud carries the construct's true (unshrunk) spread. Constructs
+# without a latent grid reuse their locked score unchanged.
+.plausible_values <- function(oof_posterior, nodes, locked, centers, scales_raw, draws, seed) {
+  n <- nrow(locked); construct_names <- colnames(locked)
+  bags <- array(NA_real_, c(n, ncol(locked), draws), dimnames = list(NULL, construct_names, NULL))
+  set.seed(seed + 99L)
+  for (b in seq_len(draws)) {
+    for (j in seq_along(construct_names)) {
+      nm <- construct_names[j]; posterior <- if (is.null(nodes)) NULL else oof_posterior[[nm]]
+      if (is.null(posterior) || anyNA(posterior[, 1L])) {
+        bags[, j, b] <- locked[, nm]
+      } else {
+        raw <- .draw_posterior_values(posterior, nodes)
+        bags[, j, b] <- (raw - centers[[nm]]) / scales_raw[[nm]]
+      }
+    }
+  }
+  bags
 }
 
 .loo_item_residuals <- function(data, spec, iterations) {

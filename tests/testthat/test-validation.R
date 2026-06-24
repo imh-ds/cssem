@@ -61,7 +61,13 @@ test_that("structural comparator validation returns structural benchmark columns
     workers = 1
   )
   expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls") %in% result$engine))
-  expect_true(all(c("selected_shape", "temporal_gap", "unrestricted_gap", "score_coverage") %in% names(result)))
+  expect_true(all(c("selected_shape", "temporal_gap", "unrestricted_gap", "score_coverage",
+    "truth_slope", "naive_estimate", "corrected_estimate", "predictor_reliability",
+    "structural_bias", "ci_covers_truth", "shape_correct") %in% names(result)))
+  # The corrected estimate is a CS-SEM capability driven by posterior reliability;
+  # score-only proxies report the naive slope and leave the correction empty.
+  cssem_rows <- result[result$engine == "cssem_locked" & result$outcome == "Quality" & result$predictor == "Trust", , drop = FALSE]
+  expect_true(any(is.finite(cssem_rows$corrected_estimate)))
   built_in <- result$engine %in% c("cssem_locked", "ordinal_factor_proxy", "composite_proxy")
   expect_true(all(result$status[built_in] == "success"))
 })

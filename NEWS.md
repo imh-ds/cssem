@@ -1,3 +1,20 @@
+# cssem 0.4.0 (in development)
+
+* Propagates measurement uncertainty instead of discarding it: `cssem_fit()` now
+  reports per-construct marginal reliability (`reliability`), per-respondent
+  posterior SD (`score_posterior_sd`), and real posterior plausible-value draws
+  (replacing the prior fixed-variance placeholder bag).
+* Adds an errors-in-variables structural correction to `cssem_associate()`. For
+  linear and monotone edges, structural slopes are disattenuated using the
+  posterior reliability and reported with a bootstrap interval
+  (`eiv_bootstrap`), recovering the true effect that composite and PLS pipelines
+  attenuate. Smooth edges are reported but not yet corrected.
+* Extends the structural comparator with truth-referenced metrics (structural
+  coefficient bias, interval coverage, shape recovery) and adds native CB-SEM
+  (`lavaan` latent SEM) and PLS-SEM (`seminr` path) structural comparators, so
+  the disattenuation and shape-recovery advantages are visible and fairly scored
+  against each incumbent's own structural estimates.
+
 # cssem 0.3.0
 
 * Positions the package as a v0.3.0 research release of cross-fitted

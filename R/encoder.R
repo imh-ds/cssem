@@ -172,6 +172,36 @@
   .score_rows(encoder$encoders, Y)
 }
 
+# Return the full respondent-by-node posterior for a marginal graded-response
+# encoder, or NULL for encoders without a latent grid (the mixed-scale fallback).
+# This is the principled measurement-uncertainty object: the posterior mean is
+# the locked score, the posterior variance is the respondent's measurement
+# information, and posterior draws are plausible latent values.
+.encoder_posterior <- function(encoder, data) {
+  if (is.null(encoder$nodes)) return(NULL)
+  if (!identical(names(data), encoder$indicators)) stop("Scoring data columns must exactly match the declared indicator order.", call. = FALSE)
+  Y <- do.call(cbind, Map(.prepare_for_encoder, data, encoder$scales, encoder$keys, encoder$levels))
+  .eap_posterior(encoder$encoders, Y, encoder$nodes, encoder$prior_weights)
+}
+
+# Posterior mean and variance on the raw latent-node scale (one row per
+# respondent). Variance is the EAP posterior variance used for reliability and
+# for the heteroskedastic respondent-information diagnostic.
+.posterior_moments <- function(posterior, nodes) {
+  mean <- drop(posterior %*% nodes)
+  list(mean = mean, variance = pmax(drop(posterior %*% nodes^2) - mean^2, 0))
+}
+
+# Draw plausible latent values from a respondent-by-node posterior. Each draw
+# samples one node per respondent with probability equal to that respondent's
+# posterior row, returning a length-n numeric vector on the raw node scale.
+.draw_posterior_values <- function(posterior, nodes) {
+  cumulative <- t(apply(posterior, 1L, cumsum))
+  u <- stats::runif(nrow(posterior))
+  index <- max.col(u <= cumulative, ties.method = "first")
+  nodes[index]
+}
+
 .item_metrics <- function(encoder, data) {
   z <- .predict_encoder(encoder, data[, encoder$indicators, drop = FALSE])
   out <- vector("list", length(encoder$encoders))

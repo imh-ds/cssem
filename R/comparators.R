@@ -90,6 +90,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
                                                        iterations = 8L,
                                                        max_iterations = 16L,
                                                        structural_repeats = 5L,
+                                                       eiv_bootstrap = 200L,
                                                        workers = 1L) {
   if (!is.data.frame(manifest) || !all(c("scenario", "n") %in% names(manifest))) {
     stop("manifest must contain scenario and n.", call. = FALSE)
@@ -105,7 +106,8 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       folds = folds,
       iterations = iterations,
       max_iterations = max_iterations,
-      structural_repeats = structural_repeats
+      structural_repeats = structural_repeats,
+      eiv_bootstrap = eiv_bootstrap
     )
   }
   do.call(rbind, .validation_map(jobs, .structural_comparator_one, workers))
@@ -290,8 +292,8 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   mean(stats::complete.cases(scores))
 }
 
-.make_pseudo_fit <- function(scores, folds) {
-  structure(list(locked_scores = as.data.frame(scores), folds = folds), class = "cssem_fit")
+.make_pseudo_fit <- function(scores, folds, reliability = NULL) {
+  structure(list(locked_scores = as.data.frame(scores), folds = folds, reliability = reliability), class = "cssem_fit")
 }
 
 .lavaan_measurement_syntax <- function(model) {
@@ -335,6 +337,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       score_runtime_seconds = 0,
       score_coverage = 1,
       scores = validation_fit$fit$locked_scores,
+      reliability = validation_fit$fit$reliability,
       error_message = NA_character_
     ))
   }
@@ -454,6 +457,156 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   stop("Unknown engine: ", engine, call. = FALSE)
 }
 
+.structural_constructs <- function(structure) {
+  unique(c(names(structure$effects), unlist(lapply(structure$effects, names), use.names = FALSE)))
+}
+
+# Native CB-SEM comparator: a full ordinal (WLSMV) latent SEM that estimates the
+# declared structural paths jointly with the measurement model. Unlike scoring a
+# CFA and regressing the scores, this disattenuates the structural coefficients,
+# which is CB-SEM's genuine strength and the fair baseline for the correction.
+.lavaan_native_structural <- function(data, model, structure) {
+  if (!requireNamespace("lavaan", quietly = TRUE))
+    return(list(available = FALSE, status = "skipped_not_installed", converged = NA, paths = NULL,
+      runtime = NA_real_, version = NA_character_, error_message = NA_character_))
+  constructs <- .structural_constructs(structure)
+  measurement <- paste(vapply(constructs, function(nm)
+    paste(nm, "=~", paste(model$constructs[[nm]]$indicators, collapse = " + ")), character(1)), collapse = "\n")
+  structural <- paste(vapply(names(structure$effects), function(outcome)
+    paste(outcome, "~", paste(names(structure$effects[[outcome]]), collapse = " + ")), character(1)), collapse = "\n")
+  indicators <- unlist(lapply(constructs, function(nm) model$constructs[[nm]]$indicators), use.names = FALSE)
+  started <- proc.time()[["elapsed"]]
+  tryCatch({
+    fit <- lavaan::sem(paste(measurement, structural, sep = "\n"), data = data,
+      ordered = indicators, estimator = "WLSMV", std.lv = TRUE)
+    reg <- lavaan::standardizedSolution(fit)
+    reg <- reg[reg$op == "~", , drop = FALSE]
+    paths <- data.frame(outcome = reg$lhs, predictor = reg$rhs, estimate = reg$est.std,
+      se = reg$se, stringsAsFactors = FALSE)
+    list(available = TRUE, status = "success", converged = isTRUE(lavaan::lavInspect(fit, "converged")),
+      paths = paths, runtime = proc.time()[["elapsed"]] - started,
+      version = as.character(utils::packageVersion("lavaan")), error_message = NA_character_)
+  }, error = function(err) list(available = TRUE, status = "error", converged = FALSE, paths = NULL,
+    runtime = proc.time()[["elapsed"]] - started, version = as.character(utils::packageVersion("lavaan")),
+    error_message = conditionMessage(err)))
+}
+
+# Native PLS-SEM comparator: estimate the declared path model directly in seminr
+# and read its standardized path coefficients. PLS composites carry measurement
+# error into the structural model, so these paths are expected to attenuate.
+.seminr_native_structural <- function(data, model, structure) {
+  if (!requireNamespace("seminr", quietly = TRUE))
+    return(list(available = FALSE, status = "skipped_not_installed", converged = NA, paths = NULL,
+      runtime = NA_real_, version = NA_character_, error_message = NA_character_))
+  constructs <- .structural_constructs(structure)
+  measurement_model <- do.call(seminr::constructs, lapply(constructs, function(nm) {
+    indicators <- model$constructs[[nm]]$indicators
+    prefix <- sub("[0-9]+$", "", indicators[[1L]])
+    numbers <- as.integer(sub("^.*?([0-9]+)$", "\\1", indicators))
+    seminr::composite(nm, seminr::multi_items(prefix, numbers))
+  }))
+  edges <- list()
+  for (outcome in names(structure$effects)) for (predictor in names(structure$effects[[outcome]]))
+    edges[[length(edges) + 1L]] <- seminr::paths(from = predictor, to = outcome)
+  structural_model <- do.call(seminr::relationships, edges)
+  started <- proc.time()[["elapsed"]]
+  tryCatch({
+    fit <- seminr::estimate_pls(data = .mean_impute_data(data),
+      measurement_model = measurement_model, structural_model = structural_model)
+    pc <- fit$path_coef
+    rows <- list()
+    for (outcome in names(structure$effects)) for (predictor in names(structure$effects[[outcome]]))
+      rows[[length(rows) + 1L]] <- data.frame(outcome = outcome, predictor = predictor,
+        estimate = pc[predictor, outcome], se = NA_real_, stringsAsFactors = FALSE)
+    list(available = TRUE, status = "success", converged = TRUE, paths = do.call(rbind, rows),
+      runtime = proc.time()[["elapsed"]] - started,
+      version = as.character(utils::packageVersion("seminr")), error_message = NA_character_)
+  }, error = function(err) list(available = TRUE, status = "error", converged = FALSE, paths = NULL,
+    runtime = proc.time()[["elapsed"]] - started, version = as.character(utils::packageVersion("seminr")),
+    error_message = conditionMessage(err)))
+}
+
+# Build comparator rows for a native structural engine, matching the score-swap
+# row schema. The native path is the engine's headline estimate; lavaan supplies
+# an analytic interval from its standard error, seminr leaves the interval empty.
+.native_structural_rows <- function(engine, native, package_name, truth_slopes, scenario,
+                                     setting, replication, validation_fit) {
+  build <- function(outcome, predictor, estimate, se, status, error_message) {
+    truth <- truth_slopes$truth_slope[truth_slopes$outcome == outcome & truth_slopes$predictor == predictor]
+    truth <- if (length(truth)) truth[[1L]] else NA_real_
+    ci_low <- if (is.finite(se)) estimate - 1.96 * se else NA_real_
+    ci_high <- if (is.finite(se)) estimate + 1.96 * se else NA_real_
+    covers <- if (is.finite(ci_low) && is.finite(ci_high) && is.finite(truth)) truth >= ci_low && truth <= ci_high else NA
+    shape_row <- data.frame(outcome = if (is.na(outcome)) "" else outcome,
+      predictor = if (is.na(predictor)) "" else predictor, shape = "linear", stringsAsFactors = FALSE)
+    cbind(data.frame(
+      engine = engine, package_name = package_name, package_version = native$version,
+      available = native$available, status = status, converged = isTRUE(native$converged),
+      replication = replication, score_runtime_seconds = NA_real_,
+      association_runtime_seconds = native$runtime, total_runtime_seconds = native$runtime,
+      score_coverage = NA_real_, outcome = outcome, predictor = predictor, selected_shape = "linear",
+      theory_r_squared = NA_real_, temporal_gap = NA_real_, unrestricted_gap = NA_real_,
+      unrestricted_minus_temporal = NA_real_, selection_stability = NA_real_, edge_drop_mse_increase = NA_real_,
+      truth_slope = truth, naive_estimate = estimate, corrected_estimate = NA_real_,
+      predictor_reliability = NA_real_, corrected_ci_low = ci_low, corrected_ci_high = ci_high,
+      eiv_applicable = FALSE, headline_estimate = estimate, structural_bias = abs(estimate - truth),
+      ci_covers_truth = covers, shape_correct = .shape_correct(scenario, shape_row),
+      measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
+      error_message = error_message, worker_pid = Sys.getpid(), stringsAsFactors = FALSE), setting)
+  }
+  if (!identical(native$status, "success") || is.null(native$paths)) {
+    return(build(NA_character_, NA_character_, NA_real_, NA_real_, native$status, native$error_message))
+  }
+  do.call(rbind, lapply(seq_len(nrow(native$paths)), function(i) {
+    p <- native$paths[i, , drop = FALSE]
+    build(p$outcome[[1L]], p$predictor[[1L]], p$estimate[[1L]], p$se[[1L]], "success", NA_character_)
+  }))
+}
+
+# True partial structural slopes implied by the data-generating latent states.
+# For each declared outcome the slope of every predictor is the standardized
+# multiple-regression coefficient on the known states; this is the unbiased
+# target the errors-in-variables correction tries to recover.
+.truth_slopes <- function(truth, structure) {
+  states <- as.data.frame(scale(as.data.frame(truth)))
+  rows <- list()
+  for (outcome in names(structure$effects)) {
+    predictors <- names(structure$effects[[outcome]])
+    if (!all(c(outcome, predictors) %in% names(states))) next
+    coefs <- stats::coef(stats::lm(stats::reformulate(predictors, outcome), data = states))
+    for (predictor in predictors) {
+      rows[[length(rows) + 1L]] <- data.frame(outcome = outcome, predictor = predictor,
+        truth_slope = unname(coefs[[predictor]]), stringsAsFactors = FALSE)
+    }
+  }
+  if (!length(rows)) data.frame(outcome = character(), predictor = character(), truth_slope = numeric()) else do.call(rbind, rows)
+}
+
+# Engine headline structural slope: the disattenuated estimate when an
+# errors-in-variables correction is available, otherwise the naive slope that a
+# composite or PLS pipeline would report.
+.headline_estimate <- function(selected) {
+  corrected <- selected$corrected_estimate[[1L]]
+  if (isTRUE(selected$eiv_applicable[[1L]]) && is.finite(corrected)) corrected else selected$naive_estimate[[1L]]
+}
+
+.ci_covers <- function(selected) {
+  lo <- selected$corrected_ci_low[[1L]]; hi <- selected$corrected_ci_high[[1L]]; truth <- selected$truth_slope[[1L]]
+  if (!is.finite(lo) || !is.finite(hi) || !is.finite(truth)) NA else (truth >= lo && truth <= hi)
+}
+
+# Whether the selected shape family matches the data-generating shape on the
+# focal Trust -> Quality edge. Linear-only engines cannot score the nonlinear
+# scenarios, which is the point of the comparison.
+.shape_correct <- function(scenario, selected) {
+  if (selected$outcome[[1L]] != "Quality" || selected$predictor[[1L]] != "Trust") return(NA)
+  family <- if (grepl("^smooth", selected$shape[[1L]])) "smooth" else selected$shape[[1L]]
+  expected <- switch(scenario,
+    monotone_increasing = "monotone_increasing", monotone_decreasing = "monotone_decreasing",
+    smooth_subtle = "smooth", smooth_strong = "smooth", "linear")
+  family == expected
+}
+
 .structural_comparator_one <- function(job) {
   setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
   generated <- .structural_validation_data(
@@ -471,6 +624,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
     job$max_iterations,
     FALSE
   )
+  truth_slopes <- .truth_slopes(generated$truth, generated$structure)
   engines <- c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls")
   rows <- list()
   index <- 0L
@@ -502,6 +656,17 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
           unrestricted_minus_temporal = NA_real_,
           selection_stability = NA_real_,
           edge_drop_mse_increase = NA_real_,
+          truth_slope = NA_real_,
+          naive_estimate = NA_real_,
+          corrected_estimate = NA_real_,
+          predictor_reliability = NA_real_,
+          corrected_ci_low = NA_real_,
+          corrected_ci_high = NA_real_,
+          eiv_applicable = NA,
+          headline_estimate = NA_real_,
+          structural_bias = NA_real_,
+          ci_covers_truth = NA,
+          shape_correct = NA,
           measurement_converged = validation_fit$converged,
           fit_attempts = validation_fit$attempts,
           error_message = scored$error_message,
@@ -513,16 +678,18 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       next
     }
     association_elapsed <- system.time({
-      pseudo_fit <- .make_pseudo_fit(scored$scores, validation_fit$fit$folds)
+      pseudo_fit <- .make_pseudo_fit(scored$scores, validation_fit$fit$folds, scored$reliability)
       association <- cssem_associate(
         pseudo_fit,
         generated$structure,
         structural_repeats = job$structural_repeats,
         seed = job$seed,
-        shadow_scope = "both"
+        shadow_scope = "both",
+        eiv_bootstrap = job$eiv_bootstrap
       )
     })["elapsed"]
     ledger <- cssem_effect_ledger(association)
+    ledger <- merge(ledger, truth_slopes, by = c("outcome", "predictor"), all.x = TRUE, sort = FALSE)
     for (row_index in seq_len(nrow(ledger))) {
       selected <- ledger[row_index, , drop = FALSE]
       index <- index + 1L
@@ -548,6 +715,17 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
           unrestricted_minus_temporal = selected$unrestricted_gap[[1L]] - selected$temporal_gap[[1L]],
           selection_stability = selected$selection_frequency[[1L]],
           edge_drop_mse_increase = selected$edge_drop_mse_increase[[1L]],
+          truth_slope = selected$truth_slope[[1L]],
+          naive_estimate = selected$naive_estimate[[1L]],
+          corrected_estimate = selected$corrected_estimate[[1L]],
+          predictor_reliability = selected$predictor_reliability[[1L]],
+          corrected_ci_low = selected$corrected_ci_low[[1L]],
+          corrected_ci_high = selected$corrected_ci_high[[1L]],
+          eiv_applicable = selected$eiv_applicable[[1L]],
+          headline_estimate = .headline_estimate(selected),
+          structural_bias = abs(.headline_estimate(selected) - selected$truth_slope[[1L]]),
+          ci_covers_truth = .ci_covers(selected),
+          shape_correct = .shape_correct(setting$scenario, selected),
           measurement_converged = validation_fit$converged,
           fit_attempts = validation_fit$attempts,
           error_message = NA_character_,
@@ -558,6 +736,16 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       )
     }
   }
+  # Native CB-SEM and PLS-SEM structural estimates: their own joint/path
+  # coefficients, scored on the same truth-referenced bias and coverage metrics.
+  lavaan_native <- .lavaan_native_structural(generated$data, generated$model, generated$structure)
+  index <- index + 1L
+  rows[[index]] <- .native_structural_rows("lavaan_native", lavaan_native, "lavaan", truth_slopes,
+    setting$scenario, setting, job$replication, validation_fit)
+  seminr_native <- .seminr_native_structural(generated$data, generated$model, generated$structure)
+  index <- index + 1L
+  rows[[index]] <- .native_structural_rows("seminr_native", seminr_native, "seminr", truth_slopes,
+    setting$scenario, setting, job$replication, validation_fit)
   do.call(rbind, rows)
 }
 
