@@ -257,17 +257,33 @@ cssem_structure <- function(effects, order = NULL) {
 # from the predictor covariance before solving the normal equations. Error in the
 # outcome inflates residual variance but does not bias the slope, so only
 # predictor reliabilities enter. Returns naive (uncorrected) and corrected slopes.
-.eiv_coefficients <- function(scores, outcome, predictors, reliability) {
+.eiv_coefficients <- function(scores, outcome, predictors, reliability, weights = NULL, posterior_var = NULL) {
   X <- as.matrix(scores[, predictors, drop = FALSE]); y <- scores[[outcome]]
-  keep <- stats::complete.cases(X, y); X <- X[keep, , drop = FALSE]; y <- y[keep]
+  w <- if (is.null(weights)) rep(1, nrow(X)) else weights
+  pv <- if (is.null(posterior_var)) NULL else as.matrix(posterior_var[, predictors, drop = FALSE])
+  keep <- stats::complete.cases(X, y) & is.finite(w)
+  X <- X[keep, , drop = FALSE]; y <- y[keep]; w <- w[keep]
+  if (!is.null(pv)) pv <- pv[keep, , drop = FALSE]
   na <- stats::setNames(rep(NA_real_, length(predictors)), predictors)
-  if (length(y) < length(predictors) + 2L) return(list(naive = na, corrected = na))
-  Xc <- sweep(X, 2L, colMeans(X), "-")
-  Szz <- crossprod(Xc) / (nrow(Xc) - 1L)
-  Szy <- crossprod(Xc, y - mean(y)) / (nrow(Xc) - 1L)
-  rel <- reliability[predictors]
+  if (length(y) < length(predictors) + 2L || sum(w) <= 0) return(list(naive = na, corrected = na))
+  # Inverse-variance weighted moments: respondents with wide posteriors carry
+  # less weight, so heteroskedastic measurement information no longer biases the
+  # structural estimate toward the noisiest respondents.
+  sw <- sum(w)
+  xbar <- colSums(X * w) / sw; ybar <- sum(y * w) / sw
+  Xc <- sweep(X, 2L, xbar, "-"); yc <- y - ybar
+  Szz <- crossprod(Xc * w, Xc) / sw
+  Szy <- crossprod(Xc * w, yc) / sw
   naive <- tryCatch(drop(solve(Szz, Szy)), error = function(e) na)
-  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0)) return(list(naive = naive, corrected = na))
+  # Weighted marginal reliability when per-respondent posterior variances are
+  # available, otherwise the construct-level reliability estimate.
+  rel <- reliability[predictors]
+  if (!is.null(pv)) {
+    signal <- diag(Szz); error <- colSums(pv * w) / sw
+    rel_w <- signal / (signal + error)
+    rel <- ifelse(is.finite(rel_w), rel_w, rel)
+  }
+  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0)) return(list(naive = stats::setNames(naive, predictors), corrected = na))
   De <- diag((1 - rel) * diag(Szz), nrow = length(predictors))
   corrected_cov <- Szz - De
   # Guard against an ill-conditioned correction (low reliability can render the
@@ -280,13 +296,16 @@ cssem_structure <- function(effects, order = NULL) {
 # Percentile bootstrap of the corrected slopes, resampling respondents. This
 # reflects sampling variability of the errors-in-variables estimator; the
 # reliability inputs are held fixed at their measurement-model estimates.
-.eiv_bootstrap <- function(scores, outcome, predictors, reliability, replicates, seed) {
+.eiv_bootstrap <- function(scores, outcome, predictors, reliability, replicates, seed,
+                           weights = NULL, posterior_var = NULL) {
   if (replicates < 1L) return(NULL)
   set.seed(seed + 4242L); n <- nrow(scores)
   estimates <- matrix(NA_real_, replicates, length(predictors), dimnames = list(NULL, predictors))
   for (b in seq_len(replicates)) {
     idx <- sample.int(n, n, replace = TRUE)
-    estimates[b, ] <- .eiv_coefficients(scores[idx, , drop = FALSE], outcome, predictors, reliability)$corrected
+    estimates[b, ] <- .eiv_coefficients(scores[idx, , drop = FALSE], outcome, predictors, reliability,
+      weights = if (is.null(weights)) NULL else weights[idx],
+      posterior_var = if (is.null(posterior_var)) NULL else posterior_var[idx, , drop = FALSE])$corrected
   }
   estimates
 }
@@ -294,11 +313,12 @@ cssem_structure <- function(effects, order = NULL) {
 # Corrected structural effects for one outcome. Edges whose selected shape is
 # linear or monotone are disattenuated; smooth edges are reported but not yet
 # corrected (closed-form errors-in-variables for splines is out of scope).
-.corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed) {
+.corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed,
+                               weights = NULL, posterior_var = NULL) {
   predictors <- names(selected_shapes)
   applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in% c("linear", "monotone_increasing", "monotone_decreasing"), logical(1))
-  fit <- .eiv_coefficients(scores, outcome, predictors, reliability)
-  boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed) else NULL
+  fit <- .eiv_coefficients(scores, outcome, predictors, reliability, weights, posterior_var)
+  boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed, weights, posterior_var) else NULL
   do.call(rbind, lapply(predictors, function(p) {
     ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p]))) stats::quantile(boot[, p], c(.025, .975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
     data.frame(outcome = outcome, predictor = p,
@@ -352,6 +372,17 @@ cssem_structure <- function(effects, order = NULL) {
 #' @param structural_repeats Number of deterministic structural CV assignments.
 #' @param seed Seed used only for repeated structural folds.
 #' @param shadow_scope Shadow benchmark scope.
+#' @param reliability Optional named vector of per-construct reliabilities used
+#'   by the errors-in-variables correction. Defaults to the posterior
+#'   reliability carried on `fit`; when unavailable the corrected estimate is
+#'   omitted rather than reported uncorrected.
+#' @param eiv_bootstrap Number of percentile-bootstrap replicates for the
+#'   corrected-estimate interval. Zero disables the interval.
+#' @param respondent_weighting Experimental. `"information"` applies
+#'   inverse-variance respondent weighting from the posterior SD. It is
+#'   `"none"` by default: because posterior width is score-dependent, weighting
+#'   induces range restriction and does not improve point-estimate bias in
+#'   validation, so it is not recommended for confirmatory estimates.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight
 #'   structural selection defaults while iterating locally.
 #' @return An object of class `cssem_association`.
@@ -360,12 +391,14 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
                              shape_stability_min = .70, structural_repeats = 5L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
+                             respondent_weighting = c("none", "information"),
                              preset = c("default", "exploratory")) {
   if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
   preset <- match.arg(preset)
   eiv_bootstrap <- as.integer(eiv_bootstrap)
   if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
+  respondent_weighting <- match.arg(respondent_weighting)
   if (preset == "exploratory") {
     if (missing(spline_df)) spline_df <- 3L
     if (missing(structural_repeats)) structural_repeats <- 2L
@@ -388,6 +421,18 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   if (!is.null(reliability_source)) {
     shared <- intersect(names(reliability_source), all_names)
     reliability_vec[shared] <- as.numeric(reliability_source[shared])
+  }
+  # Optional inverse-variance respondent weighting, drawn from the per-respondent
+  # posterior SD carried on the fit. Unavailable for score-only engines, which
+  # then fall back to unweighted estimation.
+  respondent_weights <- NULL; posterior_var <- NULL
+  if (respondent_weighting == "information" && !is.null(fit$score_posterior_sd)) {
+    sd <- as.data.frame(fit$score_posterior_sd)
+    modeled <- intersect(all_names, names(sd))
+    if (length(modeled) && nrow(sd) == nrow(scores)) {
+      respondent_weights <- .information_weights(sd[, modeled, drop = FALSE])
+      posterior_var <- sd^2
+    }
   }
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope
   temporal_order <- if ("temporal" %in% scopes) .resolve_temporal_order(structure, all_names) else NULL
@@ -424,7 +469,8 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
-    corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed)
+    corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
+      weights = respondent_weights, posterior_var = posterior_var)
     candidate_rows <- lapply(predictors, function(predictor) data.frame(outcome = outcome, predictor = predictor,
       candidate = "linear", shape = "linear", rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
       mean_mse_improvement = 0, mse_improvement_se = NA_real_, selection_frequency = if (select_nonlinear && candidate_meta[[winner]]$predictor == predictor) 0 else 1,
@@ -463,6 +509,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   structure(list(structure = structure, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = do.call(rbind, corrected), reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
+    respondent_weighting = respondent_weighting,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }

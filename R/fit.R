@@ -134,6 +134,48 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   bags
 }
 
+# Per-respondent measurement-information weights from the posterior SD. A
+# respondent with wide posteriors (e.g. careless responding) carries less
+# information and receives a smaller weight. Weights are normalized to mean one;
+# respondents or constructs without a posterior grid default to weight one.
+.information_weights <- function(score_posterior_sd, ridge = .05) {
+  sd <- as.matrix(score_posterior_sd)
+  if (!nrow(sd) || !ncol(sd)) return(rep(1, nrow(sd)))
+  variance <- rowMeans(sd^2, na.rm = TRUE)
+  weight <- 1 / (ridge + variance)
+  weight[!is.finite(weight)] <- NA_real_
+  center <- mean(weight, na.rm = TRUE)
+  if (!is.finite(center) || center <= 0) return(rep(1, nrow(sd)))
+  weight <- weight / center
+  weight[is.na(weight)] <- 1
+  weight
+}
+
+#' Report per-respondent measurement information
+#'
+#' Returns each respondent's per-construct posterior SD and an overall
+#' inverse-variance information weight (normalized to mean one). Respondents with
+#' wide posteriors carry less measurement information; the weights are the basis
+#' for the optional inverse-variance respondent weighting in
+#' [cssem_associate()].
+#'
+#' @param fit A `cssem_fit` object.
+#' @return A data frame with one row per respondent, per-construct posterior SD
+#'   columns, and an `information_weight` column. Empty when no construct was
+#'   scored with a latent grid.
+#' @examples
+#' # cssem_respondent_information(fit)
+#' @export
+cssem_respondent_information <- function(fit) {
+  if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+  sd <- fit$score_posterior_sd
+  if (is.null(sd) || !ncol(as.data.frame(sd))) return(data.frame())
+  out <- as.data.frame(sd)
+  names(out) <- paste0(names(out), "_posterior_sd")
+  out$information_weight <- .information_weights(sd)
+  out
+}
+
 .loo_item_residuals <- function(data, spec, iterations) {
   # Each residual is based on a score that excludes its own item.  This avoids
   # the circular, spuriously correlated residuals produced by a score using all
@@ -224,7 +266,14 @@ cssem_construct_card <- function(fit, construct) {
   indicators <- fit$model$constructs[[construct]]$indicators
   relevant <- fit$warnings$target == construct
   for (item in indicators) relevant <- relevant | grepl(item, fit$warnings$target, fixed = TRUE)
-  list(construct = construct, measurement_engine = fit$measurement_engine[[construct]], held_out_metrics = fit$item_metrics[fit$item_metrics$construct == construct, , drop = FALSE], stability = fit$stability[[construct]], warnings = fit$warnings[relevant, , drop = FALSE], residual_dependence = fit$residual_dependence[fit$residual_dependence$construct == construct, , drop = FALSE])
+  sd_col <- if (is.null(fit$score_posterior_sd)) NULL else fit$score_posterior_sd[[construct]]
+  respondent_information <- if (is.null(sd_col) || all(is.na(sd_col))) NULL else data.frame(
+    reliability = if (is.null(fit$reliability)) NA_real_ else unname(fit$reliability[[construct]]),
+    median_posterior_sd = stats::median(sd_col, na.rm = TRUE),
+    p90_posterior_sd = stats::quantile(sd_col, .9, na.rm = TRUE, names = FALSE),
+    information_spread = stats::quantile(sd_col, .9, na.rm = TRUE, names = FALSE) / stats::median(sd_col, na.rm = TRUE),
+    stringsAsFactors = FALSE)
+  list(construct = construct, measurement_engine = fit$measurement_engine[[construct]], held_out_metrics = fit$item_metrics[fit$item_metrics$construct == construct, , drop = FALSE], stability = fit$stability[[construct]], warnings = fit$warnings[relevant, , drop = FALSE], residual_dependence = fit$residual_dependence[fit$residual_dependence$construct == construct, , drop = FALSE], respondent_information = respondent_information)
 }
 
 #' Return exploratory leave-one-item-out residual correlations

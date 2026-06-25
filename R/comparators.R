@@ -292,8 +292,9 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   mean(stats::complete.cases(scores))
 }
 
-.make_pseudo_fit <- function(scores, folds, reliability = NULL) {
-  structure(list(locked_scores = as.data.frame(scores), folds = folds, reliability = reliability), class = "cssem_fit")
+.make_pseudo_fit <- function(scores, folds, reliability = NULL, score_posterior_sd = NULL) {
+  structure(list(locked_scores = as.data.frame(scores), folds = folds, reliability = reliability,
+    score_posterior_sd = score_posterior_sd), class = "cssem_fit")
 }
 
 .lavaan_measurement_syntax <- function(model) {
@@ -338,6 +339,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       score_coverage = 1,
       scores = validation_fit$fit$locked_scores,
       reliability = validation_fit$fit$reliability,
+      score_posterior_sd = validation_fit$fit$score_posterior_sd,
       error_message = NA_character_
     ))
   }
@@ -601,20 +603,22 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
 .shape_correct <- function(scenario, selected) {
   if (selected$outcome[[1L]] != "Quality" || selected$predictor[[1L]] != "Trust") return(NA)
   family <- if (grepl("^smooth", selected$shape[[1L]])) "smooth" else selected$shape[[1L]]
-  expected <- switch(scenario,
-    monotone_increasing = "monotone_increasing", monotone_decreasing = "monotone_decreasing",
-    smooth_subtle = "smooth", smooth_strong = "smooth", "linear")
-  family == expected
+  switch(scenario,
+    monotone_increasing = family == "monotone_increasing",
+    monotone_decreasing = family == "monotone_decreasing",
+    smooth_subtle = family == "smooth",
+    smooth_strong = family == "smooth",
+    # Monotone-nonlinear behavioral shapes: any non-linear detection counts,
+    # since the point is that linear-only CB-SEM/PLS-SEM cannot represent them.
+    plateau = family != "linear",
+    threshold = family != "linear",
+    diminishing = family != "linear",
+    family == "linear")
 }
 
 .structural_comparator_one <- function(job) {
   setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
-  generated <- .structural_validation_data(
-    setting$scenario,
-    setting$n,
-    job$seed,
-    items = if ("items" %in% names(setting)) setting$items else 4L
-  )
+  generated <- do.call(.structural_validation_data, .structural_data_args(setting, job$seed))
   validation_fit <- .validation_fit(
     generated$model,
     generated$data,
@@ -678,14 +682,15 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
       next
     }
     association_elapsed <- system.time({
-      pseudo_fit <- .make_pseudo_fit(scored$scores, validation_fit$fit$folds, scored$reliability)
+      pseudo_fit <- .make_pseudo_fit(scored$scores, validation_fit$fit$folds, scored$reliability, scored$score_posterior_sd)
       association <- cssem_associate(
         pseudo_fit,
         generated$structure,
         structural_repeats = job$structural_repeats,
         seed = job$seed,
         shadow_scope = "both",
-        eiv_bootstrap = job$eiv_bootstrap
+        eiv_bootstrap = job$eiv_bootstrap,
+        respondent_weighting = "none"
       )
     })["elapsed"]
     ledger <- cssem_effect_ledger(association)

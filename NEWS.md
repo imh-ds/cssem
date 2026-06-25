@@ -14,6 +14,18 @@
   (`lavaan` latent SEM) and PLS-SEM (`seminr` path) structural comparators, so
   the disattenuation and shape-recovery advantages are visible and fairly scored
   against each incumbent's own structural estimates.
+* Adds realistic social/behavioral validation scenarios: saturating `plateau`,
+  `threshold`, and concave `diminishing` structural effects, plus
+  `low_reliability`, `careless` (heteroskedastic responder noise), and `skewed`
+  (floor-effect) measurement stress. Existing release gates are unchanged; new
+  scenarios appear in the structural and comparator artifacts.
+* Adds `cssem_respondent_information()` and a Construct Card reliability summary
+  reporting per-respondent posterior SD and information weights, surfacing
+  careless responding that CB-SEM and PLS-SEM cannot flag. An experimental,
+  default-off inverse-variance `respondent_weighting` option is available in
+  `cssem_associate()`; validation showed it does not improve point-estimate bias
+  (posterior width is score-dependent), so it is not used for confirmatory
+  estimates.
 
 # cssem 0.3.0
 

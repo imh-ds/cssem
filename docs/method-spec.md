@@ -53,6 +53,22 @@ pipelines report the naive slope unchanged. Latent-state bags are now real
 posterior draws (plausible values), replacing the earlier fixed-variance
 placeholder.
 
+Per-respondent measurement information is reported through
+`cssem_respondent_information()` and the Construct Card, exposing wide-posterior
+(for example careless) respondents that covariance- and composite-based methods
+cannot flag. An experimental inverse-variance `respondent_weighting` option in
+`cssem_associate()` is off by default: because posterior width is
+score-dependent, weighting induces range restriction and did not reduce
+structural point-estimate bias in validation, so it is excluded from
+confirmatory estimation.
+
+The v0.4 validation manifests add behaviorally realistic structural shapes
+(saturating plateau, threshold, and concave diminishing returns) and
+measurement-stress scenarios (low reliability, careless responding, and
+floor-effect skew). These exercise the disattenuation and shape-recovery
+machinery on the kinds of survey and behavioral data CS-SEM targets; the v0.3
+release gates are unchanged because they select scenarios by name.
+
 Latent uncertainty draws remain experimental research aids in v0.3. They are
 not calibrated confidence intervals, are excluded from the release-validation
 story, and must not be reported as confirmatory uncertainty until coverage

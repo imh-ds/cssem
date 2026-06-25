@@ -14,6 +14,9 @@ cssem_associate(
   structural_repeats = 5L,
   seed = 1L,
   shadow_scope = c("both", "temporal", "unrestricted"),
+  reliability = NULL,
+  eiv_bootstrap = 0L,
+  respondent_weighting = c("none", "information"),
   preset = c("default", "exploratory")
 )
 }
@@ -37,6 +40,20 @@ nonlinear candidate.}
 \item{seed}{Seed used only for repeated structural folds.}
 
 \item{shadow_scope}{Shadow benchmark scope.}
+
+\item{reliability}{Optional named vector of per-construct reliabilities used
+by the errors-in-variables correction. Defaults to the posterior
+reliability carried on \code{fit}; when unavailable the corrected estimate is
+omitted rather than reported uncorrected.}
+
+\item{eiv_bootstrap}{Number of percentile-bootstrap replicates for the
+corrected-estimate interval. Zero disables the interval.}
+
+\item{respondent_weighting}{Experimental. \code{"information"} applies
+inverse-variance respondent weighting from the posterior SD. It is
+\code{"none"} by default: because posterior width is score-dependent, weighting
+induces range restriction and does not improve point-estimate bias in
+validation, so it is not recommended for confirmatory estimates.}
 
 \item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight
 structural selection defaults while iterating locally.}

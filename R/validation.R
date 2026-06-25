@@ -1,10 +1,19 @@
 .validation_items <- function(z, prefix, loading, missing, sparse = FALSE,
                               cross_state = NULL, cross_loading = 0,
-                              local_dependence = 0, items = 4L) {
+                              local_dependence = 0, items = 4L,
+                              respondent_noise = NULL, skew = 0) {
   shared <- stats::rnorm(length(z))
   thresholds <- if (sparse) c(-Inf, -2.2, -0.2, .5, Inf) else c(-Inf, -1, -.2, .5, Inf)
+  # Positive skew shifts the cutpoints upward so response mass piles into the
+  # lowest categories: the floor effect common in frequency or symptom items.
+  if (skew != 0) thresholds <- c(-Inf, -1, -.2, .5, Inf) + skew
+  base_sd <- sqrt(max(.05, 1 - loading^2))
+  # A per-respondent multiplier on the idiosyncratic item noise. Careless
+  # responders carry a large multiplier, so their items are weakly informative
+  # about the latent state and their posteriors are wide.
+  noise_scale <- if (is.null(respondent_noise)) rep(1, length(z)) else respondent_noise
   block <- lapply(seq_len(items), function(j) {
-    eta <- loading * z + stats::rnorm(length(z), sd = sqrt(max(.05, 1 - loading^2)))
+    eta <- loading * z + stats::rnorm(length(z), sd = base_sd) * noise_scale
     if (!is.null(cross_state)) eta <- eta + cross_loading * cross_state
     if (j %in% c(1L, 2L)) eta <- eta + local_dependence * shared
     value <- cut(eta, breaks = thresholds, labels = FALSE)
@@ -176,7 +185,8 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   do.call(rbind, .validation_map(jobs, .measurement_validation_one, workers))
 }
 
-.structural_validation_data <- function(type, n, seed, loading = .80, missing = .05, items = 4L) {
+.structural_validation_data <- function(type, n, seed, loading = .80, missing = .05, items = 4L,
+                                        careless = 0, skew = 0) {
   set.seed(seed)
   trust <- stats::rnorm(n)
   context <- stats::rnorm(n)
@@ -185,6 +195,11 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
     monotone_decreasing = as.numeric(scale(-.55 * trust - .95 * pmax(trust, 0) + stats::rnorm(n, sd = .35))),
     smooth_subtle = as.numeric(scale(.45 * (trust^2 - 1) + stats::rnorm(n, sd = .65))),
     smooth_strong = as.numeric(scale(2.10 * (trust^2 - 1) + stats::rnorm(n, sd = .10))),
+    # Behaviorally realistic monotone-nonlinear effects: a saturating plateau, a
+    # threshold that activates past a point, and concave diminishing returns.
+    plateau = as.numeric(scale(1.70 * tanh(1.40 * trust) + stats::rnorm(n, sd = .40))),
+    threshold = as.numeric(scale(1.50 * pmax(trust - .50, 0) + stats::rnorm(n, sd = .40))),
+    diminishing = as.numeric(scale(1.30 * log(trust + 4) + stats::rnorm(n, sd = .40))),
     null = stats::rnorm(n),
     omitted = .35 * trust + .65 * context + stats::rnorm(n, sd = .65),
     .65 * trust + stats::rnorm(n, sd = .70)
@@ -196,7 +211,12 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   )
   states <- list(Trust = trust, Quality = quality, Loyalty = loyalty)
   if (type == "omitted") states <- list(Trust = trust, Context = context, Quality = quality, Loyalty = loyalty)
-  data <- do.call(cbind, unname(Map(function(z, name) .validation_items(z, tolower(name), loading, missing, items = items), states, names(states))))
+  # One careless-responding multiplier shared across every item a respondent
+  # answers, producing heteroskedastic measurement information across people.
+  respondent_noise <- rep(1, n)
+  if (careless > 0) respondent_noise[sample.int(n, floor(careless * n))] <- 6
+  data <- do.call(cbind, unname(Map(function(z, name) .validation_items(z, tolower(name), loading, missing,
+    items = items, respondent_noise = respondent_noise, skew = skew), states, names(states))))
   structure_spec <- if (type == "omitted") {
     cssem_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Context", "Quality", "Loyalty"))
   } else {
@@ -206,6 +226,17 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   names(specifications) <- names(states)
   model <- cssem_model(specifications)
   list(data = data, truth = as.data.frame(states), model = model, structure = structure_spec)
+}
+
+# Assemble the .structural_validation_data() argument list from a manifest row,
+# forwarding the optional measurement-stress columns when a manifest supplies
+# them and otherwise relying on the generator defaults.
+.structural_data_args <- function(setting, seed) {
+  args <- list(setting$scenario, setting$n, seed,
+    items = if ("items" %in% names(setting)) setting$items else 4L)
+  for (param in c("loading", "missing", "careless", "skew"))
+    if (param %in% names(setting)) args[[param]] <- setting[[param]]
+  args
 }
 
 #' Create a deterministic v0.3 structural validation manifest
@@ -218,13 +249,43 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
 cssem_structural_validation_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
   types <- c("linear", "monotone_increasing", "monotone_decreasing", "smooth_subtle", "smooth_strong", "null", "interaction", "omitted", "downstream")
-  if (tier == "screening") return(data.frame(scenario = types, n = c(220L, 500L, 500L, 300L, 700L, 300L, 300L, 300L, 260L), items = c(4L, 6L, 6L, 4L, 6L, 4L, 4L, 4L, 4L), stringsAsFactors = FALSE))
-  expand.grid(scenario = types, n = c(220L, 500L, 1000L), items = c(4L, 6L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  if (tier == "screening") {
+    base <- data.frame(
+      scenario = types,
+      n = c(220L, 500L, 500L, 300L, 700L, 300L, 300L, 300L, 260L),
+      items = c(4L, 6L, 6L, 4L, 6L, 4L, 4L, 4L, 4L),
+      loading = .80, careless = 0, skew = 0, stringsAsFactors = FALSE
+    )
+    # Behaviorally realistic structural shapes and measurement-stress scenarios
+    # added in v0.4. Existing release gates filter by scenario name and ignore
+    # these; they exercise the disattenuation and respondent-weighting machinery.
+    extra <- data.frame(
+      scenario = c("plateau", "threshold", "diminishing", "low_reliability", "careless", "skewed"),
+      n = c(500L, 500L, 500L, 600L, 600L, 500L),
+      items = c(6L, 6L, 6L, 6L, 6L, 6L),
+      loading = c(.80, .80, .80, .55, .80, .80),
+      careless = c(0, 0, 0, 0, .20, 0),
+      skew = c(0, 0, 0, 0, 0, 1.20),
+      stringsAsFactors = FALSE
+    )
+    return(rbind(base, extra))
+  }
+  shapes <- expand.grid(scenario = c(types, "plateau", "threshold", "diminishing"),
+    n = c(220L, 500L, 1000L), items = c(4L, 6L), KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+  shapes$loading <- .80; shapes$careless <- 0; shapes$skew <- 0
+  stress <- data.frame(
+    scenario = rep(c("low_reliability", "careless", "skewed"), each = 2L),
+    n = rep(c(500L, 1000L), times = 3L), items = 6L,
+    loading = rep(c(.55, .80, .80), each = 2L),
+    careless = rep(c(0, .20, 0), each = 2L),
+    skew = rep(c(0, 0, 1.20), each = 2L), stringsAsFactors = FALSE
+  )
+  rbind(shapes, stress)
 }
 
 .structural_validation_one <- function(job) {
   setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
-  generated <- .structural_validation_data(setting$scenario, setting$n, job$seed, items = if ("items" %in% names(setting)) setting$items else 4L)
+  generated <- do.call(.structural_validation_data, .structural_data_args(setting, job$seed))
   elapsed <- system.time({
     validation_fit <- .validation_fit(generated$model, generated$data, job$seed, job$folds, job$iterations, job$max_iterations, FALSE)
     association <- cssem_associate(validation_fit$fit, generated$structure,
