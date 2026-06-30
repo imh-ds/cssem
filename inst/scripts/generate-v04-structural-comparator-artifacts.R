@@ -7,6 +7,9 @@ output_dir <- file.path("tests", "internal", "validation_results")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 manifest <- cssem_structural_validation_manifest("screening")
+# Each scenario-replication job is seed-deterministic, so parallel workers change
+# only runtime, not results. Leave one core free for the OS.
+workers <- max(1L, parallel::detectCores() - 1L)
 started <- Sys.time()
 comparators <- cssem_run_structural_comparator_validation(
   manifest,
@@ -14,7 +17,7 @@ comparators <- cssem_run_structural_comparator_validation(
   seed = 5026,
   folds = 3,
   iterations = 8,
-  workers = 1
+  workers = workers
 )
 elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
 
@@ -144,7 +147,7 @@ utils::write.csv(
 
 metadata <- data.frame(
   run = "structural_comparator_validation",
-  workers_requested = 1L,
+  workers_requested = workers,
   jobs = nrow(manifest) * 3L,
   rows_written = nrow(comparators),
   elapsed_seconds = round(elapsed, 2),

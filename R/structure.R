@@ -162,8 +162,12 @@ cssem_structure <- function(effects, order = NULL) {
     blocks[[predictor]] <- built$values; infos[[predictor]] <- built$info
     index <- seq_len(ncol(built$values)) + sum(vapply(blocks[-length(blocks)], ncol, integer(1))) + 1L
     if (.is_monotone_shape(built$info$shape)) {
-      constrained <- c(constrained, index[-1L])
-      directions <- c(directions, rep(if (built$info$shape == "monotone_increasing") 1L else -1L, length(index) - 1L))
+      # Constrain the linear term as well as the hinge increments so the basis is
+      # genuinely monotone. Leaving the linear term free lets a negative slope
+      # plus positive hinges trace a U-shape, which would let a symmetric
+      # nonlinear effect masquerade as a monotone one.
+      constrained <- c(constrained, index)
+      directions <- c(directions, rep(if (built$info$shape == "monotone_increasing") 1L else -1L, length(index)))
     }
   }
   design <- if (length(blocks)) cbind(`(Intercept)` = 1, do.call(cbind, blocks)) else matrix(1, nrow(data), 1L)
@@ -425,13 +429,18 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   # Optional inverse-variance respondent weighting, drawn from the per-respondent
   # posterior SD carried on the fit. Unavailable for score-only engines, which
   # then fall back to unweighted estimation.
+  # Per-respondent posterior variances feed the errors-in-variables correction
+  # directly: passing them through (even unweighted) lets the bootstrap
+  # re-estimate reliability on each resample, so its interval reflects
+  # reliability-estimation uncertainty. This matters most at low reliability,
+  # where a fixed reliability produces over-narrow intervals.
   respondent_weights <- NULL; posterior_var <- NULL
-  if (respondent_weighting == "information" && !is.null(fit$score_posterior_sd)) {
+  if (!is.null(fit$score_posterior_sd)) {
     sd <- as.data.frame(fit$score_posterior_sd)
     modeled <- intersect(all_names, names(sd))
     if (length(modeled) && nrow(sd) == nrow(scores)) {
-      respondent_weights <- .information_weights(sd[, modeled, drop = FALSE])
       posterior_var <- sd^2
+      if (respondent_weighting == "information") respondent_weights <- .information_weights(sd[, modeled, drop = FALSE])
     }
   }
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope

@@ -26,6 +26,13 @@
   `cssem_associate()`; validation showed it does not improve point-estimate bias
   (posterior width is score-dependent), so it is not used for confirmatory
   estimates.
+* Constrains the monotone shape basis to be genuinely monotone (the linear term
+  was previously left free, letting a symmetric U-shape masquerade as a monotone
+  effect). Strong symmetric nonlinear effects are now correctly selected as
+  smooth, and false-nonlinear selection on linear and null data is lower.
+* Propagates reliability-estimation uncertainty into the errors-in-variables
+  bootstrap interval by re-estimating reliability on each resample, restoring
+  interval coverage under low measurement reliability.
 
 # cssem 0.3.0
 

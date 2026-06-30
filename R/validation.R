@@ -199,7 +199,7 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
     # threshold that activates past a point, and concave diminishing returns.
     plateau = as.numeric(scale(1.70 * tanh(1.40 * trust) + stats::rnorm(n, sd = .40))),
     threshold = as.numeric(scale(1.50 * pmax(trust - .50, 0) + stats::rnorm(n, sd = .40))),
-    diminishing = as.numeric(scale(1.30 * log(trust + 4) + stats::rnorm(n, sd = .40))),
+    diminishing = as.numeric(scale(1.00 * trust + 0.95 * pmin(trust, 0) + stats::rnorm(n, sd = .40))),
     null = stats::rnorm(n),
     omitted = .35 * trust + .65 * context + stats::rnorm(n, sd = .65),
     .65 * trust + stats::rnorm(n, sd = .70)
