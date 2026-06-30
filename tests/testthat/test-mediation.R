@@ -90,6 +90,15 @@ test_that("public cssem_mediation runs end to end through the real pipeline", {
   expect_true(all(c("disattenuated_ci_low", "disattenuated_ci_high") %in% names(med$summary)))
 })
 
+test_that("mediation validation harness recovers the latent indirect effect", {
+  manifest <- cssem_mediation_validation_manifest("screening")
+  expect_true(all(c("scenario", "n", "loading", "items") %in% names(manifest)))
+  results <- cssem_run_mediation_validation(manifest[1, ], reps = 1, seed = 4026, iterations = 4, eiv_bootstrap = 60)
+  expect_true(all(c("true_indirect", "naive_indirect", "disattenuated_indirect",
+    "naive_abs_bias", "disattenuated_abs_bias", "disattenuated_covers_truth") %in% names(results)))
+  expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
+})
+
 test_that("mediation guards reject bad inputs", {
   fx <- .mediation_fixture("single")
   models <- stats::setNames(fx$models, names(fx$scores))
