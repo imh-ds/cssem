@@ -4,7 +4,7 @@
 \alias{cssem_mediation_validation_manifest}
 \title{Create a deterministic mediation validation manifest}
 \usage{
-cssem_mediation_validation_manifest(tier = c("screening", "full"))
+cssem_mediation_validation_manifest(tier = c("screening", "full", "benchmark"))
 }
 \arguments{
 \item{tier}{\code{"screening"} for a compact local suite or \code{"full"} for a larger

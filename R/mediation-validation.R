@@ -5,8 +5,24 @@
 # recover. This is the lightweight harness; the publication-ready benchmark
 # (including native PLS-SEM and CB-SEM mediation comparators) builds on it.
 
+# Build the declared mediation structure, optionally fixing every edge to a
+# linear shape policy. Declaring linear edges reflects confirmatory mediation
+# practice and keeps whole-chain disattenuation available (no edge can be
+# auto-selected as smooth), which also speeds the bootstrap refits.
+.mediation_structure <- function(scenario, edge_shape = "auto") {
+  edge <- function(predictors) {
+    if (identical(edge_shape, "linear")) stats::setNames(lapply(predictors, function(p) cssem_effect("linear")), predictors) else predictors
+  }
+  switch(scenario,
+    single = cssem_structure(list(M = edge("X"), Y = edge(c("X", "M"))), order = c("X", "M", "Y")),
+    parallel = cssem_structure(list(M1 = edge("X"), M2 = edge("X"), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
+    serial = cssem_structure(list(M1 = edge("X"), M2 = edge(c("X", "M1")), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
+    stop("Unknown mediation scenario: ", scenario, call. = FALSE)
+  )
+}
+
 .mediation_validation_data <- function(scenario, n, loading = .80, seed = 1L,
-                                        items = 4L, missing = .02) {
+                                        items = 4L, missing = .02, edge_shape = "auto") {
   set.seed(seed)
   standardize <- function(v) as.numeric(scale(v))
   X <- standardize(stats::rnorm(n))
@@ -30,11 +46,7 @@
     },
     stop("Unknown mediation scenario: ", scenario, call. = FALSE)
   )
-  structure <- switch(scenario,
-    single = cssem_structure(list(M = "X", Y = c("X", "M")), order = c("X", "M", "Y")),
-    parallel = cssem_structure(list(M1 = "X", M2 = "X", Y = c("X", "M1", "M2")), order = c("X", "M1", "M2", "Y")),
-    serial = cssem_structure(list(M1 = "X", M2 = c("X", "M1"), Y = c("X", "M1", "M2")), order = c("X", "M1", "M2", "Y"))
-  )
+  structure <- .mediation_structure(scenario, edge_shape)
   prefixes <- stats::setNames(letters[seq_along(states)], names(states))
   data <- do.call(cbind, unname(Map(function(state, prefix)
     .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
@@ -61,7 +73,8 @@
 .mediation_validation_one <- function(job) {
   setting <- as.data.frame(job$setting, stringsAsFactors = FALSE)
   items <- if ("items" %in% names(setting)) setting$items else 4L
-  generated <- .mediation_validation_data(setting$scenario, setting$n, setting$loading, job$seed, items = items)
+  edge_shape <- if ("edge_shape" %in% names(setting)) setting$edge_shape else "auto"
+  generated <- .mediation_validation_data(setting$scenario, setting$n, setting$loading, job$seed, items = items, edge_shape = edge_shape)
   model <- generated$model; model$folds <- job$folds
   constructs <- names(generated$states)
   elapsed <- system.time({
@@ -103,18 +116,28 @@
 #' @examples
 #' cssem_mediation_validation_manifest("screening")
 #' @export
-cssem_mediation_validation_manifest <- function(tier = c("screening", "full")) {
+cssem_mediation_validation_manifest <- function(tier = c("screening", "full", "benchmark")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     scenario = c("single", "single", "parallel", "serial"),
     n = c(400L, 600L, 500L, 600L),
     loading = c(.80, .60, .80, .80),
     items = c(4L, 6L, 4L, 4L),
+    edge_shape = "auto",
     stringsAsFactors = FALSE
   ))
+  if (tier == "benchmark") {
+    # Confirmatory mediation grid for the native-comparator benchmark: edges are
+    # declared linear, so every engine estimates the same linear mediation model.
+    grid <- expand.grid(scenario = c("single", "parallel", "serial"), n = c(400L, 800L),
+      loading = c(.60, .80), items = 4L, KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
+    grid$edge_shape <- "linear"
+    return(grid[, c("scenario", "n", "loading", "items", "edge_shape")])
+  }
   grid <- expand.grid(scenario = c("single", "parallel", "serial"), n = c(400L, 800L),
     loading = c(.60, .80), items = 4L, KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-  grid[, c("scenario", "n", "loading", "items")]
+  grid$edge_shape <- "auto"
+  grid[, c("scenario", "n", "loading", "items", "edge_shape")]
 }
 
 #' Run deterministic mediation validation simulations

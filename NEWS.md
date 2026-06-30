@@ -1,5 +1,12 @@
 # cssem 0.4.0 (in development)
 
+* Adds associational mediation via `cssem_mediation()`: a simulation-based path
+  decomposition (total, direct, indirect, and per-path effects) that handles
+  single, parallel, and serial mediation uniformly, disattenuates linear and
+  monotone edges, and reports bootstrap intervals. Adds a validation harness and
+  a benchmark against native CB-SEM (`lavaan`) and PLS-SEM (`seminr`) mediation.
+  On the benchmark grid the disattenuated indirect effect matches CB-SEM on bias
+  and coverage and is far less attenuated than PLS-SEM.
 * Propagates measurement uncertainty instead of discarding it: `cssem_fit()` now
   reports per-construct marginal reliability (`reliability`), per-respondent
   posterior SD (`score_posterior_sd`), and real posterior plausible-value draws

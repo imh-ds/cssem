@@ -99,6 +99,20 @@ test_that("mediation validation harness recovers the latent indirect effect", {
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
 })
 
+test_that("mediation benchmark scores every engine against the latent truth", {
+  manifest <- cssem_mediation_validation_manifest("benchmark")
+  expect_true(all(c("scenario", "n", "loading", "items", "edge_shape") %in% names(manifest)))
+  expect_true(all(manifest$edge_shape == "linear"))
+  row <- manifest[manifest$scenario == "single" & manifest$loading == .80 & manifest$n == 400L, ]
+  results <- cssem_run_mediation_comparator_validation(row, reps = 1, seed = 4026, iterations = 4,
+    eiv_bootstrap = 40, seminr_bootstrap = 40)
+  expect_setequal(unique(results$engine), c("cssem_disattenuated", "cssem_naive", "lavaan_native", "seminr_native"))
+  disattenuated <- results[results$engine == "cssem_disattenuated", ]
+  naive <- results[results$engine == "cssem_naive", ]
+  # Disattenuation reduces indirect-effect bias relative to the naive estimate.
+  expect_lt(disattenuated$abs_bias, naive$abs_bias)
+})
+
 test_that("mediation guards reject bad inputs", {
   fx <- .mediation_fixture("single")
   models <- stats::setNames(fx$models, names(fx$scores))
