@@ -172,11 +172,76 @@
   )
 }
 
-# Internal entry point for development steps 1-2: decompose the effect of x on y,
-# adding errors-in-variables disattenuated effects when per-construct reliability
-# is supplied. Public cssem_mediation() (bootstrap intervals and reporting) is
-# added in step 3.
-.cssem_mediation_core <- function(models, scores, structure, x, y, reliability = NULL, delta = 1) {
+# Refit one shape model per endogenous construct with shapes held fixed. Used by
+# the bootstrap so model selection is conditioned on and only the coefficients
+# vary across resamples.
+.refit_models <- function(scores, shapes_by_outcome) {
+  refit <- vector("list", length(shapes_by_outcome)); names(refit) <- names(shapes_by_outcome)
+  for (outcome in names(shapes_by_outcome)) {
+    shapes <- shapes_by_outcome[[outcome]]
+    if (!is.null(shapes)) refit[[outcome]] <- .fit_shape_model(scores, outcome, shapes)
+  }
+  refit
+}
+
+# Percentile bootstrap of every decomposition quantity. Respondents are
+# resampled, stage-model coefficients refit at the fixed shapes, and the naive
+# (and, when reliability is supplied, disattenuated) effects recomputed. The
+# reliability inputs are held fixed at their estimates.
+.add_mediation_intervals <- function(out, models, scores, order, paths, x, y,
+                                      reliability, delta, replicates, seed) {
+  shapes_by_outcome <- lapply(models, function(model) if (is.null(model)) NULL else model$shapes)
+  mediating <- which(vapply(paths, length, integer(1)) > 2L)
+  n <- nrow(scores)
+  naive_summary <- matrix(NA_real_, replicates, 3L)
+  dis_summary <- matrix(NA_real_, replicates, 3L)
+  naive_path <- matrix(NA_real_, replicates, length(mediating))
+  dis_path <- matrix(NA_real_, replicates, length(mediating))
+  set.seed(seed + 808L)
+  for (b in seq_len(replicates)) {
+    resampled <- scores[sample.int(n, n, replace = TRUE), , drop = FALSE]
+    refit <- .refit_models(resampled, shapes_by_outcome)
+    naive <- .decompose_effects(refit, resampled, order, x, y, paths, delta)
+    naive_summary[b, ] <- c(naive$total, naive$direct, naive$indirect_total)
+    naive_path[b, ] <- naive$path_eff[mediating]
+    if (!is.null(reliability)) {
+      corrected <- .corrected_models(refit, resampled, reliability)
+      dis <- .decompose_effects(corrected$models, resampled, order, x, y, paths, delta)
+      dis_summary[b, ] <- c(dis$total, dis$direct, dis$indirect_total)
+      dis_path[b, ] <- dis$path_eff[mediating]
+    }
+  }
+  ci <- function(m) t(apply(m, 2L, function(column) {
+    column <- column[is.finite(column)]
+    if (!length(column)) c(NA_real_, NA_real_) else stats::quantile(column, c(.025, .975), names = FALSE)
+  }))
+  mask <- function(bounds, point) ifelse(is.na(point), NA_real_, bounds)
+
+  ns <- ci(naive_summary)
+  out$summary$naive_ci_low <- ns[, 1L]; out$summary$naive_ci_high <- ns[, 2L]
+  if (!is.null(reliability)) {
+    ds <- ci(dis_summary)
+    out$summary$disattenuated_ci_low <- mask(ds[, 1L], out$summary$disattenuated_effect)
+    out$summary$disattenuated_ci_high <- mask(ds[, 2L], out$summary$disattenuated_effect)
+  }
+  if (length(mediating)) {
+    np <- ci(naive_path)
+    out$path_specific$naive_ci_low <- np[, 1L]; out$path_specific$naive_ci_high <- np[, 2L]
+    if (!is.null(reliability)) {
+      dp <- ci(dis_path)
+      out$path_specific$disattenuated_ci_low <- mask(dp[, 1L], out$path_specific$disattenuated_effect)
+      out$path_specific$disattenuated_ci_high <- mask(dp[, 2L], out$path_specific$disattenuated_effect)
+    }
+  }
+  out
+}
+
+# Internal entry point for development steps 1-3: decompose the effect of x on y,
+# add errors-in-variables disattenuated effects when per-construct reliability is
+# supplied, and attach percentile bootstrap intervals when requested. Public
+# cssem_mediation() (validation and reporting) is added in step 4.
+.cssem_mediation_core <- function(models, scores, structure, x, y, reliability = NULL,
+                                  delta = 1, eiv_bootstrap = 0L, seed = 1L) {
   order <- .resolve_temporal_order(structure, names(scores))
   if (match(x, order) >= match(y, order)) stop("x must precede y in the temporal order.", call. = FALSE)
   paths <- .structure_paths(structure, x, y)
@@ -188,5 +253,10 @@
     disattenuated <- .decompose_effects(corrected$models, scores, order, x, y, paths, delta)
     eligible <- corrected$eligible
   }
-  .assemble_mediation(paths, naive, disattenuated, eligible, x, y)
+  out <- .assemble_mediation(paths, naive, disattenuated, eligible, x, y)
+  if (as.integer(eiv_bootstrap) > 0L) {
+    out <- .add_mediation_intervals(out, models, scores, order, paths, x, y,
+      reliability, delta, as.integer(eiv_bootstrap), seed)
+  }
+  out
 }
