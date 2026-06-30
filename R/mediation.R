@@ -83,49 +83,110 @@
   mean(shifted_y - baseline_y, na.rm = TRUE) / delta
 }
 
-# Decompose the effect of x on y into total, direct, total-indirect, and one
-# path-specific indirect effect per enumerated mediating path.
-.mediation_decompose <- function(models, scores, order, x, y, paths, delta) {
+# Raw total, direct, total-indirect, and per-path effects for one model set.
+# The per-path vector is aligned with `paths`; direct paths (length two) are
+# returned as NA there and summarized separately.
+.decompose_effects <- function(models, scores, order, x, y, paths, delta) {
   baseline_y <- .propagate_y(models, scores, order, x, y, 0, character(0))
   all_edges <- .model_edges(models)
   effect <- function(active) .mediation_effect(models, scores, order, x, y, delta, active, baseline_y)
-
   total <- effect(all_edges)
-  direct_edge <- .edge(x, y)
-  direct <- if (direct_edge %in% all_edges) effect(direct_edge) else 0
-  total_indirect <- total - direct
+  direct <- if (.edge(x, y) %in% all_edges) effect(.edge(x, y)) else 0
+  path_eff <- vapply(paths, function(path) if (length(path) > 2L) effect(.path_edges(path)) else NA_real_, numeric(1))
+  list(total = total, direct = direct, indirect_total = total - direct, path_eff = path_eff)
+}
 
-  mediating <- Filter(function(path) length(path) > 2L, paths)
-  path_rows <- lapply(mediating, function(path) {
+# A purely linear model object compatible with .predict_shape_model(), built from
+# named edge slopes. The intercept is irrelevant because every reported effect is
+# a difference of predictions.
+.linear_model_from_slopes <- function(predictors, slopes) {
+  list(
+    shapes = stats::setNames(rep("linear", length(predictors)), predictors),
+    infos = stats::setNames(lapply(predictors, function(predictor) list(shape = "linear")), predictors),
+    coefficient = c(0, slopes[predictors])
+  )
+}
+
+# Replace each outcome model with a linear model carrying the errors-in-variables
+# disattenuated slope for every linear/monotone edge. Smooth edges (and edges
+# without a usable correction) keep their naive slope and are marked ineligible,
+# so any path passing through them is reported without disattenuation.
+.corrected_models <- function(models, scores, reliability) {
+  corrected <- vector("list", length(models)); names(corrected) <- names(models)
+  eligible <- logical()
+  for (outcome in names(models)) {
+    model <- models[[outcome]]; if (is.null(model)) next
+    predictors <- names(model$shapes)
+    coefficients <- .eiv_coefficients(scores, outcome, predictors, reliability)
+    slopes <- vapply(predictors, function(predictor) {
+      linear_or_monotone <- model$shapes[[predictor]] %in% c("linear", "monotone_increasing", "monotone_decreasing")
+      usable <- linear_or_monotone && is.finite(coefficients$corrected[[predictor]])
+      eligible[[.edge(predictor, outcome)]] <<- usable
+      if (usable) unname(coefficients$corrected[[predictor]]) else unname(coefficients$naive[[predictor]])
+    }, numeric(1))
+    corrected[[outcome]] <- .linear_model_from_slopes(predictors, stats::setNames(slopes, predictors))
+  }
+  list(models = corrected, eligible = eligible)
+}
+
+# Assemble the naive (and, when reliability is supplied, disattenuated)
+# decomposition into reporting tables. A path's disattenuated effect is reported
+# only when every edge it traverses is correction-eligible.
+.assemble_mediation <- function(paths, naive, disattenuated, eligible, x, y) {
+  path_ok <- function(path) if (is.null(eligible)) NA else isTRUE(all(eligible[.path_edges(path)]))
+  mediating <- which(vapply(paths, length, integer(1)) > 2L)
+  direct_ok <- if (is.null(eligible)) NA else isTRUE(eligible[[.edge(x, y)]])
+  paths_ok <- if (is.null(eligible)) NA else all(vapply(paths[mediating], path_ok, logical(1)))
+
+  summary <- data.frame(
+    component = c("total", "direct", "indirect_total"),
+    naive_effect = c(naive$total, naive$direct, naive$indirect_total),
+    disattenuated_effect = if (is.null(disattenuated)) NA_real_ else c(
+      if (isTRUE(direct_ok) && isTRUE(paths_ok)) disattenuated$total else NA_real_,
+      if (isTRUE(direct_ok)) disattenuated$direct else NA_real_,
+      if (isTRUE(paths_ok)) disattenuated$indirect_total else NA_real_
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  path_rows <- lapply(mediating, function(j) {
+    path <- paths[[j]]; usable <- path_ok(path)
     data.frame(
       path = paste(path, collapse = " -> "),
       mediators = paste(path[-c(1L, length(path))], collapse = ", "),
-      effect = effect(.path_edges(path)),
+      naive_effect = naive$path_eff[[j]],
+      disattenuated_effect = if (!is.null(disattenuated) && isTRUE(usable)) disattenuated$path_eff[[j]] else NA_real_,
+      disattenuated = usable,
       stringsAsFactors = FALSE
     )
   })
   path_specific <- if (length(path_rows)) do.call(rbind, path_rows) else
-    data.frame(path = character(0), mediators = character(0), effect = numeric(0))
+    data.frame(path = character(0), mediators = character(0), naive_effect = numeric(0),
+      disattenuated_effect = numeric(0), disattenuated = logical(0))
 
   list(
-    summary = data.frame(
-      component = c("total", "direct", "indirect_total"),
-      effect = c(total, direct, total_indirect),
-      stringsAsFactors = FALSE
-    ),
+    summary = summary,
     path_specific = path_specific,
-    proportion_mediated = if (is.finite(total) && abs(total) > 1e-8) total_indirect / total else NA_real_,
-    path_sum_residual = total_indirect - sum(path_specific$effect)
+    proportion_mediated = if (is.finite(naive$total) && abs(naive$total) > 1e-8) naive$indirect_total / naive$total else NA_real_,
+    path_sum_residual = naive$indirect_total - sum(naive$path_eff[mediating])
   )
 }
 
-# Internal entry point for step-1 validation: fit one linear/selected-shape model
-# per endogenous construct on the path set and decompose. Public cssem_mediation()
-# (with disattenuation, bootstrap, and reporting) is added in later steps.
-.cssem_mediation_core <- function(models, scores, structure, x, y, delta = 1) {
+# Internal entry point for development steps 1-2: decompose the effect of x on y,
+# adding errors-in-variables disattenuated effects when per-construct reliability
+# is supplied. Public cssem_mediation() (bootstrap intervals and reporting) is
+# added in step 3.
+.cssem_mediation_core <- function(models, scores, structure, x, y, reliability = NULL, delta = 1) {
   order <- .resolve_temporal_order(structure, names(scores))
   if (match(x, order) >= match(y, order)) stop("x must precede y in the temporal order.", call. = FALSE)
   paths <- .structure_paths(structure, x, y)
   if (!length(paths)) stop("No directed path connects x to y in the declared structure.", call. = FALSE)
-  .mediation_decompose(models, scores, order, x, y, paths, delta)
+  naive <- .decompose_effects(models, scores, order, x, y, paths, delta)
+  disattenuated <- NULL; eligible <- NULL
+  if (!is.null(reliability)) {
+    corrected <- .corrected_models(models, scores, reliability)
+    disattenuated <- .decompose_effects(corrected$models, scores, order, x, y, paths, delta)
+    eligible <- corrected$eligible
+  }
+  .assemble_mediation(paths, naive, disattenuated, eligible, x, y)
 }
