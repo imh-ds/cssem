@@ -260,3 +260,148 @@
   }
   out
 }
+
+# Choose the reported effect and interval for each row: the disattenuated value
+# when disattenuation was requested and available for that row, otherwise naive.
+.mediation_reported <- function(table, disattenuated) {
+  use <- disattenuated & !is.na(table$disattenuated_effect)
+  table$reported_effect <- ifelse(use, table$disattenuated_effect, table$naive_effect)
+  table$reported_ci_low <- if ("naive_ci_low" %in% names(table))
+    ifelse(use, table$disattenuated_ci_low, table$naive_ci_low) else NA_real_
+  table$reported_ci_high <- if ("naive_ci_high" %in% names(table))
+    ifelse(use, table$disattenuated_ci_high, table$naive_ci_high) else NA_real_
+  table$basis <- ifelse(use, "disattenuated", "naive")
+  table
+}
+
+#' Decompose an associational mediation effect on locked construct states
+#'
+#' Decomposes the effect of `x` on `y` into total, direct, and indirect
+#' components, plus one path-specific indirect effect for every directed path
+#' from `x` to `y` declared in the association's structure. Single, parallel, and
+#' serial mediation are handled uniformly: effects are obtained by simulating an
+#' `x` shift and propagating it through the fitted construct-level effect models,
+#' so the decomposition is correct for nonlinear edges, not only linear paths.
+#'
+#' Linear and monotone edges are disattenuated with the same errors-in-variables
+#' correction used by [cssem_associate()], recovering the latent-scale indirect
+#' effect that measurement error attenuates (the bias is largest for indirect
+#' effects, which compound error across paths). Any path through a smooth edge is
+#' reported without disattenuation. The decomposition is associational: it
+#' requires the structure's declared temporal order and makes no causal claim.
+#'
+#' @param association A `cssem_association` from [cssem_associate()].
+#' @param x Name of the locked predictor construct.
+#' @param y Name of the locked outcome construct.
+#' @param mediators Optional character vector restricting the displayed
+#'   path-specific effects to paths whose mediators all lie in this set. Total,
+#'   direct, and indirect effects always reflect the full declared structure.
+#' @param disattenuate Whether to report errors-in-variables disattenuated
+#'   effects when the association carries reliability. Defaults to `TRUE`.
+#' @param eiv_bootstrap Number of percentile-bootstrap resamples for the
+#'   intervals. Zero (default) omits intervals.
+#' @param delta Size of the `x` contrast, in standard-deviation units of the
+#'   standardized construct states. Defaults to one. Effects are reported per
+#'   `delta`; for linear models they are scale-invariant.
+#' @param seed Bootstrap seed.
+#' @return An object of class `cssem_mediation`.
+#' @examples
+#' # association <- cssem_associate(fit, structure)
+#' # cssem_mediation(association, x = "Trust", y = "Loyalty", eiv_bootstrap = 200)
+#' @export
+cssem_mediation <- function(association, x, y, mediators = NULL, disattenuate = TRUE,
+                            eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
+  scores <- association$scores
+  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  all_names <- names(scores)
+  if (length(x) != 1L || length(y) != 1L || !all(c(x, y) %in% all_names)) stop("x and y must be locked construct names.", call. = FALSE)
+  if (identical(x, y)) stop("x and y must differ.", call. = FALSE)
+  if (!is.null(mediators) && !all(mediators %in% all_names)) stop("mediators must be locked construct names.", call. = FALSE)
+  eiv_bootstrap <- as.integer(eiv_bootstrap)
+  if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
+  if (!is.numeric(delta) || length(delta) != 1L || !is.finite(delta) || delta == 0) stop("delta must be a non-zero numeric scalar.", call. = FALSE)
+
+  models <- stats::setNames(vector("list", length(all_names)), all_names)
+  for (outcome in names(association$full_models)) models[[outcome]] <- association$full_models[[outcome]]
+
+  reliability <- NULL
+  if (isTRUE(disattenuate)) {
+    reliability <- association$reliability
+    if (is.null(reliability) || all(is.na(reliability))) reliability <- NULL
+  }
+
+  core <- .cssem_mediation_core(models, scores, association$structure, x, y,
+    reliability = reliability, delta = delta, eiv_bootstrap = eiv_bootstrap, seed = seed)
+
+  if (!is.null(mediators) && nrow(core$path_specific)) {
+    keep <- vapply(strsplit(core$path_specific$mediators, ", ", fixed = TRUE),
+      function(path_mediators) all(path_mediators %in% mediators), logical(1))
+    core$path_specific <- core$path_specific[keep, , drop = FALSE]
+    if (!nrow(core$path_specific)) stop("No mediating path passes only through the requested mediators.", call. = FALSE)
+  }
+
+  structure(c(core, list(x = x, y = y, n = nrow(scores), delta = delta,
+    disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap, status = "associational")),
+    class = "cssem_mediation")
+}
+
+#' Return a tidy mediation effect ledger
+#'
+#' @param mediation A `cssem_mediation` object.
+#' @return A data frame with one row per total, direct, indirect, and
+#'   path-specific effect, carrying the reported effect, interval, estimation
+#'   basis, and associational status.
+#' @examples
+#' # cssem_mediation_ledger(mediation)
+#' @export
+cssem_mediation_ledger <- function(mediation) {
+  if (!inherits(mediation, "cssem_mediation")) stop("mediation must be a cssem_mediation.", call. = FALSE)
+  summary <- .mediation_reported(mediation$summary, isTRUE(mediation$disattenuated))
+  ledger <- data.frame(component = summary$component, path = NA_character_,
+    effect = summary$reported_effect, ci_low = summary$reported_ci_low, ci_high = summary$reported_ci_high,
+    basis = summary$basis, stringsAsFactors = FALSE)
+  if (nrow(mediation$path_specific)) {
+    paths <- .mediation_reported(mediation$path_specific, isTRUE(mediation$disattenuated))
+    ledger <- rbind(ledger, data.frame(component = "path_indirect", path = paths$path,
+      effect = paths$reported_effect, ci_low = paths$reported_ci_low, ci_high = paths$reported_ci_high,
+      basis = paths$basis, stringsAsFactors = FALSE))
+  }
+  ledger$status <- "associational"
+  ledger
+}
+
+#' Print an associational CS-SEM mediation decomposition
+#'
+#' @param x A `cssem_mediation` object.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.cssem_mediation <- function(x, ...) {
+  paths <- nrow(x$path_specific)
+  cat(sprintf("CS-SEM associational mediation: %s -> %s  (n = %d, %d mediating path%s)\n",
+    x$x, x$y, x$n, paths, if (paths == 1L) "" else "s"))
+  basis <- if (isTRUE(x$disattenuated)) "disattenuated (errors-in-variables)" else "naive (not disattenuated)"
+  intervals <- if (x$bootstrap > 0L) sprintf("; 95%% bootstrap intervals (%d resamples)", x$bootstrap) else ""
+  cat("Effects are ", basis, intervals, ".\n\n", sep = "")
+  format_effect <- function(effect, low, high) if (is.na(low)) sprintf("% .3f", effect) else
+    sprintf("% .3f  [% .3f, % .3f]", effect, low, high)
+  labels <- c(total = "total effect", direct = "direct effect", indirect_total = "indirect effect")
+  summary <- .mediation_reported(x$summary, isTRUE(x$disattenuated))
+  for (i in seq_len(nrow(summary))) {
+    cat(sprintf("  %-16s %s\n", labels[[summary$component[i]]],
+      format_effect(summary$reported_effect[i], summary$reported_ci_low[i], summary$reported_ci_high[i])))
+  }
+  if (is.finite(x$proportion_mediated)) cat(sprintf("  %-16s %.3f\n", "prop. mediated", x$proportion_mediated))
+  if (paths) {
+    cat("\n  path-specific indirect effects:\n")
+    rows <- .mediation_reported(x$path_specific, isTRUE(x$disattenuated))
+    for (i in seq_len(nrow(rows))) {
+      flag <- if (isTRUE(x$disattenuated) && !isTRUE(rows$disattenuated[i])) "  (smooth edge: not disattenuated)" else ""
+      cat(sprintf("  %-26s %s%s\n", rows$path[i],
+        format_effect(rows$reported_effect[i], rows$reported_ci_low[i], rows$reported_ci_high[i]), flag))
+    }
+  }
+  cat("\nAssociational decomposition under the declared temporal order; not a causal mediation claim.\n")
+  invisible(x)
+}

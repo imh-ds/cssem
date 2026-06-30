@@ -518,7 +518,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   structure(list(structure = structure, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = do.call(rbind, corrected), reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
-    respondent_weighting = respondent_weighting,
+    respondent_weighting = respondent_weighting, scores = scores,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }
