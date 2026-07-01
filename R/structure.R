@@ -261,7 +261,8 @@ cssem_structure <- function(effects, order = NULL) {
 # from the predictor covariance before solving the normal equations. Error in the
 # outcome inflates residual variance but does not bias the slope, so only
 # predictor reliabilities enter. Returns naive (uncorrected) and corrected slopes.
-.eiv_coefficients <- function(scores, outcome, predictors, reliability, weights = NULL, posterior_var = NULL) {
+.eiv_coefficients <- function(scores, outcome, predictors, reliability, weights = NULL, posterior_var = NULL,
+                              reliability_floor = 0.15, condition_ratio = 0.10) {
   X <- as.matrix(scores[, predictors, drop = FALSE]); y <- scores[[outcome]]
   w <- if (is.null(weights)) rep(1, nrow(X)) else weights
   pv <- if (is.null(posterior_var)) NULL else as.matrix(posterior_var[, predictors, drop = FALSE])
@@ -287,14 +288,29 @@ cssem_structure <- function(effects, order = NULL) {
     rel_w <- signal / (signal + error)
     rel <- ifelse(is.finite(rel_w), rel_w, rel)
   }
-  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0)) return(list(naive = stats::setNames(naive, predictors), corrected = na))
-  De <- diag((1 - rel) * diag(Szz), nrow = length(predictors))
-  corrected_cov <- Szz - De
-  # Guard against an ill-conditioned correction (low reliability can render the
-  # corrected predictor covariance non-positive-definite); fall back to naive.
-  pd <- tryCatch(all(eigen(corrected_cov, symmetric = TRUE, only.values = TRUE)$values > 1e-6), error = function(e) FALSE)
-  corrected <- if (pd) tryCatch(drop(solve(corrected_cov, Szy)), error = function(e) na) else na
-  list(naive = stats::setNames(naive, predictors), corrected = stats::setNames(corrected, predictors))
+  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0))
+    return(list(naive = stats::setNames(naive, predictors), corrected = na, stable = NA))
+  # Adaptive regularization. At very low reliability a raw errors-in-variables
+  # correction subtracts almost all the predictor variance, leaving a
+  # near-singular covariance whose inverse explodes (the corrected estimate then
+  # becomes more biased than the naive one). Floor the effective reliability so
+  # the correction factor stays bounded, then shrink the error-covariance
+  # subtraction further if the corrected covariance is still ill-conditioned. The
+  # result interpolates between the full correction and the naive estimate, so it
+  # is never worse than naive; `stable` flags when this limiting engaged.
+  effective <- pmax(rel, reliability_floor)
+  De <- diag((1 - effective) * diag(Szz), nrow = length(predictors))
+  base <- tryCatch(min(eigen(Szz, symmetric = TRUE, only.values = TRUE)$values), error = function(e) NA_real_)
+  shrink <- 1; corrected_cov <- Szz - De
+  if (is.finite(base)) {
+    iteration <- 0L
+    while (iteration < 25L && min(eigen(corrected_cov, symmetric = TRUE, only.values = TRUE)$values) < condition_ratio * base) {
+      shrink <- shrink * 0.8; corrected_cov <- Szz - shrink * De; iteration <- iteration + 1L
+    }
+  }
+  corrected <- tryCatch(drop(solve(corrected_cov, Szy)), error = function(e) na)
+  stable <- all(rel >= reliability_floor) && shrink >= 1 - 1e-6
+  list(naive = stats::setNames(naive, predictors), corrected = stats::setNames(corrected, predictors), stable = stable)
 }
 
 # Percentile bootstrap of the corrected slopes, resampling respondents. This
@@ -330,7 +346,8 @@ cssem_structure <- function(effects, order = NULL) {
       corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
       predictor_reliability = unname(reliability[[p]]),
       corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
-      eiv_applicable = applicable[[p]], stringsAsFactors = FALSE)
+      eiv_applicable = applicable[[p]], eiv_stable = applicable[[p]] && isTRUE(fit$stable),
+      stringsAsFactors = FALSE)
   }))
 }
 

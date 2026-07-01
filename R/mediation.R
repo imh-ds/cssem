@@ -111,29 +111,38 @@
 # disattenuated slope for every linear/monotone edge. Smooth edges (and edges
 # without a usable correction) keep their naive slope and are marked ineligible,
 # so any path passing through them is reported without disattenuation.
-.corrected_models <- function(models, scores, reliability) {
+.corrected_models <- function(models, scores, reliability, posterior_var = NULL) {
   corrected <- vector("list", length(models)); names(corrected) <- names(models)
-  eligible <- logical()
+  eligible <- logical(); stable <- logical()
   for (outcome in names(models)) {
     model <- models[[outcome]]; if (is.null(model)) next
     predictors <- names(model$shapes)
-    coefficients <- .eiv_coefficients(scores, outcome, predictors, reliability)
+    coefficients <- .eiv_coefficients(scores, outcome, predictors, reliability, posterior_var = posterior_var)
     slopes <- vapply(predictors, function(predictor) {
       linear_or_monotone <- model$shapes[[predictor]] %in% c("linear", "monotone_increasing", "monotone_decreasing")
       usable <- linear_or_monotone && is.finite(coefficients$corrected[[predictor]])
       eligible[[.edge(predictor, outcome)]] <<- usable
+      # An edge's correction is stable only when it was usable and the adaptive
+      # regularization did not have to limit the outcome model's correction.
+      stable[[.edge(predictor, outcome)]] <<- usable && isTRUE(coefficients$stable)
       if (usable) unname(coefficients$corrected[[predictor]]) else unname(coefficients$naive[[predictor]])
     }, numeric(1))
     corrected[[outcome]] <- .linear_model_from_slopes(predictors, stats::setNames(slopes, predictors))
   }
-  list(models = corrected, eligible = eligible)
+  list(models = corrected, eligible = eligible, stable = stable)
 }
 
 # Assemble the naive (and, when reliability is supplied, disattenuated)
 # decomposition into reporting tables. A path's disattenuated effect is reported
 # only when every edge it traverses is correction-eligible.
-.assemble_mediation <- function(paths, naive, disattenuated, eligible, x, y) {
+.assemble_mediation <- function(paths, naive, disattenuated, eligible, stable, reliability, x, y) {
   path_ok <- function(path) if (is.null(eligible)) NA else isTRUE(all(eligible[.path_edges(path)]))
+  path_stable <- function(path) if (is.null(stable)) NA else isTRUE(all(stable[.path_edges(path)]))
+  path_min_reliability <- function(path) {
+    if (is.null(reliability)) return(NA_real_)
+    values <- reliability[intersect(path, names(reliability))]
+    if (!length(values) || all(is.na(values))) NA_real_ else min(values, na.rm = TRUE)
+  }
   mediating <- which(vapply(paths, length, integer(1)) > 2L)
   direct_ok <- if (is.null(eligible)) NA else isTRUE(eligible[[.edge(x, y)]])
   paths_ok <- if (is.null(eligible)) NA else all(vapply(paths[mediating], path_ok, logical(1)))
@@ -157,12 +166,15 @@
       naive_effect = naive$path_eff[[j]],
       disattenuated_effect = if (!is.null(disattenuated) && isTRUE(usable)) disattenuated$path_eff[[j]] else NA_real_,
       disattenuated = usable,
+      disattenuation_stable = path_stable(path),
+      min_reliability = path_min_reliability(path),
       stringsAsFactors = FALSE
     )
   })
   path_specific <- if (length(path_rows)) do.call(rbind, path_rows) else
     data.frame(path = character(0), mediators = character(0), naive_effect = numeric(0),
-      disattenuated_effect = numeric(0), disattenuated = logical(0))
+      disattenuated_effect = numeric(0), disattenuated = logical(0),
+      disattenuation_stable = logical(0), min_reliability = numeric(0))
 
   list(
     summary = summary,
@@ -247,13 +259,13 @@
   paths <- .structure_paths(structure, x, y)
   if (!length(paths)) stop("No directed path connects x to y in the declared structure.", call. = FALSE)
   naive <- .decompose_effects(models, scores, order, x, y, paths, delta)
-  disattenuated <- NULL; eligible <- NULL
+  disattenuated <- NULL; eligible <- NULL; stable <- NULL
   if (!is.null(reliability)) {
     corrected <- .corrected_models(models, scores, reliability)
     disattenuated <- .decompose_effects(corrected$models, scores, order, x, y, paths, delta)
-    eligible <- corrected$eligible
+    eligible <- corrected$eligible; stable <- corrected$stable
   }
-  out <- .assemble_mediation(paths, naive, disattenuated, eligible, x, y)
+  out <- .assemble_mediation(paths, naive, disattenuated, eligible, stable, reliability, x, y)
   if (as.integer(eiv_bootstrap) > 0L) {
     out <- .add_mediation_intervals(out, models, scores, order, paths, x, y,
       reliability, delta, as.integer(eiv_bootstrap), seed)
@@ -393,15 +405,26 @@ print.cssem_mediation <- function(x, ...) {
       format_effect(summary$reported_effect[i], summary$reported_ci_low[i], summary$reported_ci_high[i])))
   }
   if (is.finite(x$proportion_mediated)) cat(sprintf("  %-16s %.3f\n", "prop. mediated", x$proportion_mediated))
+  limited <- FALSE
   if (paths) {
     cat("\n  path-specific indirect effects:\n")
     rows <- .mediation_reported(x$path_specific, isTRUE(x$disattenuated))
     for (i in seq_len(nrow(rows))) {
-      flag <- if (isTRUE(x$disattenuated) && !isTRUE(rows$disattenuated[i])) "  (smooth edge: not disattenuated)" else ""
+      # Flag a path when the correction was numerically regularized, or when a
+      # construct it passes through has low reliability (where disattenuation is
+      # incomplete and intervals can under-cover even if numerically stable).
+      low_reliability <- is.finite(rows$min_reliability[i]) && rows$min_reliability[i] < 0.5
+      flag <- if (isTRUE(x$disattenuated) && !isTRUE(rows$disattenuated[i])) {
+        "  (smooth edge: not disattenuated)"
+      } else if (isTRUE(x$disattenuated) && (identical(rows$disattenuation_stable[i], FALSE) || low_reliability)) {
+        limited <- TRUE
+        sprintf("  (limited: reliability %.2f)", rows$min_reliability[i])
+      } else ""
       cat(sprintf("  %-26s %s%s\n", rows$path[i],
         format_effect(rows$reported_effect[i], rows$reported_ci_low[i], rows$reported_ci_high[i]), flag))
     }
   }
+  if (limited) cat("\nSome corrections were limited by low construct reliability; those intervals can under-cover. Interpret the flagged effects with caution.\n")
   cat("\nAssociational decomposition under the declared temporal order; not a causal mediation claim.\n")
   invisible(x)
 }

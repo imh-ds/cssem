@@ -70,6 +70,34 @@ test_that("disattenuation increases the indirect effect under measurement error"
   expect_equal(row$disattenuated_effect, latent_indirect, tolerance = 0.05)
 })
 
+test_that("very low reliability flags a limited, stabilized correction", {
+  fx <- .mediation_fixture("single")
+  high <- cssem:::.cssem_mediation_core(fx$models, fx$scores, fx$structure, "X", "Y", reliability = c(X = .9, M = .9, Y = .9))
+  expect_true(isTRUE(high$path_specific$disattenuation_stable[[1L]]))
+  low <- cssem:::.cssem_mediation_core(fx$models, fx$scores, fx$structure, "X", "Y", reliability = c(X = .2, M = .2, Y = .2))
+  # The correction is regularized (flagged not stable) but still produced.
+  expect_false(isTRUE(low$path_specific$disattenuation_stable[[1L]]))
+  expect_true(is.finite(low$path_specific$disattenuated_effect[[1L]]))
+  expect_equal(low$path_specific$min_reliability[[1L]], 0.2)
+})
+
+test_that("regularized correction is never worse than naive at low reliability", {
+  set.seed(11)
+  std <- function(v) as.numeric(scale(v))
+  attenuate <- function(latent, rho) std(sqrt(rho) * std(latent) + sqrt(1 - rho) * stats::rnorm(length(latent)))
+  n <- 4000; rho <- 0.3
+  X <- std(stats::rnorm(n)); M <- std(.5 * X + stats::rnorm(n, sd = .4)); Y <- std(.3 * X + .4 * M + stats::rnorm(n, sd = .4))
+  truth <- unname(stats::coef(stats::lm(M ~ X))[2L]) * unname(stats::coef(stats::lm(Y ~ X + M))[["M"]])
+  obs <- data.frame(X = attenuate(X, rho), M = attenuate(M, rho), Y = attenuate(Y, rho))
+  structure <- cssem_structure(list(M = "X", Y = c("X", "M")), order = c("X", "M", "Y"))
+  models <- list(X = NULL,
+    M = cssem:::.fit_shape_model(obs, "M", c(X = "linear")),
+    Y = cssem:::.fit_shape_model(obs, "Y", c(X = "linear", M = "linear")))
+  out <- cssem:::.cssem_mediation_core(models, obs, structure, "X", "Y", reliability = c(X = rho, M = rho, Y = rho))
+  row <- out$summary[out$summary$component == "indirect_total", ]
+  expect_lte(abs(row$disattenuated_effect - truth), abs(row$naive_effect - truth) + 1e-6)
+})
+
 test_that("a path through a smooth edge is not disattenuated", {
   fx <- .mediation_fixture("single")
   fx$models$Y <- cssem:::.fit_shape_model(fx$scores, "Y", c(X = "linear", M = "smooth_df3"))
