@@ -54,15 +54,19 @@ cssem_structure <- function(effects, order = NULL) {
 
 .effect_predictors <- function(effect_specs) names(effect_specs)
 
+# Parent constructs of an outcome, expanding interaction predictors to their
+# constituent constructs.
+.outcome_parents <- function(effects, node) {
+  if (!node %in% names(effects)) return(character())
+  unique(unlist(lapply(names(effects[[node]]), .predictor_constructs), use.names = FALSE))
+}
+
 .derived_temporal_order <- function(effects, all_names) {
-  graph_names <- unique(c(names(effects), unlist(lapply(effects, names), use.names = FALSE)))
+  graph_names <- unique(c(names(effects), unlist(lapply(names(effects), function(o) .outcome_parents(effects, o)), use.names = FALSE)))
   if (!setequal(graph_names, all_names)) return(NULL)
   remaining <- all_names; resolved <- character()
   while (length(remaining)) {
-    available <- remaining[vapply(remaining, function(node) {
-      parents <- if (node %in% names(effects)) names(effects[[node]]) else character()
-      all(parents %in% resolved)
-    }, logical(1))]
+    available <- remaining[vapply(remaining, function(node) all(.outcome_parents(effects, node) %in% resolved), logical(1))]
     if (!length(available)) return(NULL)
     resolved <- c(resolved, available); remaining <- setdiff(remaining, available)
   }
@@ -75,7 +79,7 @@ cssem_structure <- function(effects, order = NULL) {
   if (is.null(order) || !setequal(order, all_names))
     stop("Temporal shadows require an explicit order containing every locked construct when the declared graph is cyclic or incomplete.", call. = FALSE)
   for (outcome in names(structure$effects)) {
-    if (any(match(names(structure$effects[[outcome]]), order) >= match(outcome, order)))
+    if (any(match(.outcome_parents(structure$effects, outcome), order) >= match(outcome, order)))
       stop("Every declared predictor must occur before its outcome in order.", call. = FALSE)
   }
   order
@@ -114,6 +118,24 @@ cssem_structure <- function(effects, order = NULL) {
   if (shape == "linear") return(1L)
   if (.is_monotone_shape(shape)) return(2L)
   2L + .shape_df(shape)
+}
+
+# Interaction predictors are declared with R-style colon syntax ("A:B") and enter
+# the effect surface as a linear-by-linear product term. These helpers parse them
+# and recover the constituent constructs.
+.is_interaction <- function(predictor) grepl(":", predictor, fixed = TRUE)
+.interaction_terms <- function(predictor) strsplit(predictor, ":", fixed = TRUE)[[1L]]
+.predictor_constructs <- function(predictor) if (.is_interaction(predictor)) .interaction_terms(predictor) else predictor
+
+# Design matrix with one column per predictor, forming the product for
+# interaction predictors from their constituent construct columns.
+.predictor_matrix <- function(scores, predictors) {
+  columns <- lapply(predictors, function(predictor) {
+    if (.is_interaction(predictor)) {
+      terms <- .interaction_terms(predictor); scores[[terms[[1L]]]] * scores[[terms[[2L]]]]
+    } else scores[[predictor]]
+  })
+  matrix(unlist(columns, use.names = FALSE), ncol = length(predictors), dimnames = list(NULL, predictors))
 }
 
 .hinge_basis <- function(x, knots) {
@@ -158,7 +180,10 @@ cssem_structure <- function(effects, order = NULL) {
 .fit_shape_model <- function(data, outcome, shapes) {
   predictors <- names(shapes); blocks <- list(); infos <- list(); constrained <- integer(); directions <- integer()
   for (predictor in predictors) {
-    built <- .train_basis(data[[predictor]], shapes[[predictor]])
+    built <- if (.is_interaction(predictor)) {
+      terms <- .interaction_terms(predictor)
+      list(values = matrix(data[[terms[[1L]]]] * data[[terms[[2L]]]], ncol = 1L), info = list(shape = "product", terms = terms))
+    } else .train_basis(data[[predictor]], shapes[[predictor]])
     blocks[[predictor]] <- built$values; infos[[predictor]] <- built$info
     index <- seq_len(ncol(built$values)) + sum(vapply(blocks[-length(blocks)], ncol, integer(1))) + 1L
     if (.is_monotone_shape(built$info$shape)) {
@@ -181,7 +206,11 @@ cssem_structure <- function(effects, order = NULL) {
 }
 
 .predict_shape_model <- function(model, data) {
-  blocks <- lapply(names(model$shapes), function(predictor) .predict_basis(data[[predictor]], model$infos[[predictor]]))
+  blocks <- lapply(names(model$shapes), function(predictor) {
+    info <- model$infos[[predictor]]
+    if (identical(info$shape, "product")) matrix(data[[info$terms[[1L]]]] * data[[info$terms[[2L]]]], ncol = 1L)
+    else .predict_basis(data[[predictor]], info)
+  })
   design <- if (length(blocks)) cbind(`(Intercept)` = 1, do.call(cbind, blocks)) else matrix(1, nrow(data), 1L)
   drop(design %*% model$coefficient)
 }
@@ -263,9 +292,12 @@ cssem_structure <- function(effects, order = NULL) {
 # predictor reliabilities enter. Returns naive (uncorrected) and corrected slopes.
 .eiv_coefficients <- function(scores, outcome, predictors, reliability, weights = NULL, posterior_var = NULL,
                               reliability_floor = 0.15, condition_ratio = 0.10) {
-  X <- as.matrix(scores[, predictors, drop = FALSE]); y <- scores[[outcome]]
+  interaction <- vapply(predictors, .is_interaction, logical(1))
+  X <- .predictor_matrix(scores, predictors); y <- scores[[outcome]]
   w <- if (is.null(weights)) rep(1, nrow(X)) else weights
-  pv <- if (is.null(posterior_var)) NULL else as.matrix(posterior_var[, predictors, drop = FALSE])
+  # Posterior-variance reweighting is only defined for construct predictors; skip
+  # it when an interaction term is present.
+  pv <- if (is.null(posterior_var) || any(interaction)) NULL else as.matrix(posterior_var[, predictors, drop = FALSE])
   keep <- stats::complete.cases(X, y) & is.finite(w)
   X <- X[keep, , drop = FALSE]; y <- y[keep]; w <- w[keep]
   if (!is.null(pv)) pv <- pv[keep, , drop = FALSE]
@@ -281,8 +313,11 @@ cssem_structure <- function(effects, order = NULL) {
   Szy <- crossprod(Xc * w, yc) / sw
   naive <- tryCatch(drop(solve(Szz, Szy)), error = function(e) na)
   # Weighted marginal reliability when per-respondent posterior variances are
-  # available, otherwise the construct-level reliability estimate.
-  rel <- reliability[predictors]
+  # available, otherwise the construct-level reliability estimate. Interaction
+  # terms are treated as observed (reliability one): they are not disattenuated,
+  # but main effects are still corrected while controlling for them.
+  rel <- vapply(predictors, function(predictor) if (.is_interaction(predictor)) 1 else unname(reliability[predictor]), numeric(1))
+  names(rel) <- predictors
   if (!is.null(pv)) {
     signal <- diag(Szz); error <- colSums(pv * w) / sw
     rel_w <- signal / (signal + error)
@@ -344,7 +379,7 @@ cssem_structure <- function(effects, order = NULL) {
     data.frame(outcome = outcome, predictor = p,
       naive_estimate = if (applicable[[p]]) unname(fit$naive[[p]]) else NA_real_,
       corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
-      predictor_reliability = unname(reliability[[p]]),
+      predictor_reliability = if (.is_interaction(p)) NA_real_ else unname(reliability[[p]]),
       corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
       eiv_applicable = applicable[[p]], eiv_stable = applicable[[p]] && isTRUE(fit$stable),
       stringsAsFactors = FALSE)
@@ -365,7 +400,7 @@ cssem_structure <- function(effects, order = NULL) {
 .effect_rows <- function(model, scores, outcome) {
   rows <- lapply(names(model$shapes), function(predictor) {
     shape <- model$shapes[[predictor]]
-    if (shape == "linear") return(data.frame(outcome = outcome, predictor = predictor, shape = shape,
+    if (shape %in% c("linear", "product")) return(data.frame(outcome = outcome, predictor = predictor, shape = shape,
       estimate = model$coefficient[model$maps[[predictor]]][1L], x = NA_real_, fitted = NA_real_, strongest_region = NA_character_))
     grid <- seq(stats::quantile(scores[[predictor]], .05), stats::quantile(scores[[predictor]], .95), length.out = 50L)
     new_data <- as.data.frame(lapply(names(model$shapes), function(name) rep(mean(scores[[name]]), length(grid))))
@@ -432,7 +467,8 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
-  declared <- unique(c(names(structure$effects), unlist(lapply(structure$effects, names), use.names = FALSE)))
+  predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
+  declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
   # Per-construct reliability used by the errors-in-variables correction. Defaults
   # to the posterior reliability carried on the fit; NA where unavailable so the
@@ -467,10 +503,13 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
   fold_sets <- .structural_fold_sets(folds, structural_repeats, seed)
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
   for (outcome in names(structure$effects)) {
-    policies <- structure$effects[[outcome]]; predictors <- names(policies); baseline_shapes <- stats::setNames(rep("linear", length(predictors)), predictors)
+    policies <- structure$effects[[outcome]]; predictors <- names(policies)
+    # Declared interaction predictors enter as fixed linear-by-linear product
+    # terms; only main-effect predictors are shape-searched.
+    baseline_shapes <- stats::setNames(vapply(predictors, function(p) if (.is_interaction(p)) "product" else "linear", character(1)), predictors)
     baseline <- .cv_shape_candidate(scores, outcome, baseline_shapes, fold_sets)
     nonlinear <- list(); candidate_meta <- list()
-    for (predictor in predictors) for (shape in setdiff(.shape_candidates(policies[[predictor]]$shape, spline_df), "linear")) {
+    for (predictor in predictors) if (!.is_interaction(predictor)) for (shape in setdiff(.shape_candidates(policies[[predictor]]$shape, spline_df), "linear")) {
       shapes <- baseline_shapes; shapes[[predictor]] <- shape; key <- paste(predictor, shape, sep = "::")
       nonlinear[[key]] <- .cv_shape_candidate(scores, outcome, shapes, fold_sets)
       candidate_meta[[key]] <- list(predictor = predictor, shape = shape, shapes = shapes)

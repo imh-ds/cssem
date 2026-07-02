@@ -19,9 +19,8 @@
 .forward_edges <- function(structure) {
   adjacency <- list()
   for (outcome in names(structure$effects)) {
-    for (predictor in names(structure$effects[[outcome]])) {
-      adjacency[[predictor]] <- c(adjacency[[predictor]], outcome)
-    }
+    constructs <- unique(unlist(lapply(names(structure$effects[[outcome]]), .predictor_constructs), use.names = FALSE))
+    for (construct in constructs) adjacency[[construct]] <- c(adjacency[[construct]], outcome)
   }
   adjacency
 }
@@ -49,7 +48,10 @@
 .model_edges <- function(models) {
   edges <- character(0)
   for (outcome in names(models)) {
-    if (!is.null(models[[outcome]])) edges <- c(edges, .edge(names(models[[outcome]]$shapes), outcome))
+    if (!is.null(models[[outcome]])) {
+      constructs <- unique(unlist(lapply(names(models[[outcome]]$shapes), .predictor_constructs), use.names = FALSE))
+      edges <- c(edges, .edge(constructs, outcome))
+    }
   }
   unique(edges)
 }
@@ -65,10 +67,12 @@
   for (node in order) {
     model <- models[[node]]
     if (is.null(model)) next
-    predictors <- names(model$shapes)
-    frame <- as.data.frame(stats::setNames(lapply(predictors, function(predictor) {
-      if (.edge(predictor, node) %in% active) shifted[[predictor]] else baseline[[predictor]]
-    }), predictors), stringsAsFactors = FALSE)
+    # Build the frame over the model's input constructs (interaction predictors
+    # contribute their constituents) so edge-masking applies per construct.
+    constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+    frame <- as.data.frame(stats::setNames(lapply(constructs, function(construct) {
+      if (.edge(construct, node) %in% active) shifted[[construct]] else baseline[[construct]]
+    }), constructs), stringsAsFactors = FALSE)
     shifted[[node]] <- .predict_shape_model(model, frame)
   }
   shifted[[y]]
@@ -101,8 +105,9 @@
 # a difference of predictions.
 .linear_model_from_slopes <- function(predictors, slopes) {
   list(
-    shapes = stats::setNames(rep("linear", length(predictors)), predictors),
-    infos = stats::setNames(lapply(predictors, function(predictor) list(shape = "linear")), predictors),
+    shapes = stats::setNames(vapply(predictors, function(p) if (.is_interaction(p)) "product" else "linear", character(1)), predictors),
+    infos = stats::setNames(lapply(predictors, function(p)
+      if (.is_interaction(p)) list(shape = "product", terms = .interaction_terms(p)) else list(shape = "linear")), predictors),
     coefficient = c(0, slopes[predictors])
   )
 }
