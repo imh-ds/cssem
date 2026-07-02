@@ -33,6 +33,19 @@ test_that("cssem_moderated_mediation reports conditional effects and the index",
   expect_output(print(mm), "index of moderated mediation")
 })
 
+test_that("moderated mediation benchmark scores every engine against the latent truth", {
+  skip_if_not_installed("seminr")
+  manifest <- cssem_moderated_mediation_validation_manifest("screening")
+  row <- manifest[manifest$scenario == "b_path" & manifest$loading == .80, ][1, ]
+  results <- cssem_run_moderated_mediation_comparator_validation(row, reps = 1, seed = 6000, iterations = 4,
+    eiv_bootstrap = 40, seminr_bootstrap = 40)
+  expect_setequal(unique(results$engine), c("cssem_disattenuated", "cssem_naive", "lavaan_native", "seminr_native"))
+  disattenuated <- results[results$engine == "cssem_disattenuated", ]
+  naive <- results[results$engine == "cssem_naive", ]
+  # Disattenuation reduces the bias of the index of moderated mediation.
+  expect_lt(disattenuated$abs_bias, naive$abs_bias)
+})
+
 test_that("cssem_simple_slopes reports conditional slopes and a Johnson-Neyman region", {
   fx <- .moderation_fixture()
   association <- cssem_associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
