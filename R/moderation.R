@@ -52,6 +52,152 @@
   )
 }
 
+# Contiguous moderator intervals over which a logical significance flag is TRUE.
+# A positive interaction typically yields two significant regions (a strongly
+# negative and a strongly positive slope) with a non-significant band between,
+# so reporting the range of significant points alone would hide the gap.
+.significant_intervals <- function(grid, significant) {
+  if (!any(significant)) return(list())
+  runs <- rle(significant); ends <- cumsum(runs$lengths); starts <- ends - runs$lengths + 1L
+  Map(function(s, e) c(grid[[s]], grid[[e]]), starts[runs$values], ends[runs$values])
+}
+
+# Extract a predictor's slope from a fitted shape model or a corrected linear
+# model (the latter carries no `maps`, so fall back to positional lookup).
+.model_slope <- function(model, name) {
+  if (!is.null(model$maps) && !is.null(model$maps[[name]])) return(model$coefficient[[model$maps[[name]][[1L]]]])
+  model$coefficient[[1L + match(name, names(model$shapes))]]
+}
+
+# The interaction predictor on `outcome` that pairs `predictor` with `moderator`.
+.find_interaction <- function(model, predictor, moderator) {
+  hit <- Filter(function(p) .is_interaction(p) && setequal(.interaction_terms(p), c(predictor, moderator)), names(model$shapes))
+  if (length(hit)) hit[[1L]] else NA_character_
+}
+
+# Percentile bootstrap of the focal main-effect and interaction coefficients, so
+# the conditional slope (linear in the moderator) has intervals at any level.
+.simple_slope_bootstrap <- function(models, scores, outcome, predictor, interaction_name,
+                                    reliability, disattenuate, replicates, seed) {
+  shapes_by_outcome <- lapply(models, function(model) if (is.null(model)) NULL else model$shapes)
+  n <- nrow(scores); main <- rep(NA_real_, replicates); interaction <- rep(NA_real_, replicates)
+  set.seed(seed + 606L)
+  for (b in seq_len(replicates)) {
+    resampled <- scores[sample.int(n, n, replace = TRUE), , drop = FALSE]
+    refit <- .refit_models(resampled, shapes_by_outcome)
+    use <- if (disattenuate && !is.null(reliability)) .corrected_models(refit, resampled, reliability)$models else refit
+    main[b] <- .model_slope(use[[outcome]], predictor); interaction[b] <- .model_slope(use[[outcome]], interaction_name)
+  }
+  list(main = main, interaction = interaction)
+}
+
+#' Conditional (simple) slopes of a moderated effect
+#'
+#' Reports the slope of `predictor` on `outcome` at levels of a `moderator`
+#' (`slope(w) = b_predictor + b_interaction * w`), with bootstrap intervals and a
+#' Johnson-Neyman region: the range of the moderator over which the conditional
+#' slope is distinguishable from zero. The moderator must appear in a declared
+#' `predictor`-by-`moderator` interaction on the outcome. The focal main effect is
+#' disattenuated; the interaction term is treated as observed.
+#'
+#' @param association A `cssem_association` from [cssem_associate()].
+#' @param outcome Outcome construct carrying the moderated effect.
+#' @param predictor Focal predictor whose slope is conditioned.
+#' @param moderator Moderator construct.
+#' @param levels Moderator levels in standard-deviation units. Defaults to -1, 0, 1.
+#' @param disattenuate Disattenuate the focal main effect. Defaults to `TRUE`.
+#' @param eiv_bootstrap Percentile-bootstrap resamples for intervals. Zero omits.
+#' @param johnson_neyman Whether to locate the Johnson-Neyman region.
+#' @param seed Bootstrap seed.
+#' @return An object of class `cssem_simple_slopes`.
+#' @examples
+#' # cssem_simple_slopes(association, "Y", "M", "W", eiv_bootstrap = 500)
+#' @export
+cssem_simple_slopes <- function(association, outcome, predictor, moderator, levels = c(-1, 0, 1),
+                                disattenuate = TRUE, eiv_bootstrap = 0L, johnson_neyman = TRUE, seed = 1L) {
+  if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
+  scores <- association$scores
+  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (!all(c(outcome, predictor, moderator) %in% names(scores))) stop("outcome, predictor, and moderator must be locked construct names.", call. = FALSE)
+  model <- association$full_models[[outcome]]
+  if (is.null(model)) stop("outcome is not a declared endogenous construct.", call. = FALSE)
+  interaction_name <- .find_interaction(model, predictor, moderator)
+  if (is.na(interaction_name)) stop("No declared interaction between predictor and moderator on this outcome.", call. = FALSE)
+  eiv_bootstrap <- as.integer(eiv_bootstrap)
+  if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
+
+  reliability <- if (isTRUE(disattenuate)) association$reliability else NULL
+  if (!is.null(reliability) && all(is.na(reliability))) reliability <- NULL
+  disattenuated <- !is.null(reliability)
+  point_model <- if (disattenuated) {
+    models <- stats::setNames(vector("list", length(scores)), names(scores))
+    for (o in names(association$full_models)) models[[o]] <- association$full_models[[o]]
+    .corrected_models(models, scores, reliability)$models[[outcome]]
+  } else model
+  main <- .model_slope(point_model, predictor); interaction <- .model_slope(point_model, interaction_name)
+  slope_at <- function(w) main + interaction * w
+
+  boot <- NULL
+  if (eiv_bootstrap > 0L) {
+    models <- stats::setNames(vector("list", length(scores)), names(scores))
+    for (o in names(association$full_models)) models[[o]] <- association$full_models[[o]]
+    boot <- .simple_slope_bootstrap(models, scores, outcome, predictor, interaction_name, reliability, disattenuated, eiv_bootstrap, seed)
+  }
+  ci_at <- function(w) if (is.null(boot)) c(NA_real_, NA_real_) else stats::quantile(boot$main + boot$interaction * w, c(.025, .975), na.rm = TRUE, names = FALSE)
+
+  slopes <- data.frame(level = .level_labels(levels), moderator_value = levels,
+    slope = vapply(levels, slope_at, numeric(1)), stringsAsFactors = FALSE)
+  if (!is.null(boot)) {
+    bounds <- vapply(levels, ci_at, numeric(2L))
+    slopes$ci_low <- bounds[1L, ]; slopes$ci_high <- bounds[2L, ]
+  }
+
+  jn <- NULL
+  if (isTRUE(johnson_neyman) && !is.null(boot)) {
+    grid <- seq(-3, 3, length.out = 121L)
+    bounds <- vapply(grid, ci_at, numeric(2L))
+    significant <- bounds[1L, ] > 0 | bounds[2L, ] < 0
+    jn <- list(grid = grid, significant = significant, intervals = .significant_intervals(grid, significant))
+  }
+
+  structure(list(outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
+    slopes = slopes, interaction = interaction, disattenuated = disattenuated, bootstrap = eiv_bootstrap,
+    johnson_neyman = jn, status = "associational"), class = "cssem_simple_slopes")
+}
+
+#' Print conditional (simple) slopes
+#'
+#' @param x A `cssem_simple_slopes` object.
+#' @param ... Unused.
+#' @return `x`, invisibly.
+#' @export
+print.cssem_simple_slopes <- function(x, ...) {
+  cat(sprintf("CS-SEM simple slopes: %s -> %s, moderated by %s\n", x$predictor, x$outcome, x$moderator))
+  basis <- if (isTRUE(x$disattenuated)) "disattenuated focal effect" else "naive"
+  intervals <- if (x$bootstrap > 0L) sprintf("; 95%% bootstrap intervals (%d resamples)", x$bootstrap) else ""
+  cat("Effects are ", basis, intervals, ".\n\n", sep = "")
+  format_effect <- function(effect, low, high) if (is.na(low)) sprintf("% .3f", effect) else sprintf("% .3f  [% .3f, % .3f]", effect, low, high)
+  has_ci <- "ci_low" %in% names(x$slopes)
+  for (i in seq_len(nrow(x$slopes))) {
+    cat(sprintf("  %s = %-8s slope = %s\n", x$moderator, x$slopes$level[i],
+      format_effect(x$slopes$slope[i], if (has_ci) x$slopes$ci_low[i] else NA_real_, if (has_ci) x$slopes$ci_high[i] else NA_real_)))
+  }
+  cat(sprintf("\n  interaction (%s:%s) = %.3f\n", x$predictor, x$moderator, x$interaction))
+  if (!is.null(x$johnson_neyman)) {
+    intervals <- x$johnson_neyman$intervals
+    if (!length(intervals)) {
+      cat(sprintf("  Johnson-Neyman: slope not distinguishable from zero for %s in [-3, 3] SD.\n", x$moderator))
+    } else if (length(intervals) == 1L && isTRUE(all.equal(intervals[[1L]], c(-3, 3)))) {
+      cat(sprintf("  Johnson-Neyman: slope significant across %s in [-3, 3] SD.\n", x$moderator))
+    } else {
+      described <- paste(vapply(intervals, function(i) sprintf("[%.2f, %.2f]", i[[1L]], i[[2L]]), character(1)), collapse = " and ")
+      cat(sprintf("  Johnson-Neyman: slope significant for %s in %s SD.\n", x$moderator, described))
+    }
+  }
+  cat("\nAssociational estimates under the declared temporal order; not a causal claim.\n")
+  invisible(x)
+}
+
 #' Decompose a moderated mediation effect on locked construct states
 #'
 #' Estimates the indirect effect of `x` on `y` through the declared mediators as

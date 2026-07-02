@@ -313,10 +313,12 @@ cssem_structure <- function(effects, order = NULL) {
   Szy <- crossprod(Xc * w, yc) / sw
   naive <- tryCatch(drop(solve(Szz, Szy)), error = function(e) na)
   # Weighted marginal reliability when per-respondent posterior variances are
-  # available, otherwise the construct-level reliability estimate. Interaction
-  # terms are treated as observed (reliability one): they are not disattenuated,
-  # but main effects are still corrected while controlling for them.
-  rel <- vapply(predictors, function(predictor) if (.is_interaction(predictor)) 1 else unname(reliability[predictor]), numeric(1))
+  # available, otherwise the construct-level reliability estimate. An interaction
+  # term's reliability is the product of its constituents' reliabilities (the
+  # reliability of a product of standardized error-laden scores), so the
+  # interaction coefficient is disattenuated too rather than left attenuated.
+  rel <- vapply(predictors, function(predictor)
+    if (.is_interaction(predictor)) prod(reliability[.interaction_terms(predictor)]) else unname(reliability[predictor]), numeric(1))
   names(rel) <- predictors
   if (!is.null(pv)) {
     signal <- diag(Szz); error <- colSums(pv * w) / sw

@@ -33,6 +33,21 @@ test_that("cssem_moderated_mediation reports conditional effects and the index",
   expect_output(print(mm), "index of moderated mediation")
 })
 
+test_that("cssem_simple_slopes reports conditional slopes and a Johnson-Neyman region", {
+  fx <- .moderation_fixture()
+  association <- cssem_associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
+  ss <- cssem_simple_slopes(association, "Y", "M", "W", eiv_bootstrap = 100L, seed = 2)
+  expect_s3_class(ss, "cssem_simple_slopes")
+  expect_equal(nrow(ss$slopes), 3L)
+  expect_true(all(c("slope", "ci_low", "ci_high") %in% names(ss$slopes)))
+  # The slope of M on Y increases with the moderator (positive interaction).
+  expect_lt(ss$slopes$slope[[1L]], ss$slopes$slope[[3L]])
+  expect_gt(ss$interaction, 0)
+  expect_false(is.null(ss$johnson_neyman))
+  expect_error(cssem_simple_slopes(association, "Y", "M", "X"), "No declared interaction")
+  expect_output(print(ss), "Johnson-Neyman")
+})
+
 test_that("moderated mediation guards reject bad inputs", {
   fx <- .moderation_fixture()
   association <- cssem_associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
@@ -41,6 +56,16 @@ test_that("moderated mediation guards reject bad inputs", {
     cssem_structure(list(M = "X", Y = c("X", "M", "W")), order = c("X", "W", "M", "Y")),
     structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
   expect_error(cssem_moderated_mediation(no_interaction, "X", "Y", "W"), "interaction")
+})
+
+test_that("moderated mediation harness recovers the index of moderated mediation", {
+  manifest <- cssem_moderated_mediation_validation_manifest("screening")
+  expect_true(all(c("scenario", "n", "loading", "items") %in% names(manifest)))
+  results <- cssem_run_moderated_mediation_validation(manifest[1, ], reps = 1, seed = 5000, iterations = 4, eiv_bootstrap = 60)
+  expect_true(all(c("true_index", "naive_index", "disattenuated_index",
+    "naive_abs_bias", "disattenuated_abs_bias", "index_covers_truth") %in% names(results)))
+  # Disattenuation reduces the bias of the index of moderated mediation.
+  expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
 })
 
 test_that("conditional indirect effects match analytic moderated mediation", {

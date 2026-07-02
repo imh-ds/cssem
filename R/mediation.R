@@ -124,8 +124,10 @@
     predictors <- names(model$shapes)
     coefficients <- .eiv_coefficients(scores, outcome, predictors, reliability, posterior_var = posterior_var)
     slopes <- vapply(predictors, function(predictor) {
-      linear_or_monotone <- model$shapes[[predictor]] %in% c("linear", "monotone_increasing", "monotone_decreasing")
-      usable <- linear_or_monotone && is.finite(coefficients$corrected[[predictor]])
+      # Linear, monotone, and product (interaction) edges carry a disattenuated
+      # slope; smooth edges keep the naive slope.
+      correctable <- .is_interaction(predictor) || model$shapes[[predictor]] %in% c("linear", "monotone_increasing", "monotone_decreasing")
+      usable <- correctable && is.finite(coefficients$corrected[[predictor]])
       eligible[[.edge(predictor, outcome)]] <<- usable
       # An edge's correction is stable only when it was usable and the adaptive
       # regularization did not have to limit the outcome model's correction.

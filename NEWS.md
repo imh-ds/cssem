@@ -1,5 +1,13 @@
 # cssem 0.4.0 (in development)
 
+* Adds moderation and moderated mediation. Declared `"A:B"` interaction terms
+  enter the effect surface as product moderation effects; `cssem_simple_slopes()`
+  reports conditional slopes with Johnson-Neyman regions; and
+  `cssem_moderated_mediation()` reports conditional indirect effects and the index
+  of moderated mediation with plain-language output. Interaction terms are
+  disattenuated using the product of the constituents' reliabilities, which
+  recovers the index of moderated mediation that measurement error attenuates.
+  Adds a moderated-mediation validation harness.
 * Adds associational mediation via `cssem_mediation()`: a simulation-based path
   decomposition (total, direct, indirect, and per-path effects) that handles
   single, parallel, and serial mediation uniformly, disattenuates linear and
