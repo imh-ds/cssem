@@ -29,6 +29,25 @@ test_that("a causal label requires both an adjustment set and a temporal order",
   expect_identical(cssem_causal_effect(association, "X", "Y")$label, "unadjusted_association")
 })
 
+test_that("cssem_route builds a Path Routing Table with honest defaults", {
+  generated <- cssem:::.structural_validation_data("linear", 400, 5, items = 4L)
+  fit <- cssem_fit(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
+  association <- cssem_associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
+  routing <- cssem_route(association,
+    causal = list(cssem_causal_edge("Quality", "Loyalty", adjust = "Trust")),
+    temporal_order = c("Trust", "Quality", "Loyalty"))
+  expect_s3_class(routing, "cssem_routing")
+  expect_true(all(c("path", "status", "effect", "interpretation") %in% names(routing$table)))
+  expect_true(any(routing$table$status == "associational"))
+  causal_row <- routing$table[routing$table$status == "causal", ]
+  expect_equal(nrow(causal_row), 1L)
+  expect_true(is.finite(causal_row$robustness_value))
+  # Discipline: a causal edge without a temporal order is rejected.
+  expect_error(cssem_route(association, causal = list(cssem_causal_edge("Quality", "Loyalty", adjust = "Trust"))), "temporal_order")
+  expect_error(cssem_causal_edge("Quality", "Loyalty"), "adjustment set")
+  expect_output(print(routing), "Path Routing Table")
+})
+
 test_that("cssem_causal_effect guards reject bad inputs", {
   association <- .causal_fixture()
   expect_error(cssem_causal_effect(association, "X", "X"), "distinct")

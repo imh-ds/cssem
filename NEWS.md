@@ -9,6 +9,11 @@
   a causal-under-assumptions label -- discipline and sensitivity that CB-SEM and
   PLS-SEM do not provide. Flexible (nonlinear) confounder adjustment is a planned
   extension.
+* Adds edge routing via `cssem_route()` and `cssem_causal_edge()`: assigns every
+  declared structural edge a status (associational by default, or predictive,
+  representational, or causal) and prints a Path Routing Table stating each
+  edge's allowed interpretation. A causal status requires an adjustment set and a
+  declared temporal order, so no path is read causally by default.
 * Adds moderation and moderated mediation. Declared `"A:B"` interaction terms
   enter the effect surface as product moderation effects; `cssem_simple_slopes()`
   reports conditional slopes with Johnson-Neyman regions; and
