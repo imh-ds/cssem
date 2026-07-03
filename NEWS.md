@@ -1,5 +1,14 @@
 # cssem 0.4.0 (in development)
 
+* Adds `cssem_causal_effect()`: a declared, adjusted causal effect on locked
+  construct states, disattenuated for measurement error and adjusted for linear
+  confounding. It reports the unadjusted, adjusted-attenuated, and
+  adjusted-disattenuated estimates, an identification diagnostic, a
+  Cinelli-Hazlett robustness value, and a reliability-sensitivity curve, and it
+  requires both an adjustment set and a declared temporal order before applying
+  a causal-under-assumptions label -- discipline and sensitivity that CB-SEM and
+  PLS-SEM do not provide. Flexible (nonlinear) confounder adjustment is a planned
+  extension.
 * Adds moderation and moderated mediation. Declared `"A:B"` interaction terms
   enter the effect surface as product moderation effects; `cssem_simple_slopes()`
   reports conditional slopes with Johnson-Neyman regions; and
