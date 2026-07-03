@@ -9,10 +9,12 @@ cssem_causal_effect(
   treatment,
   outcome,
   adjust = character(0),
+  estimand = c("adjusted_linear", "adjusted_dml"),
   temporal_order = NULL,
   disattenuate = TRUE,
   eiv_bootstrap = 0L,
   reliability_grid = c(0.5, 0.6, 0.7, 0.8, 0.9, 1),
+  spline_df = 5L,
   seed = 1L
 )
 }
@@ -25,15 +27,29 @@ cssem_causal_effect(
 
 \item{adjust}{Character vector of adjustment-set construct names.}
 
+\item{estimand}{Adjustment strategy. \code{"adjusted_linear"} (default) is the
+errors-in-variables corrected coefficient: disattenuated and adjusted for
+\emph{linear} confounding. \code{"adjusted_dml"} is a cross-fitted partially-linear
+double-machine-learning estimate with flexible spline nuisances, which
+removes \emph{nonlinear} confounding that a linear adjustment leaves behind (a
+gain over CB-SEM's linear structural adjustment). The DML estimand is
+computed on the denoised construct states and is not disattenuated.}
+
 \item{temporal_order}{Optional character vector asserting the temporal order
 of the constructs; required (with \code{adjust}) for a causal label.}
 
-\item{disattenuate}{Whether to disattenuate using the association reliability.}
+\item{disattenuate}{Whether to disattenuate using the association reliability
+(\code{"adjusted_linear"} only).}
 
-\item{eiv_bootstrap}{Percentile-bootstrap resamples for the interval.}
+\item{eiv_bootstrap}{Percentile-bootstrap resamples for the interval
+(\code{"adjusted_linear"} only; the DML interval is the analytic orthogonal-score
+interval).}
 
 \item{reliability_grid}{Assumed treatment reliabilities for the reliability
-sensitivity curve.}
+sensitivity curve (\code{"adjusted_linear"} only).}
+
+\item{spline_df}{Spline degrees of freedom per confounder for the DML
+nuisances (\code{"adjusted_dml"} only).}
 
 \item{seed}{Bootstrap seed.}
 }
@@ -55,4 +71,8 @@ as an association.
 #   adjust = c("Trust", "PriorLoyalty"),
 #   temporal_order = c("Trust", "PriorLoyalty", "Satisfaction", "Loyalty"),
 #   eiv_bootstrap = 500)
+# # Flexible adjustment for nonlinear confounding:
+# cssem_causal_effect(association, "Satisfaction", "Loyalty",
+#   adjust = "Trust", estimand = "adjusted_dml",
+#   temporal_order = c("Trust", "Satisfaction", "Loyalty"))
 }

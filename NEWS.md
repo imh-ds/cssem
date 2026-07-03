@@ -7,8 +7,19 @@
   Cinelli-Hazlett robustness value, and a reliability-sensitivity curve, and it
   requires both an adjustment set and a declared temporal order before applying
   a causal-under-assumptions label -- discipline and sensitivity that CB-SEM and
-  PLS-SEM do not provide. Flexible (nonlinear) confounder adjustment is a planned
-  extension.
+  PLS-SEM do not provide.
+* Adds an optional `estimand = "adjusted_dml"` to `cssem_causal_effect()` (and
+  `cssem_causal_edge()`): a cross-fitted partially-linear double-machine-learning
+  estimate with flexible spline nuisances and an analytic orthogonal-score
+  interval. It removes *nonlinear* confounding that a linear structural
+  adjustment leaves behind -- a gain over CB-SEM's linear-only adjustment -- and
+  is estimated on the denoised construct states. Prototyping found that
+  disattenuating or otherwise measurement-error-correcting the DML estimate
+  over-corrects in the nonlinear setting (treatment attenuation and residual
+  confounding are opposite-signed) and that on denoised states the DML estimate
+  is not better than the same estimator on composite scores; the estimand is
+  therefore offered as flexible confounder adjustment, without claiming a
+  measurement-error advantage over dedicated causal-ML.
 * Adds edge routing via `cssem_route()` and `cssem_causal_edge()`: assigns every
   declared structural edge a status (associational by default, or predictive,
   representational, or causal) and prints a Path Routing Table stating each

@@ -18,7 +18,8 @@ Description: Research implementation of cross-fitted construct-state modeling fo
     association benchmarks, plus same-structure score-engine comparisons for
     shape selection and shadow-gap diagnostics. It does not make causal claims.
 Imports:
-    rpart
+    rpart,
+    splines
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

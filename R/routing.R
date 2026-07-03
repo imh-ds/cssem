@@ -9,12 +9,15 @@
 #' @param from Treatment construct name.
 #' @param to Outcome construct name.
 #' @param adjust Character vector of adjustment-set construct names.
-#' @param estimand Causal estimand. Currently `"adjusted_linear"`.
+#' @param estimand Causal estimand: `"adjusted_linear"` (disattenuated, linear
+#'   adjustment) or `"adjusted_dml"` (flexible spline adjustment for nonlinear
+#'   confounding). See [cssem_causal_effect()].
 #' @return A `cssem_causal_edge` specification for [cssem_route()].
 #' @examples
 #' cssem_causal_edge("Satisfaction", "Loyalty", adjust = c("Trust", "PriorLoyalty"))
 #' @export
-cssem_causal_edge <- function(from, to, adjust, estimand = "adjusted_linear") {
+cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjusted_dml")) {
+  estimand <- match.arg(estimand)
   if (!is.character(from) || length(from) != 1L || !is.character(to) || length(to) != 1L)
     stop("from and to must be single construct names.", call. = FALSE)
   if (missing(adjust) || !length(adjust)) stop("A causal edge requires a non-empty adjustment set.", call. = FALSE)
@@ -83,7 +86,7 @@ cssem_route <- function(association, causal = list(), predictive = list(), repre
     if (!key %in% names(status)) stop(sprintf("Causal edge %s is not a declared structural edge.", key), call. = FALSE)
     status[[key]] <- "causal"
     effect <- cssem_causal_effect(association, edge$from, edge$to, adjust = edge$adjust,
-      temporal_order = temporal_order, eiv_bootstrap = eiv_bootstrap, seed = seed)
+      estimand = edge$estimand, temporal_order = temporal_order, eiv_bootstrap = eiv_bootstrap, seed = seed)
     causal_effects[[key]] <- effect; causal_lookup[[key]] <- edge
   }
 

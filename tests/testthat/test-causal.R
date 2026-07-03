@@ -21,6 +21,52 @@ test_that("cssem_causal_effect decomposes confounding and attenuation", {
   expect_true(is.finite(effect$ci_low) && is.finite(effect$ci_high))
 })
 
+.causal_nonlinear_fixture <- function(n = 4000, seed = 7) {
+  set.seed(seed); std <- function(v) as.numeric(scale(v))
+  C <- stats::rnorm(n)
+  X <- std(sin(1.3 * C) + stats::rnorm(n, sd = .7))
+  Y <- std(0.3 * X + sin(1.3 * C) + stats::rnorm(n, sd = .5))
+  scores <- data.frame(X = std(X), C = std(C), Y = Y)
+  structure(list(scores = scores, folds = sample(rep_len(1:5, n)),
+    reliability = stats::setNames(c(.75, .85, .85), c("X", "C", "Y")),
+    full_models = list(), structure = cssem_structure(list(Y = c("X", "C")), order = c("C", "X", "Y"))),
+    class = "cssem_association")
+}
+
+test_that("the DML estimand removes nonlinear confounding a linear adjustment leaves", {
+  association <- .causal_nonlinear_fixture()
+  dml <- cssem_causal_effect(association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
+    temporal_order = c("C", "X", "Y"))
+  expect_identical(dml$estimand, "adjusted_dml")
+  expect_false(dml$disattenuated)
+  expect_null(dml$reliability_sensitivity)
+  # Flexible adjustment recovers the ~0.3 effect that the linear adjustment
+  # leaves upward-confounded (nonlinear confounder).
+  expect_lt(dml$adjusted_effect, dml$adjusted_naive)
+  expect_lt(abs(dml$adjusted_effect - 0.3), abs(dml$adjusted_naive - 0.3))
+  expect_lt(abs(dml$adjusted_effect - 0.3), 0.06)
+  # Analytic orthogonal-score interval.
+  expect_true(is.finite(dml$ci_low) && is.finite(dml$ci_high) && dml$ci_low < dml$ci_high)
+  expect_true(is.finite(dml$robustness_value) && dml$robustness_value > 0)
+  expect_output(print(dml), "nonlinear confounding")
+})
+
+test_that("the DML estimand requires an adjustment set", {
+  association <- .causal_nonlinear_fixture(n = 500)
+  expect_error(cssem_causal_effect(association, "X", "Y", estimand = "adjusted_dml"), "requires an adjustment set")
+})
+
+test_that("cssem_route carries the DML estimand through to a causal edge", {
+  association <- .causal_nonlinear_fixture(n = 1500)
+  routing <- cssem_route(association,
+    causal = list(cssem_causal_edge("X", "Y", adjust = "C", estimand = "adjusted_dml")),
+    temporal_order = c("C", "X", "Y"))
+  causal_row <- routing$table[routing$table$status == "causal", ]
+  expect_equal(causal_row$estimand, "adjusted_dml")
+  expect_identical(routing$causal_effects[[1L]]$estimand, "adjusted_dml")
+  expect_error(cssem_causal_edge("X", "Y", adjust = "C", estimand = "bogus"), "should be one of")
+})
+
 test_that("a causal label requires both an adjustment set and a temporal order", {
   association <- .causal_fixture()
   expect_identical(cssem_causal_effect(association, "X", "Y", adjust = "C",

@@ -4,7 +4,12 @@
 \alias{cssem_causal_edge}
 \title{Declare a causal edge for routing}
 \usage{
-cssem_causal_edge(from, to, adjust, estimand = "adjusted_linear")
+cssem_causal_edge(
+  from,
+  to,
+  adjust,
+  estimand = c("adjusted_linear", "adjusted_dml")
+)
 }
 \arguments{
 \item{from}{Treatment construct name.}
@@ -13,7 +18,9 @@ cssem_causal_edge(from, to, adjust, estimand = "adjusted_linear")
 
 \item{adjust}{Character vector of adjustment-set construct names.}
 
-\item{estimand}{Causal estimand. Currently \code{"adjusted_linear"}.}
+\item{estimand}{Causal estimand: \code{"adjusted_linear"} (disattenuated, linear
+adjustment) or \code{"adjusted_dml"} (flexible spline adjustment for nonlinear
+confounding). See \code{\link[=cssem_causal_effect]{cssem_causal_effect()}}.}
 }
 \value{
 A \code{cssem_causal_edge} specification for \code{\link[=cssem_route]{cssem_route()}}.
