@@ -1,5 +1,20 @@
 # cssem 0.4.0 (in development)
 
+* Adds `cssem_causal_mediation()`: an interventional (causal) mediation estimand
+  that elevates the disattenuated mediation decomposition to interventional
+  total, direct, and indirect effects under a declared adjustment set. It
+  enforces causal discipline the associational `cssem_mediation()` does not --
+  requiring a non-empty adjustment set, requiring those confounders to be
+  declared predictors of the outcome and every mediator, refusing to adjust for
+  any construct downstream of the treatment, and reporting a causal-admissibility
+  panel (identification strength, stage-model fit, a mediator-outcome robustness
+  value, and minimum path reliability). A `causal_under_assumptions` label also
+  requires a declared temporal order. For additive mediator models the g-computed
+  indirect effect equals the interventional indirect effect; on a
+  measurement-error benchmark the disattenuated interventional indirect recovers
+  the truth (bias 0.009) that a composite-score product attenuates by ~44%.
+  Exposure-induced mediator-outcome confounding and mediator interactions are not
+  yet modeled and are flagged.
 * Adds `cssem_causal_effect()`: a declared, adjusted causal effect on locked
   construct states, disattenuated for measurement error and adjusted for linear
   confounding. It reports the unadjusted, adjusted-attenuated, and
