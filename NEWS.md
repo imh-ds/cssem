@@ -1,5 +1,16 @@
 # cssem 0.4.0 (in development)
 
+* Adds `cssem_evidence_report()`: the unified, causal-aware evidence artifact that
+  composes the construct, effect, and causal layers into one profile -- a
+  construct section (recovery, distinctiveness, warnings), an effect-surface
+  section (shape, disattenuated estimate, predictive contribution, stability,
+  shadow gap), and a causal-claims section (declared direct and
+  interventional-mediation effects with identification and robustness). Each edge
+  now carries its routed causal status instead of a hardcoded associational label,
+  and every row gets a plain-language verdict derived from transparent rules over
+  the raw signals -- an evidentiary profile, not a significance test. This is the
+  primary artifact intended to replace the coefficient-table-plus-fit-indices
+  ritual.
 * Adds `cssem_causal_mediation()`: an interventional (causal) mediation estimand
   that elevates the disattenuated mediation decomposition to interventional
   total, direct, and indirect effects under a declared adjustment set. It
