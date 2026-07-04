@@ -34,6 +34,16 @@
   requires both an adjustment set and a declared temporal order before applying
   a causal-under-assumptions label -- discipline and sensitivity that CB-SEM and
   PLS-SEM do not provide.
+* Adds `estimand = "adjusted_ame"` to `cssem_causal_effect()` (and
+  `cssem_causal_edge()`): the cross-fitted doubly-robust average marginal effect
+  (average derivative `E[d/dx E[Y | X = x, C]]`) with an analytic
+  influence-function interval. Unlike the partially-linear `"adjusted_dml"`, it
+  does not assume a constant slope, so it is the correct summary when the
+  treatment effect is nonlinear in the treatment; on a nonlinear dose-response
+  with a skewed treatment it recovers the true average marginal effect (bias
+  0.008) where the partially-linear estimand answers a different, curvature-
+  weighted question (bias 0.244). Estimated on the denoised construct states and
+  not disattenuated.
 * Adds an optional `estimand = "adjusted_dml"` to `cssem_causal_effect()` (and
   `cssem_causal_edge()`): a cross-fitted partially-linear double-machine-learning
   estimate with flexible spline nuisances and an analytic orthogonal-score

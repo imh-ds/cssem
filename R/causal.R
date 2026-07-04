@@ -47,6 +47,39 @@
   list(estimate = theta, se = se, ci_low = theta - 1.96 * se, ci_high = theta + 1.96 * se, df = m - spline_df * length(adjust) - 2L)
 }
 
+# Cross-fitted doubly-robust average marginal effect (average derivative):
+# E[d/dx E[Y | X = x, C]], the mean slope of the causal dose-response. Unlike the
+# partially-linear estimand it does not assume a constant slope, so it is correct
+# when the treatment effect is nonlinear in X. The efficient influence function
+# adds a Riesz-representer correction (X - m_X(C)) / Var(X | C) times the outcome
+# residual to the fitted derivative; its empirical spread gives the interval. The
+# outcome model is additive in a treatment spline and confounder splines, so the
+# derivative is read off the treatment spline by finite difference. Estimated on
+# the denoised construct states; not disattenuated (correction over-corrects here).
+.dml_average_derivative <- function(scores, outcome, treatment, adjust, folds, spline_df = 5L, step = 1e-3) {
+  n <- nrow(scores)
+  confounders <- paste(sprintf("splines::ns(%s, df = %d)", adjust, spline_df), collapse = " + ")
+  formula_y <- stats::as.formula(sprintf("%s ~ splines::ns(%s, df = %d) + %s", outcome, treatment, spline_df, confounders))
+  formula_x <- stats::as.formula(paste(treatment, "~", confounders))
+  score <- rep(NA_real_, n)
+  for (fold in sort(unique(folds))) {
+    train <- folds != fold; test <- folds == fold
+    model_y <- stats::lm(formula_y, scores[train, , drop = FALSE])
+    model_x <- stats::lm(formula_x, scores[train, , drop = FALSE])
+    residual_variance <- mean(stats::residuals(model_x)^2)
+    high <- low <- scores[test, , drop = FALSE]
+    high[[treatment]] <- high[[treatment]] + step; low[[treatment]] <- low[[treatment]] - step
+    derivative <- (stats::predict(model_y, high) - stats::predict(model_y, low)) / (2 * step)
+    fitted_y <- stats::predict(model_y, scores[test, , drop = FALSE])
+    riesz <- (scores[[treatment]][test] - stats::predict(model_x, scores[test, , drop = FALSE])) / residual_variance
+    score[test] <- derivative + riesz * (scores[[outcome]][test] - fitted_y)
+  }
+  score <- score[is.finite(score)]; m <- length(score)
+  estimate <- mean(score); se <- stats::sd(score) / sqrt(m)
+  list(estimate = estimate, se = se, ci_low = estimate - 1.96 * se, ci_high = estimate + 1.96 * se,
+       df = m - spline_df * (length(adjust) + 1L) - 1L)
+}
+
 #' Estimate a declared causal effect on locked construct states
 #'
 #' Estimates the effect of a `treatment` construct on an `outcome` construct
@@ -67,19 +100,23 @@
 #'   *linear* confounding. `"adjusted_dml"` is a cross-fitted partially-linear
 #'   double-machine-learning estimate with flexible spline nuisances, which
 #'   removes *nonlinear* confounding that a linear adjustment leaves behind (a
-#'   gain over CB-SEM's linear structural adjustment). The DML estimand is
-#'   computed on the denoised construct states and is not disattenuated.
+#'   gain over CB-SEM's linear structural adjustment). `"adjusted_ame"` is the
+#'   cross-fitted doubly-robust average marginal effect (average derivative
+#'   `E[d/dx E[Y | X = x, C]]`): unlike the partially-linear estimand it does not
+#'   assume a constant slope, so it is the right summary when the treatment effect
+#'   is nonlinear in the treatment. Both flexible estimands are computed on the
+#'   denoised construct states and are not disattenuated.
 #' @param temporal_order Optional character vector asserting the temporal order
 #'   of the constructs; required (with `adjust`) for a causal label.
 #' @param disattenuate Whether to disattenuate using the association reliability
 #'   (`"adjusted_linear"` only).
 #' @param eiv_bootstrap Percentile-bootstrap resamples for the interval
-#'   (`"adjusted_linear"` only; the DML interval is the analytic orthogonal-score
-#'   interval).
+#'   (`"adjusted_linear"` only; the flexible estimands use the analytic
+#'   orthogonal-score / influence-function interval).
 #' @param reliability_grid Assumed treatment reliabilities for the reliability
 #'   sensitivity curve (`"adjusted_linear"` only).
-#' @param spline_df Spline degrees of freedom per confounder for the DML
-#'   nuisances (`"adjusted_dml"` only).
+#' @param spline_df Spline degrees of freedom per confounder (and per treatment,
+#'   for `"adjusted_ame"`) for the flexible-estimand nuisances.
 #' @param seed Bootstrap seed.
 #' @return An object of class `cssem_causal_effect`.
 #' @examples
@@ -93,10 +130,11 @@
 #' #   temporal_order = c("Trust", "Satisfaction", "Loyalty"))
 #' @export
 cssem_causal_effect <- function(association, treatment, outcome, adjust = character(0),
-                                estimand = c("adjusted_linear", "adjusted_dml"),
+                                estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
                                 temporal_order = NULL, disattenuate = TRUE, eiv_bootstrap = 0L,
                                 reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L) {
   estimand <- match.arg(estimand)
+  flexible <- estimand %in% c("adjusted_dml", "adjusted_ame")
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
   if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
@@ -105,7 +143,7 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
   if (treatment %in% c(outcome, adjust) || outcome %in% adjust) stop("treatment, outcome, and adjust must be distinct.", call. = FALSE)
   eiv_bootstrap <- as.integer(eiv_bootstrap)
   if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
-  if (estimand == "adjusted_dml" && !length(adjust)) stop("estimand = \"adjusted_dml\" requires an adjustment set to residualize against.", call. = FALSE)
+  if (flexible && !length(adjust)) stop(sprintf("estimand = \"%s\" requires an adjustment set to residualize against.", estimand), call. = FALSE)
   if (!is.null(temporal_order)) {
     if (!all(constructs %in% temporal_order)) stop("temporal_order must contain the treatment, outcome, and adjust constructs.", call. = FALSE)
     if (match(treatment, temporal_order) >= match(outcome, temporal_order)) stop("treatment must precede outcome in temporal_order.", call. = FALSE)
@@ -118,17 +156,18 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
   outcome_r2 <- if (length(adjust)) summary(stats::lm(stats::reformulate(adjust, outcome), scores))$r.squared else 0
   identification_strength <- 1 - treatment_r2
 
-  if (estimand == "adjusted_dml") {
+  if (flexible) {
     folds <- association$folds
     if (is.null(folds) || length(folds) != nrow(scores)) {
       set.seed(seed); folds <- sample(rep_len(1:5, nrow(scores)))
     }
-    dml <- .dml_partial_linear(scores, outcome, treatment, adjust, folds, spline_df)
+    fit_flexible <- if (estimand == "adjusted_ame") .dml_average_derivative(scores, outcome, treatment, adjust, folds, spline_df)
+      else .dml_partial_linear(scores, outcome, treatment, adjust, folds, spline_df)
     unadjusted <- unname(stats::coef(stats::lm(stats::reformulate(treatment, outcome), scores))[treatment])
     adjusted_naive <- unname(stats::coef(stats::lm(stats::reformulate(c(treatment, adjust), outcome), scores))[treatment])
-    adjusted_effect <- dml$estimate; interval <- c(dml$ci_low, dml$ci_high)
+    adjusted_effect <- fit_flexible$estimate; interval <- c(fit_flexible$ci_low, fit_flexible$ci_high)
     disattenuated <- FALSE; stable <- TRUE
-    robustness_value <- .robustness_value(dml$estimate / dml$se, dml$df)
+    robustness_value <- .robustness_value(fit_flexible$estimate / fit_flexible$se, fit_flexible$df)
     reliability_sensitivity <- NULL
   } else {
     reliability <- if (isTRUE(disattenuate)) association$reliability else NULL
@@ -188,14 +227,21 @@ print.cssem_causal_effect <- function(x, ...) {
     unadjusted_association = "Unadjusted association (not causal: no adjustment set)")
   cat("Interpretation: ", labels[[x$label]], "\n", sep = "")
   cat("Adjustment set: ", if (length(x$adjust)) paste(x$adjust, collapse = ", ") else "(none)", "\n")
-  dml <- identical(x$estimand, "adjusted_dml")
-  cat("Estimand:       ", if (dml) "adjusted_dml (flexible spline adjustment for nonlinear confounding)" else "adjusted_linear (disattenuated, linear adjustment)", "\n\n", sep = "")
-  basis <- if (dml) "flexible-adjusted, not disattenuated" else if (isTRUE(x$disattenuated)) "disattenuated" else "naive"
+  flexible <- x$estimand %in% c("adjusted_dml", "adjusted_ame")
+  ame <- identical(x$estimand, "adjusted_ame")
+  estimand_label <- switch(x$estimand,
+    adjusted_dml = "adjusted_dml (flexible spline adjustment for nonlinear confounding)",
+    adjusted_ame = "adjusted_ame (average marginal effect; doubly-robust average derivative)",
+    "adjusted_linear (disattenuated, linear adjustment)")
+  cat("Estimand:       ", estimand_label, "\n\n", sep = "")
+  basis <- if (flexible) "flexible-adjusted, not disattenuated" else if (isTRUE(x$disattenuated)) "disattenuated" else "naive"
   format_effect <- function(effect, low, high) if (is.na(low)) sprintf("% .3f", effect) else sprintf("% .3f  [% .3f, % .3f]", effect, low, high)
   cat(sprintf("  unadjusted effect     % .3f  (confounded if the adjustment set matters)\n", x$unadjusted))
-  if (dml) cat(sprintf("  linear-adjusted       % .3f  (leaves residual nonlinear confounding)\n", x$adjusted_naive))
+  if (ame) cat(sprintf("  linear-adjusted       % .3f  (constant-slope estimand)\n", x$adjusted_naive))
+  else if (flexible) cat(sprintf("  linear-adjusted       % .3f  (leaves residual nonlinear confounding)\n", x$adjusted_naive))
   else cat(sprintf("  adjusted, attenuated  % .3f  (adjusted but not disattenuated)\n", x$adjusted_naive))
-  cat(sprintf("  adjusted effect       %s  (%s)\n", format_effect(x$adjusted_effect, x$ci_low, x$ci_high), basis))
+  final_label <- if (ame) "avg marginal effect  " else "adjusted effect      "
+  cat(sprintf("  %s%s  (%s)\n", final_label, format_effect(x$adjusted_effect, x$ci_low, x$ci_high), basis))
   cat("\n  identification strength ", sprintf("%.2f", x$identification_strength),
     " (residual treatment variation after adjustment)\n", sep = "")
   if (is.finite(x$robustness_value)) cat(sprintf("  robustness value        %.2f  (an unmeasured confounder explaining %.0f%% of residual variance in both treatment and outcome would null the effect)\n",

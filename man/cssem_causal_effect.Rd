@@ -9,7 +9,7 @@ cssem_causal_effect(
   treatment,
   outcome,
   adjust = character(0),
-  estimand = c("adjusted_linear", "adjusted_dml"),
+  estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
   temporal_order = NULL,
   disattenuate = TRUE,
   eiv_bootstrap = 0L,
@@ -32,8 +32,12 @@ errors-in-variables corrected coefficient: disattenuated and adjusted for
 \emph{linear} confounding. \code{"adjusted_dml"} is a cross-fitted partially-linear
 double-machine-learning estimate with flexible spline nuisances, which
 removes \emph{nonlinear} confounding that a linear adjustment leaves behind (a
-gain over CB-SEM's linear structural adjustment). The DML estimand is
-computed on the denoised construct states and is not disattenuated.}
+gain over CB-SEM's linear structural adjustment). \code{"adjusted_ame"} is the
+cross-fitted doubly-robust average marginal effect (average derivative
+\verb{E[d/dx E[Y | X = x, C]]}): unlike the partially-linear estimand it does not
+assume a constant slope, so it is the right summary when the treatment effect
+is nonlinear in the treatment. Both flexible estimands are computed on the
+denoised construct states and are not disattenuated.}
 
 \item{temporal_order}{Optional character vector asserting the temporal order
 of the constructs; required (with \code{adjust}) for a causal label.}
@@ -42,14 +46,14 @@ of the constructs; required (with \code{adjust}) for a causal label.}
 (\code{"adjusted_linear"} only).}
 
 \item{eiv_bootstrap}{Percentile-bootstrap resamples for the interval
-(\code{"adjusted_linear"} only; the DML interval is the analytic orthogonal-score
-interval).}
+(\code{"adjusted_linear"} only; the flexible estimands use the analytic
+orthogonal-score / influence-function interval).}
 
 \item{reliability_grid}{Assumed treatment reliabilities for the reliability
 sensitivity curve (\code{"adjusted_linear"} only).}
 
-\item{spline_df}{Spline degrees of freedom per confounder for the DML
-nuisances (\code{"adjusted_dml"} only).}
+\item{spline_df}{Spline degrees of freedom per confounder (and per treatment,
+for \code{"adjusted_ame"}) for the flexible-estimand nuisances.}
 
 \item{seed}{Bootstrap seed.}
 }

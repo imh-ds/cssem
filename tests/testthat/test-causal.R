@@ -56,6 +56,45 @@ test_that("the DML estimand requires an adjustment set", {
   expect_error(cssem_causal_effect(association, "X", "Y", estimand = "adjusted_dml"), "requires an adjustment set")
 })
 
+.causal_ame_fixture <- function(n = 5000, seed = 4) {
+  set.seed(seed); std <- function(v) as.numeric(scale(v))
+  C <- stats::rnorm(n)
+  X <- std(0.8 * C + (stats::rgamma(n, 2, 1) - 2))       # skewed treatment
+  Y <- 0.3 * X + 0.2 * X^2 + 0.7 * C + stats::rnorm(n, sd = .5)
+  scores <- data.frame(X = X, C = C, Y = Y)
+  list(truth = mean(0.3 + 0.4 * X), association = structure(list(scores = scores,
+    folds = sample(rep_len(1:5, n)), reliability = stats::setNames(c(.75, .85, .85), c("X", "C", "Y")),
+    full_models = list(), structure = cssem_structure(list(Y = c("X", "C")), order = c("C", "X", "Y"))),
+    class = "cssem_association"))
+}
+
+test_that("the AME estimand recovers the average derivative under a nonlinear dose-response", {
+  fixture <- .causal_ame_fixture()
+  ame <- cssem_causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
+    temporal_order = c("C", "X", "Y"))
+  pl <- cssem_causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
+    temporal_order = c("C", "X", "Y"))
+  expect_identical(ame$estimand, "adjusted_ame")
+  expect_false(ame$disattenuated)
+  expect_null(ame$reliability_sensitivity)
+  # The average marginal effect recovers the true average derivative ...
+  expect_lt(abs(ame$adjusted_effect - fixture$truth), 0.04)
+  # ... where the constant-slope partially-linear estimand does not.
+  expect_gt(abs(pl$adjusted_effect - fixture$truth), abs(ame$adjusted_effect - fixture$truth))
+  expect_true(is.finite(ame$ci_low) && is.finite(ame$ci_high) && ame$ci_low < ame$ci_high)
+  expect_output(print(ame), "average marginal effect")
+  expect_output(print(ame), "avg marginal effect")
+})
+
+test_that("the AME estimand requires an adjustment set and routes through an edge", {
+  fixture <- .causal_ame_fixture(n = 1500)
+  expect_error(cssem_causal_effect(fixture$association, "X", "Y", estimand = "adjusted_ame"), "requires an adjustment set")
+  routing <- cssem_route(fixture$association,
+    causal = list(cssem_causal_edge("X", "Y", adjust = "C", estimand = "adjusted_ame")),
+    temporal_order = c("C", "X", "Y"))
+  expect_identical(routing$causal_effects[[1L]]$estimand, "adjusted_ame")
+})
+
 test_that("cssem_route carries the DML estimand through to a causal edge", {
   association <- .causal_nonlinear_fixture(n = 1500)
   routing <- cssem_route(association,

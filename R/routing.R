@@ -10,13 +10,14 @@
 #' @param to Outcome construct name.
 #' @param adjust Character vector of adjustment-set construct names.
 #' @param estimand Causal estimand: `"adjusted_linear"` (disattenuated, linear
-#'   adjustment) or `"adjusted_dml"` (flexible spline adjustment for nonlinear
-#'   confounding). See [cssem_causal_effect()].
+#'   adjustment), `"adjusted_dml"` (flexible spline adjustment for nonlinear
+#'   confounding), or `"adjusted_ame"` (doubly-robust average marginal effect).
+#'   See [cssem_causal_effect()].
 #' @return A `cssem_causal_edge` specification for [cssem_route()].
 #' @examples
 #' cssem_causal_edge("Satisfaction", "Loyalty", adjust = c("Trust", "PriorLoyalty"))
 #' @export
-cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjusted_dml")) {
+cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame")) {
   estimand <- match.arg(estimand)
   if (!is.character(from) || length(from) != 1L || !is.character(to) || length(to) != 1L)
     stop("from and to must be single construct names.", call. = FALSE)
