@@ -51,6 +51,23 @@ test_that("parallel and serial paths are enumerated and sum to the indirect tota
   expect_equal(serial$path_sum_residual, 0, tolerance = 1e-6)
 })
 
+test_that("an endogenous treatment propagates its own shift", {
+  # Regression: when x is itself an endogenous construct (has a stage model), the
+  # propagation loop must not overwrite its injected shift, or every effect
+  # collapses to zero. Query M1 -> Y in the serial chain X -> M1 -> M2 -> Y.
+  fx <- .mediation_fixture("serial")
+  out <- cssem:::.cssem_mediation_core(fx$models, fx$scores, fx$structure, "M1", "Y")
+  y_coef <- stats::coef(stats::lm(Y ~ X + M1 + M2, fx$scores))
+  m2_coef <- stats::coef(stats::lm(M2 ~ X + M1, fx$scores))
+  direct_ref <- unname(y_coef[["M1"]])
+  indirect_ref <- unname(m2_coef[["M1"]]) * unname(y_coef[["M2"]])
+  direct <- out$summary$naive_effect[out$summary$component == "direct"]
+  indirect <- out$summary$naive_effect[out$summary$component == "indirect_total"]
+  expect_equal(direct, direct_ref, tolerance = 0.01)
+  expect_equal(indirect, indirect_ref, tolerance = 0.01)
+  expect_gt(abs(indirect), 0.05)
+})
+
 test_that("disattenuation increases the indirect effect under measurement error", {
   set.seed(3)
   std <- function(v) as.numeric(scale(v))

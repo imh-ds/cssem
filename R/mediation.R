@@ -66,7 +66,10 @@
   shifted[[x]] <- baseline[[x]] + delta
   for (node in order) {
     model <- models[[node]]
-    if (is.null(model)) next
+    # Never overwrite the treatment: it carries the injected shift, and
+    # re-predicting it from its own parents would erase the delta before it can
+    # propagate (collapsing every effect to zero when x is itself endogenous).
+    if (is.null(model) || identical(node, x)) next
     # Build the frame over the model's input constructs (interaction predictors
     # contribute their constituents) so edge-masking applies per construct.
     constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
