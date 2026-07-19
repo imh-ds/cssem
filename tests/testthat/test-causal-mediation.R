@@ -73,6 +73,34 @@ test_that("causal-mediation discipline guards reject bad specifications", {
     "intermediate constructs")
 })
 
+test_that("an endogenous treatment propagates through causal mediation", {
+  # Regression: X is itself endogenous (X = f(C)), so it carries a stage model.
+  # The propagation engine must preserve X's injected shift or the interventional
+  # indirect effect collapses to zero. Error-free states with unit reliability, so
+  # the estimate equals the analytic truth.
+  set.seed(21); std <- function(v) as.numeric(scale(v)); n <- 6000
+  C <- stats::rnorm(n)
+  X <- std(0.5 * C + stats::rnorm(n, sd = .8))
+  M <- std(0.5 * X + 0.3 * C + stats::rnorm(n, sd = .7))
+  Y <- std(0.2 * X + 0.45 * M + 0.3 * C + stats::rnorm(n, sd = .7))
+  scores <- data.frame(C = C, X = X, M = M, Y = Y)
+  truth <- unname(stats::coef(stats::lm(M ~ X + C))["X"] * stats::coef(stats::lm(Y ~ X + M + C))["M"])
+  structure <- cssem_structure(list(X = "C", M = c("X", "C"), Y = c("X", "M", "C")),
+    order = c("C", "X", "M", "Y"))
+  full_models <- list(
+    X = cssem:::.fit_shape_model(scores, "X", c(C = "linear")),
+    M = cssem:::.fit_shape_model(scores, "M", c(X = "linear", C = "linear")),
+    Y = cssem:::.fit_shape_model(scores, "Y", c(X = "linear", M = "linear", C = "linear")))
+  association <- structure(list(scores = scores,
+    reliability = stats::setNames(rep(1, 4), c("C", "X", "M", "Y")),
+    full_models = full_models, structure = structure), class = "cssem_association")
+  cm <- cssem_causal_mediation(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "M", "Y"))
+  indirect <- cm$summary$naive_effect[cm$summary$component == "indirect_total"]
+  expect_gt(abs(indirect), 0.05)
+  expect_equal(indirect, truth, tolerance = 0.02)
+})
+
 test_that("bootstrap intervals attach to the interventional decomposition", {
   fixture <- .causal_mediation_fixture(n = 1500)
   cm <- cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C",

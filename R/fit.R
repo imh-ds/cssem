@@ -264,8 +264,9 @@ cssem_score <- function(fit, new_data) {
 cssem_construct_card <- function(fit, construct) {
   if (!inherits(fit, "cssem_fit") || !construct %in% names(fit$full_encoders)) stop("Unknown construct.", call. = FALSE)
   indicators <- fit$model$constructs[[construct]]$indicators
-  relevant <- fit$warnings$target == construct
-  for (item in indicators) relevant <- relevant | grepl(item, fit$warnings$target, fixed = TRUE)
+  # Item-level warnings carry the exact indicator name as their target; match on
+  # exact membership so item "a1" does not also capture a warning for "a10".
+  relevant <- fit$warnings$target == construct | fit$warnings$target %in% indicators
   sd_col <- if (is.null(fit$score_posterior_sd)) NULL else fit$score_posterior_sd[[construct]]
   respondent_information <- if (is.null(sd_col) || all(is.na(sd_col))) NULL else data.frame(
     reliability = if (is.null(fit$reliability)) NA_real_ else unname(fit$reliability[[construct]]),

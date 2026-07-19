@@ -77,8 +77,17 @@ cssem_route <- function(association, causal = list(), predictive = list(), repre
 
   edges <- .declared_edges(association$structure)
   status <- stats::setNames(rep("associational", nrow(edges)), paste(edges$from, edges$to, sep = "→"))
-  for (edge in .pair_edges(predictive, "predictive")) status[[paste(edge$from, edge$to, sep = "→")]] <- "predictive"
-  for (edge in .pair_edges(representational, "representational")) status[[paste(edge$from, edge$to, sep = "→")]] <- "representational"
+  # A pair that is not a declared structural edge would silently append an entry
+  # that never reaches the output table, so reject it as the causal branch does.
+  set_status <- function(pairs, kind) {
+    for (edge in .pair_edges(pairs, kind)) {
+      key <- paste(edge$from, edge$to, sep = "→")
+      if (!key %in% names(status)) stop(sprintf("%s edge %s is not a declared structural edge.", kind, key), call. = FALSE)
+      status[[key]] <<- kind
+    }
+  }
+  set_status(predictive, "predictive")
+  set_status(representational, "representational")
 
   causal_effects <- list()
   causal_lookup <- list()

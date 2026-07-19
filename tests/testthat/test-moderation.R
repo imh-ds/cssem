@@ -100,3 +100,30 @@ test_that("conditional indirect effects match analytic moderated mediation", {
   # A positive index of moderated mediation: the indirect effect grows with W.
   expect_gt(conditional(1) - conditional(-1), 0)
 })
+
+test_that("an endogenous treatment propagates through moderated mediation", {
+  # Regression: X is itself endogenous (X = f(P)), so it carries a stage model.
+  # The propagation engine must preserve X's injected shift or every conditional
+  # indirect effect collapses to zero.
+  set.seed(22); std <- function(v) as.numeric(scale(v)); n <- 6000
+  P <- stats::rnorm(n); W <- std(stats::rnorm(n))
+  X <- std(0.5 * P + stats::rnorm(n, sd = .8))
+  M <- std(0.5 * X + stats::rnorm(n, sd = .6))
+  Y <- std(0.2 * X + 0.4 * M + 0.1 * W + 0.35 * (M * W) + stats::rnorm(n, sd = .6))
+  scores <- data.frame(P = P, W = W, X = X, M = M, Y = Y)
+  structure <- cssem_structure(
+    list(X = "P", M = "X", Y = c("X", "M", "W", "M:W")),
+    order = c("P", "W", "X", "M", "Y"))
+  full_models <- list(
+    X = cssem:::.fit_shape_model(scores, "X", c(P = "linear")),
+    M = cssem:::.fit_shape_model(scores, "M", c(X = "linear")),
+    Y = cssem:::.fit_shape_model(scores, "Y",
+      stats::setNames(c("linear", "linear", "linear", "product"), c("X", "M", "W", "M:W"))))
+  association <- structure(list(scores = scores,
+    reliability = stats::setNames(rep(1, 5), c("P", "W", "X", "M", "Y")),
+    full_models = full_models, structure = structure), class = "cssem_association")
+  mm <- cssem_moderated_mediation(association, "X", "Y", "W", disattenuate = FALSE)
+  # Conditional indirect effects are non-zero and increase with W (positive M:W).
+  expect_gt(mean(abs(mm$conditional$indirect)), 0.05)
+  expect_gt(mm$index$estimate, 0)
+})
