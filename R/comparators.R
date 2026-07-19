@@ -69,6 +69,8 @@ cssem_run_comparator_validation <- function(manifest, reps = 3L, seed = 1L,
 #'   not converged.
 #' @param structural_repeats Number of repeated structural CV assignments used
 #'   for edge-level shape selection.
+#' @param eiv_bootstrap Percentile-bootstrap resamples for the corrected
+#'   structural-coefficient interval in each engine's associational fit.
 #' @param workers Number of independent scenario-replication jobs to run
 #'   concurrently.
 #'

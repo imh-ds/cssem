@@ -1,12 +1,14 @@
 # CS-SEM
 
-CS-SEM v0.3.0 is a research release of cross-fitted construct-state
+CS-SEM v0.4.0 is a research release of cross-fitted construct-state
 measurement plus a narrow associational structural layer. It estimates
 theory-declared, one-dimensional manifestation constructs from ordinal, binary,
 and continuous indicators, locks those construct states with cross-fitting, and
 fits theory-declared **associational** linear, constrained monotone, or
-low-complexity smooth effects on the locked scores. It does **not** fit causal
-effects, formative constructs, or global SEM fit indices.
+low-complexity smooth effects on the locked scores. It does **not** assert
+causal effects by default; causal estimands are available only under explicitly
+declared adjustment sets and temporal order. It does not fit formative
+constructs or global SEM fit indices.
 
 The public model contract is deliberately language-neutral: a construct has a
 name, ordered indicator names, scale declarations, and item keys. The R API

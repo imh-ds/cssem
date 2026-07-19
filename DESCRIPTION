@@ -1,7 +1,7 @@
 Package: cssem
 Type: Package
 Title: Cross-Fitted Construct-State Structural Equation Modeling
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person(
     "Hohjin",
     "Im",
@@ -16,7 +16,9 @@ Description: Research implementation of cross-fitted construct-state modeling fo
     locked scores and reports edge-level evidence profiles. Optional
     comparator validation records both latent recovery and held-out downstream
     association benchmarks, plus same-structure score-engine comparisons for
-    shape selection and shadow-gap diagnostics. It does not make causal claims.
+    shape selection and shadow-gap diagnostics. It does not assert causal
+    effects by default; causal estimands are available only under explicitly
+    declared adjustment sets and temporal order.
 Imports:
     rpart,
     splines
@@ -30,3 +32,4 @@ Suggests:
     roxygen2
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
+RoxygenNote: 7.3.2

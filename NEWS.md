@@ -1,4 +1,4 @@
-# cssem 0.4.0 (in development)
+# cssem 0.4.0
 
 * Adds `cssem_evidence_report()`: the unified, causal-aware evidence artifact that
   composes the construct, effect, and causal layers into one profile -- a
