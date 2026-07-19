@@ -1,5 +1,20 @@
 # cssem 0.4.0
 
+## Bug fixes and hardening
+
+* Fixes mediation propagation zeroing every effect when the treatment `x` is
+  itself an endogenous construct: the forward pass overwrote `x` with its own
+  stage-model prediction, erasing the injected shift before it could propagate.
+  `cssem_mediation()`, `cssem_causal_mediation()`, and
+  `cssem_moderated_mediation()` now recover the correct total, direct, and
+  indirect effects for an endogenous treatment.
+* `cssem_route()` now rejects `predictive`/`representational` pairs that are not
+  declared structural edges instead of silently dropping them.
+* `cssem_construct_card()` matches item-level warnings by exact indicator name,
+  so item `a1` no longer also captures warnings for `a10`.
+
+## New features
+
 * Adds `cssem_evidence_report()`: the unified, causal-aware evidence artifact that
   composes the construct, effect, and causal layers into one profile -- a
   construct section (recovery, distinctiveness, warnings), an effect-surface
