@@ -1,3 +1,30 @@
+# cssem (development version)
+
+## Bug fixes and hardening
+
+* Smooth-shape candidate bases no longer abort the fit when heavily tied scores
+  (e.g. composites of few ordinal items) collapse the spline's quantile-based
+  interior knots onto a boundary knot. `.train_basis()` retries with the
+  deduplicated interior quantiles and degrades to the linear column when no
+  interior knot survives, so the smooth candidate competes as linear instead of
+  erroring.
+
+## Validation harness
+
+* The `ordinal_factor_proxy` comparator engine sign-aligns its first
+  principal component with the block's row-mean composite. `prcomp()`'s
+  rotation sign is arbitrary, so the unaligned proxy randomly flipped the sign
+  of downstream structural slopes across replications, inflating its recorded
+  bias to roughly the magnitude of the true slope; aligned, its structural
+  bias matches the composite proxy's.
+* `cssem_run_structural_comparator_validation()` gains a `lavaan_sam` native
+  comparator: Croon-corrected factor-score regression via lavaan's
+  structural-after-measurement estimator (`sam(..., sam.method = "local")`,
+  items treated as continuous with FIML because lavaan's local SAM does not yet
+  support standard errors for categorical indicators). It is scored on the same
+  truth-referenced bias and coverage metrics as the CB-SEM and PLS-SEM native
+  comparators.
+
 # cssem 0.4.0
 
 ## Bug fixes and hardening

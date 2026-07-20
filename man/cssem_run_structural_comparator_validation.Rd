@@ -52,6 +52,13 @@ selector while swapping only the construct-score engine. This is intended to
 show where cross-fitted locked scores help with shape selection, shadow-gap
 diagnostics, and structural robustness, rather than only latent recovery.
 }
+\details{
+Native structural comparators are appended when their packages are
+available: a full ordinal CB-SEM (\code{lavaan_native}), a PLS-SEM path model
+(\code{seminr_native}), and Croon-corrected factor-score regression via lavaan's
+structural-after-measurement estimator (\code{lavaan_sam}), each scored on the
+same truth-referenced bias and coverage metrics.
+}
 \examples{
 structural_comparators <- cssem_run_structural_comparator_validation(
   cssem_structural_validation_manifest("screening")[1, ],

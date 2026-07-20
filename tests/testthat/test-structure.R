@@ -128,3 +128,17 @@ test_that("exploratory preset lightens structural defaults", {
   expect_equal(association$structural_repeats, 2L)
   expect_identical(association$shadow_scope, "temporal")
 })
+
+test_that("smooth basis degrades gracefully when quantile knots collapse", {
+  # Enough mass on one value that every df-based quantile knot equals the left
+  # boundary, which errors in splines::ns() and previously aborted the fit.
+  x <- c(rep(0, 90), seq(.1, 1, length.out = 10))
+  expect_error(splines::ns(x, df = 4L))
+  trained <- cssem:::.train_basis(x, "smooth_df4")
+  reconstructed <- cssem:::.predict_basis(x, trained$info)
+  expect_equal(ncol(as.matrix(reconstructed)), ncol(as.matrix(trained$values)))
+  # Fully degenerate scores degrade to the single linear column.
+  constant <- cssem:::.train_basis(rep(1, 50), "smooth_df4")
+  expect_identical(ncol(as.matrix(constant$values)), 1L)
+  expect_identical(ncol(as.matrix(cssem:::.predict_basis(rep(1, 50), constant$info))), 1L)
+})

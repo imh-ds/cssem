@@ -146,7 +146,21 @@ cssem_structure <- function(effects, order = NULL) {
 .train_basis <- function(x, shape) {
   if (shape == "linear") return(list(values = matrix(x, ncol = 1L), info = list(shape = shape)))
   if (grepl("^smooth", shape)) {
-    basis <- splines::ns(x, df = .shape_df(shape))
+    df <- .shape_df(shape)
+    basis <- tryCatch(splines::ns(x, df = df), error = function(err) NULL)
+    if (is.null(basis)) {
+      # Heavily tied scores (e.g. composites of few ordinal items) can collapse
+      # the df-based quantile knots onto a boundary knot. Retry with the
+      # deduplicated interior quantiles; when none fall strictly inside the
+      # range, degrade to the linear column so the smooth candidate still
+      # competes (as linear) instead of aborting the fit.
+      boundary <- range(x, na.rm = TRUE)
+      knots <- unique(as.numeric(stats::quantile(x, seq_len(df - 1L) / df, na.rm = TRUE, names = FALSE)))
+      knots <- knots[knots > boundary[[1L]] & knots < boundary[[2L]]]
+      if (!length(knots))
+        return(list(values = matrix(x, ncol = 1L), info = list(shape = shape, knots = NULL, boundary = NULL)))
+      basis <- splines::ns(x, knots = knots, Boundary.knots = boundary)
+    }
     return(list(values = basis, info = list(shape = shape, knots = attr(basis, "knots"), boundary = attr(basis, "Boundary.knots"))))
   }
   knots <- unique(as.numeric(stats::quantile(x, c(.20, .50, .80), na.rm = TRUE, names = FALSE)))
@@ -156,8 +170,11 @@ cssem_structure <- function(effects, order = NULL) {
 
 .predict_basis <- function(x, info) {
   if (info$shape == "linear") return(matrix(x, ncol = 1L))
-  if (grepl("^smooth", info$shape))
+  if (grepl("^smooth", info$shape)) {
+    # A NULL boundary marks the degraded-to-linear training basis above.
+    if (is.null(info$boundary)) return(matrix(x, ncol = 1L))
     return(splines::ns(x, knots = info$knots, Boundary.knots = info$boundary))
+  }
   .hinge_basis(x, info$knots)
 }
 

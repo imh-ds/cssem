@@ -60,10 +60,13 @@ test_that("structural comparator validation returns structural benchmark columns
     structural_repeats = 1,
     workers = 1
   )
-  expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls") %in% result$engine))
+  expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls",
+    "lavaan_native", "seminr_native", "lavaan_sam") %in% result$engine))
   expect_true(all(c("selected_shape", "temporal_gap", "unrestricted_gap", "score_coverage",
     "truth_slope", "naive_estimate", "corrected_estimate", "predictor_reliability",
     "structural_bias", "ci_covers_truth", "shape_correct") %in% names(result)))
+  expect_true(all(result$status[result$engine == "lavaan_sam"] %in%
+    c("success", "skipped_not_installed", "skipped_no_sam", "error")))
   # The corrected estimate is a CS-SEM capability driven by posterior reliability;
   # score-only proxies report the naive slope and leave the correction empty.
   cssem_rows <- result[result$engine == "cssem_locked" & result$outcome == "Quality" & result$predictor == "Trust", , drop = FALSE]
@@ -120,4 +123,17 @@ test_that("public docs refer to seminr instead of plspm", {
   lines <- unlist(lapply(paths, readLines, warn = FALSE))
   expect_false(any(grepl("plspm", lines, fixed = TRUE)))
   expect_true(any(grepl("seminr", lines, fixed = TRUE)))
+})
+
+test_that("proxy first-PC scores are sign-aligned with the item composite", {
+  set.seed(31)
+  latent <- rnorm(120)
+  block <- data.frame(
+    a1 = latent + rnorm(120, sd = .5), a2 = latent + rnorm(120, sd = .5),
+    a3 = latent + rnorm(120, sd = .5), a4 = latent + rnorm(120, sd = .5)
+  )
+  # Alignment must hold regardless of prcomp()'s arbitrary rotation sign, which
+  # negating the data flips.
+  expect_gt(cor(cssem:::.aligned_first_pc(block), rowMeans(block)), 0)
+  expect_gt(cor(cssem:::.aligned_first_pc(-block), rowMeans(-block)), 0)
 })

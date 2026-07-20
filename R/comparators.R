@@ -59,6 +59,12 @@ cssem_run_comparator_validation <- function(manifest, reps = 3L, seed = 1L,
 #' show where cross-fitted locked scores help with shape selection, shadow-gap
 #' diagnostics, and structural robustness, rather than only latent recovery.
 #'
+#' Native structural comparators are appended when their packages are
+#' available: a full ordinal CB-SEM (`lavaan_native`), a PLS-SEM path model
+#' (`seminr_native`), and Croon-corrected factor-score regression via lavaan's
+#' structural-after-measurement estimator (`lavaan_sam`), each scored on the
+#' same truth-referenced bias and coverage metrics.
+#'
 #' @param manifest A structural manifest from
 #'   [cssem_structural_validation_manifest()].
 #' @param reps Replications per scenario.
@@ -229,16 +235,25 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   mean(abs(diag(stats::cor(scores[, matched, drop = FALSE], truth[, matched, drop = FALSE], use = "complete.obs"))))
 }
 
+# First-principal-component scores with a determinate direction. prcomp()'s
+# rotation sign is arbitrary, so unaligned PC scores randomly flip the sign of
+# downstream regression slopes across replications; align the component with
+# the block's row-mean composite so the proxy always points with its items.
+.aligned_first_pc <- function(block) {
+  x <- scale(block)
+  x[is.na(x)] <- 0
+  pc <- as.numeric(x %*% stats::prcomp(x)$rotation[, 1])
+  alignment <- stats::cor(pc, rowMeans(x))
+  if (is.finite(alignment) && alignment < 0) pc <- -pc
+  pc
+}
+
 .proxy_scores <- function(data) {
   composite <- data.frame(
     A = rowMeans(data[1:4], na.rm = TRUE),
     B = rowMeans(data[5:8], na.rm = TRUE)
   )
-  factor_proxy <- lapply(list(data[1:4], data[5:8]), function(block) {
-    x <- scale(block)
-    x[is.na(x)] <- 0
-    as.numeric(x %*% stats::prcomp(x)$rotation[, 1])
-  })
+  factor_proxy <- lapply(list(data[1:4], data[5:8]), .aligned_first_pc)
   ordinal_factor <- data.frame(A = factor_proxy[[1L]], B = factor_proxy[[2L]])
   list(
     ordinal_factor_proxy = ordinal_factor,
@@ -249,11 +264,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
 .construct_proxy_scores <- function(data, model) {
   specs <- model$constructs
   composite <- lapply(specs, function(spec) rowMeans(data[, spec$indicators, drop = FALSE], na.rm = TRUE))
-  factor_proxy <- lapply(specs, function(spec) {
-    block <- scale(data[, spec$indicators, drop = FALSE])
-    block[is.na(block)] <- 0
-    as.numeric(block %*% stats::prcomp(block)$rotation[, 1])
-  })
+  factor_proxy <- lapply(specs, function(spec) .aligned_first_pc(data[, spec$indicators, drop = FALSE]))
   list(
     ordinal_factor_proxy = as.data.frame(factor_proxy, optional = TRUE),
     composite_proxy = as.data.frame(composite, optional = TRUE)
@@ -530,6 +541,43 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
     error_message = conditionMessage(err)))
 }
 
+# Croon-corrected factor-score regression comparator via lavaan's SAM
+# ("structural after measurement", local method): score each measurement block,
+# then correct the structural regression for score unreliability (Croon 2002;
+# Rosseel & Loh 2022). This is the strongest simple correction an informed
+# reader will cite, so S2-style bias comparisons must include it. Items are
+# treated as continuous with FIML for missingness because lavaan's local SAM
+# cannot yet compute standard errors for categorical indicators -- which also
+# mirrors how applied users run the correction on Likert data.
+.lavaan_sam_structural <- function(data, model, structure) {
+  if (!requireNamespace("lavaan", quietly = TRUE))
+    return(list(available = FALSE, status = "skipped_not_installed", converged = NA, paths = NULL,
+      runtime = NA_real_, version = NA_character_, error_message = NA_character_))
+  if (!"sam" %in% getNamespaceExports("lavaan"))
+    return(list(available = FALSE, status = "skipped_no_sam", converged = NA, paths = NULL,
+      runtime = NA_real_, version = as.character(utils::packageVersion("lavaan")),
+      error_message = NA_character_))
+  constructs <- .structural_constructs(structure)
+  measurement <- paste(vapply(constructs, function(nm)
+    paste(nm, "=~", paste(model$constructs[[nm]]$indicators, collapse = " + ")), character(1)), collapse = "\n")
+  structural <- paste(vapply(names(structure$effects), function(outcome)
+    paste(outcome, "~", paste(names(structure$effects[[outcome]]), collapse = " + ")), character(1)), collapse = "\n")
+  started <- proc.time()[["elapsed"]]
+  tryCatch({
+    fit <- lavaan::sam(paste(measurement, structural, sep = "\n"), data = data,
+      sam.method = "local", std.lv = TRUE, missing = "ml")
+    reg <- lavaan::standardizedSolution(fit)
+    reg <- reg[reg$op == "~", , drop = FALSE]
+    paths <- data.frame(outcome = reg$lhs, predictor = reg$rhs, estimate = reg$est.std,
+      se = reg$se, stringsAsFactors = FALSE)
+    list(available = TRUE, status = "success", converged = isTRUE(lavaan::lavInspect(fit, "converged")),
+      paths = paths, runtime = proc.time()[["elapsed"]] - started,
+      version = as.character(utils::packageVersion("lavaan")), error_message = NA_character_)
+  }, error = function(err) list(available = TRUE, status = "error", converged = FALSE, paths = NULL,
+    runtime = proc.time()[["elapsed"]] - started, version = as.character(utils::packageVersion("lavaan")),
+    error_message = conditionMessage(err)))
+}
+
 # Build comparator rows for a native structural engine, matching the score-swap
 # row schema. The native path is the engine's headline estimate; lavaan supplies
 # an analytic interval from its standard error, seminr leaves the interval empty.
@@ -752,6 +800,10 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   seminr_native <- .seminr_native_structural(generated$data, generated$model, generated$structure)
   index <- index + 1L
   rows[[index]] <- .native_structural_rows("seminr_native", seminr_native, "seminr", truth_slopes,
+    setting$scenario, setting, job$replication, validation_fit)
+  sam_native <- .lavaan_sam_structural(generated$data, generated$model, generated$structure)
+  index <- index + 1L
+  rows[[index]] <- .native_structural_rows("lavaan_sam", sam_native, "lavaan", truth_slopes,
     setting$scenario, setting, job$replication, validation_fit)
   do.call(rbind, rows)
 }
