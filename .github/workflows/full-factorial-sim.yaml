@@ -1,0 +1,95 @@
+name: Full factorial validation simulation
+
+# Manually-triggered Monte Carlo run of the package's validation harness
+# (S1 recovery, S2 disattenuation bias, S3 shape recovery) sharded across
+# parallel runners. Seed-deterministic, so sharding changes only wall-clock.
+# Results are uploaded as artifacts and concatenated by the combine job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: "Replications per scenario"
+        required: false
+        default: "25"
+
+env:
+  NSHARDS: "15"
+
+jobs:
+  structural:
+    name: structural shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::lavaan, any::seminr
+      - name: Run structural shard
+        env:
+          SIM_PART: structural
+          SIM_SHARD: ${{ matrix.shard }}
+          SIM_NSHARDS: ${{ env.NSHARDS }}
+          SIM_REPS: ${{ github.event.inputs.reps }}
+          SIM_OUTDIR: sim-out
+        run: Rscript inst/scripts/run-sim-shard.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sim-structural-${{ matrix.shard }}
+          path: sim-out/
+          if-no-files-found: ignore
+
+  measurement:
+    name: measurement recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::lavaan, any::seminr
+      - name: Run measurement recovery
+        env:
+          SIM_PART: measurement
+          SIM_REPS: ${{ github.event.inputs.reps }}
+          SIM_OUTDIR: sim-out
+        run: Rscript inst/scripts/run-sim-shard.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sim-measurement
+          path: sim-out/
+
+  combine:
+    name: combine shards
+    needs: [structural, measurement]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - name: Download all shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: sim-artifacts
+      - name: Combine
+        env:
+          SIM_INDIR: sim-artifacts
+          SIM_OUTDIR: sim-combined
+        run: Rscript inst/scripts/combine-sim-shards.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sim-combined-results
+          path: sim-combined/
