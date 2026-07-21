@@ -2,6 +2,13 @@
 
 ## Bug fixes and hardening
 
+* `cssem_causal_effect()` (and therefore `cssem_route()`) now refuses an
+  adjustment set containing constructs at or after the treatment in the
+  declared `temporal_order`. Previously a post-treatment adjustment (e.g.
+  conditioning on a mediator) passed silently and could earn the
+  "causal under assumptions" label; it now errors with a pointer to
+  `cssem_causal_mediation()` for mediator analysis.
+
 * Smooth-shape candidate bases no longer abort the fit when heavily tied scores
   (e.g. composites of few ordinal items) collapse the spline's quantile-based
   interior knots onto a boundary knot. `.train_basis()` retries with the

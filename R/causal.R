@@ -147,6 +147,16 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
   if (!is.null(temporal_order)) {
     if (!all(constructs %in% temporal_order)) stop("temporal_order must contain the treatment, outcome, and adjust constructs.", call. = FALSE)
     if (match(treatment, temporal_order) >= match(outcome, temporal_order)) stop("treatment must precede outcome in temporal_order.", call. = FALSE)
+    # Post-treatment adjustment guard: conditioning on a construct that follows
+    # the treatment in the declared order blocks part of the effect or opens
+    # collider paths, so it must never earn a causal label silently.
+    post <- adjust[match(adjust, temporal_order) >= match(treatment, temporal_order)]
+    if (length(post)) stop(sprintf(
+      paste0("Adjustment set contains post-treatment construct(s): %s. ",
+        "Conditioning on variables that follow the treatment in temporal_order ",
+        "induces post-treatment bias; remove them, or analyze mediators with ",
+        "cssem_causal_mediation()."),
+      paste(post, collapse = ", ")), call. = FALSE)
   }
 
   # Identification: how much treatment variation survives adjustment, and how

@@ -142,3 +142,27 @@ test_that("cssem_causal_effect guards reject bad inputs", {
   expect_output(print(cssem_causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "Y"))), "Causal under assumptions")
 })
+
+test_that("post-treatment adjustment is refused under a declared temporal order", {
+  set.seed(91)
+  n <- 120
+  scores <- data.frame(X = rnorm(n))
+  scores$M <- .6 * scores$X + rnorm(n, sd = .7)
+  scores$Y <- .5 * scores$X + .4 * scores$M + rnorm(n, sd = .7)
+  fit <- structure(list(locked_scores = scores, folds = sample(rep(1:3, length.out = n)),
+    reliability = c(X = .85, M = .85, Y = .9)), class = "cssem_fit")
+  assoc <- cssem_associate(fit,
+    cssem_structure(list(M = "X", Y = c("X", "M")), order = c("X", "M", "Y")),
+    structural_repeats = 2L, seed = 91, shadow_scope = "temporal")
+  expect_error(
+    cssem_causal_effect(assoc, "X", "Y", adjust = "M", temporal_order = c("X", "M", "Y")),
+    "post-treatment")
+  expect_error(
+    cssem_route(assoc,
+      causal = list(cssem_causal_edge("X", "Y", adjust = "M")),
+      temporal_order = c("X", "M", "Y")),
+    "post-treatment")
+  # A pre-treatment adjustment set still routes.
+  ok <- cssem_causal_effect(assoc, "M", "Y", adjust = "X", temporal_order = c("X", "M", "Y"))
+  expect_identical(ok$label, "causal_under_assumptions")
+})
