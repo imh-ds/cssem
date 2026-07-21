@@ -44,14 +44,46 @@ if (identical(part, "measurement")) {
   keep <- (((seq_len(nrow(manifest)) - 1L) %% nshards) + 1L) == shard
   shard_manifest <- manifest[keep, , drop = FALSE]
   cat("structural shard", shard, "of", nshards, ":", nrow(shard_manifest), "scenarios\n")
-  if (nrow(shard_manifest) == 0L) {
-    cat("empty shard; nothing to do\n")
-  } else {
-    res <- cssem_run_structural_comparator_validation(
-      shard_manifest, reps = reps, seed = seed + (shard - 1L) * 10000L,
-      folds = 3L, iterations = 8L, workers = workers)
-    utils::write.csv(res, file.path(outdir, sprintf("structural_shard_%02d.csv", shard)),
+
+  # Run each scenario in isolation. The harness runs replications in a parallel
+  # cluster whose parLapply ABORTS the whole call if any single replication
+  # errors (e.g. a rare "computationally singular" solve in a comparator engine
+  # on a hard cell). Isolating per scenario -- with a per-replication salvage
+  # fallback -- means one bad cell is skipped, not the entire shard.
+  run_scenario <- function(row, base_seed) {
+    fast <- tryCatch(
+      cssem_run_structural_comparator_validation(row, reps = reps, seed = base_seed,
+        folds = 3L, iterations = 8L, workers = workers),
+      error = function(e) { message("  parallel failed (", conditionMessage(e),
+        "); salvaging per-replication"); NULL })
+    if (!is.null(fast)) return(fast)
+    # Salvage: run replications one at a time (workers = 1, no cluster), keeping
+    # seeds aligned to the fast path (job index r uses base_seed + r), so a
+    # single offending replication is dropped and the rest reproduce exactly.
+    per_rep <- lapply(seq_len(reps), function(r) tryCatch(
+      cssem_run_structural_comparator_validation(row, reps = 1L, seed = base_seed + r - 1L,
+        folds = 3L, iterations = 8L, workers = 1L),
+      error = function(e) NULL))
+    per_rep <- per_rep[!vapply(per_rep, is.null, logical(1))]
+    if (length(per_rep)) do.call(rbind, per_rep) else NULL
+  }
+
+  results <- list(); failed <- character(0)
+  for (i in seq_len(nrow(shard_manifest))) {
+    row <- shard_manifest[i, , drop = FALSE]
+    base_seed <- seed + (shard - 1L) * 10000L + (i - 1L) * 1000L
+    res <- run_scenario(row, base_seed)
+    if (!is.null(res) && nrow(res) > 0L) results[[length(results) + 1L]] <- res
+    else failed <- c(failed, row$scenario)
+  }
+  if (length(results)) {
+    out_df <- do.call(rbind, results)
+    utils::write.csv(out_df, file.path(outdir, sprintf("structural_shard_%02d.csv", shard)),
       row.names = FALSE)
-    cat("structural shard done: rows", nrow(res), "\n")
+    cat("structural shard done: rows", nrow(out_df),
+      "| scenarios kept", length(results), "of", nrow(shard_manifest),
+      if (length(failed)) paste("| dropped:", paste(failed, collapse = ",")) else "", "\n")
+  } else {
+    cat("structural shard: no scenarios produced results", "\n")
   }
 }
