@@ -107,6 +107,49 @@ test_that("structural declarations reject invalid self-effects", {
   expect_error(cssem_structure(list(Trust = "Trust")))
 })
 
+test_that("specify_structure() produces the same object as cssem_structure()", {
+  via_list <- cssem_structure(list(
+    Satisfaction = "Trust",
+    Loyalty = c("Trust", "Satisfaction")
+  ), order = c("Trust", "Satisfaction", "Loyalty"))
+  via_formula <- specify_structure(
+    Satisfaction ~ Trust,
+    Loyalty ~ Trust + Satisfaction,
+    order = c("Trust", "Satisfaction", "Loyalty")
+  )
+  expect_equal(via_list, via_formula)
+})
+
+test_that("specify_structure() supports interaction terms via formula colon syntax", {
+  via_list <- cssem_structure(list(Hope = c("Planning", "FlexEx", "Planning:FlexEx")))
+  via_formula <- specify_structure(Hope ~ Planning + FlexEx + Planning:FlexEx)
+  expect_equal(via_list$effects, via_formula$effects)
+})
+
+test_that("specify_structure() shape wrappers declare non-default edge policies", {
+  declared <- specify_structure(
+    Quality ~ monotone_increasing(Trust),
+    Loyalty ~ Trust + Quality,
+    order = c("Trust", "Quality", "Loyalty")
+  )
+  expect_equal(declared$effects$Quality$Trust$shape, "monotone_increasing")
+  expect_equal(declared$effects$Loyalty$Trust$shape, "auto")
+  equivalent_list <- cssem_structure(list(
+    Quality = list(Trust = cssem_effect("monotone_increasing")),
+    Loyalty = c("Trust", "Quality")
+  ), order = c("Trust", "Quality", "Loyalty"))
+  expect_equal(declared, equivalent_list)
+})
+
+test_that("specify_structure() rejects shape wrappers on interaction terms", {
+  expect_error(specify_structure(Hope ~ smooth(Planning:FlexEx)))
+})
+
+test_that("specify_structure() requires formulas and unique outcomes", {
+  expect_error(specify_structure(list(Hope = "Planning")))
+  expect_error(specify_structure(Hope ~ Planning, Hope ~ Neuro))
+})
+
 test_that("temporal shadows require a valid ordering for cyclic declarations", {
   fit <- structure(list(locked_scores = data.frame(A = rnorm(30), B = rnorm(30)), folds = rep(1:3, 10)), class = "cssem_fit")
   cyclic <- cssem_structure(list(A = "B", B = "A"))

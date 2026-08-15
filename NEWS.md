@@ -1,5 +1,26 @@
 # cssem (development version)
 
+## New features
+
+* Added `specify_measurement()` and `specify_structure()`, friendlier front
+  doors for `cssem_model()`/`cssem_structure()` that resolve to identical
+  internal specifications.
+  * `specify_measurement()` declares constructs with `ordinal()`/`continuous()`
+    helpers, bundling indicators, scale, and default keys instead of spelling
+    out `list(indicators = , scales = )` by hand.
+  * `specify_structure()` declares each outcome with a formula
+    (`Outcome ~ predictor1 + predictor2`), using standard `A:B` colon syntax
+    for interaction predictors. Wrap a predictor in `linear()`,
+    `auto_monotone()`, `monotone_increasing()`, `monotone_decreasing()`, or
+    `smooth()` to declare a non-default edge shape policy; these are formula
+    markers only (parsed via `stats::terms()` specials, never evaluated as
+    functions), so they never shadow `base`/`stats` names.
+  * `cssem_model()`, `cssem_structure()`, and `cssem_effect()` are now
+    soft-deprecated (`.Deprecated()`, one warning per call) in favor of
+    `specify_measurement()`/`specify_structure()`. They remain exported and
+    fully functional; both front doors resolve to identical internal
+    specifications and are interchangeable.
+
 ## Bug fixes and hardening
 
 * `cssem_causal_effect()` (and therefore `cssem_route()`) now refuses an

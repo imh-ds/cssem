@@ -81,7 +81,7 @@
   data <- .measurement_validation_data(setting$n, setting$loading, setting$missing,
     setting$local_dependence, setting$cross_loading, setting$overlap, setting$sparse, job$seed)
   truth <- attr(data, "truth")
-  model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
+  model <- .build_measurement(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
     B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = job$folds)
   elapsed <- system.time(validation_fit <- .validation_fit(model, data, job$seed, job$folds, job$iterations, job$max_iterations, job$diagnostics))["elapsed"]
   fit <- validation_fit$fit
@@ -218,13 +218,13 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
   data <- do.call(cbind, unname(Map(function(z, name) .validation_items(z, tolower(name), loading, missing,
     items = items, respondent_noise = respondent_noise, skew = skew), states, names(states))))
   structure_spec <- if (type == "omitted") {
-    cssem_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Context", "Quality", "Loyalty"))
+    .build_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Context", "Quality", "Loyalty"))
   } else {
-    cssem_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Quality", "Loyalty"))
+    .build_structure(list(Quality = "Trust", Loyalty = c("Trust", "Quality")), order = c("Trust", "Quality", "Loyalty"))
   }
   specifications <- lapply(names(states), function(name) list(indicators = paste0(tolower(name), seq_len(items)), scales = "ordinal"))
   names(specifications) <- names(states)
-  model <- cssem_model(specifications)
+  model <- .build_measurement(specifications, folds = 5L)
   list(data = data, truth = as.data.frame(states), model = model, structure = structure_spec)
 }
 

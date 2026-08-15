@@ -18,5 +18,8 @@ cssem_effect(
 An object of class \code{cssem_effect}.
 }
 \description{
-Declare an edge-level CS-SEM associational effect policy
+\strong{Deprecated.} Use the shape-wrapper markers (\code{linear()},
+\code{auto_monotone()}, \code{monotone_increasing()}, \code{monotone_decreasing()},
+\code{smooth()}) inside a \code{\link[=specify_structure]{specify_structure()}} formula instead.
+\code{cssem_structure()} still accepts \code{cssem_effect()} declarations unchanged.
 }

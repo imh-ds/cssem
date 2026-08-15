@@ -16,19 +16,28 @@ uses a list specification that can be serialized and reproduced by a future
 Python implementation.
 
 ```r
-model <- cssem_model(list(
-  trust = list(indicators = c("t1", "t2", "t3"),
-               scales = "ordinal", keys = c(1, 1, -1))
-), folds = 5)
+model <- specify_measurement(
+  trust = ordinal("t1", "t2", "t3", keys = c(1, 1, -1)),
+  folds = 5
+)
 fit <- cssem_fit(model, survey_data, seed = 42)
 cssem_construct_card(fit, "trust")
 ```
 
 ```r
-structure <- cssem_structure(list(loyalty = "trust"))
+structure <- specify_structure(loyalty ~ trust)
 association <- cssem_associate(fit, structure)
 cssem_specification_gap(association)
 ```
+
+`specify_measurement()`/`specify_structure()` are friendlier front doors for
+[`cssem_model()`](man/cssem_model.Rd)/[`cssem_structure()`](man/cssem_structure.Rd)
+and resolve to the identical internal specification; both forms remain
+supported. `specify_structure()` declares outcomes with formulas
+(`Outcome ~ predictor1 + predictor2`, with `A:B` interaction syntax), and
+wraps a predictor in `linear()`, `auto_monotone()`, `monotone_increasing()`,
+`monotone_decreasing()`, or `smooth()` to declare a non-default shape policy
+for that edge — see `?specify_structure`.
 
 Structural reports include a temporally admissible shadow benchmark and an
 unrestricted same-wave network benchmark. Positive specification gaps mean the

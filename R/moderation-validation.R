@@ -5,10 +5,10 @@
 # disattenuated estimate must recover.
 
 .moderated_mediation_structure <- function(scenario) {
-  linear <- function(predictors) stats::setNames(lapply(predictors, function(p) cssem_effect("linear")), predictors)
+  linear <- function(predictors) stats::setNames(lapply(predictors, function(p) .build_effect("linear")), predictors)
   switch(scenario,
-    b_path = cssem_structure(list(M = linear("X"), Y = linear(c("X", "M", "W", "M:W"))), order = c("X", "W", "M", "Y")),
-    a_path = cssem_structure(list(M = linear(c("X", "W", "X:W")), Y = linear(c("X", "M"))), order = c("X", "W", "M", "Y")),
+    b_path = .build_structure(list(M = linear("X"), Y = linear(c("X", "M", "W", "M:W"))), order = c("X", "W", "M", "Y")),
+    a_path = .build_structure(list(M = linear(c("X", "W", "X:W")), Y = linear(c("X", "M"))), order = c("X", "W", "M", "Y")),
     stop("Unknown moderated mediation scenario: ", scenario, call. = FALSE)
   )
 }
@@ -51,7 +51,7 @@
     .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
     list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
-  list(data = data, model = cssem_model(specifications), structure = structure, states = as.data.frame(states),
+  list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure, states = as.data.frame(states),
        truth = .moderated_mediation_truth(as.data.frame(states), structure, "W", c(-1, 0, 1)))
 }
 

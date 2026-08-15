@@ -134,7 +134,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
     job$seed
   )
   truth <- attr(data, "truth")
-  model <- cssem_model(list(
+  model <- .build_measurement(list(
     A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
     B = list(indicators = paste0("b", 1:4), scales = "ordinal")
   ), folds = job$folds)

@@ -1,0 +1,40 @@
+category,current_name,proposed_name,collision_note
+Model / measurement,cssem_model,specify_measurement,IMPLEMENTED and DEPRECATED (.Deprecated() warning); ordinal()/continuous() helpers; both resolve to the same internal object
+Model / measurement,cssem_construct_card,construct_card,none
+Model / measurement,cssem_score,score_states,avoids base::structure-class ambiguity around bare `score`
+Model / measurement,cssem_fit,fit_states,bare `fit` sits near lavaan::fitted()/fitMeasures()
+Model / measurement,cssem_respondent_information,respondent_information,none
+Model / measurement,simulate_cssem_data,simulate_states,none
+Structural / associational,cssem_structure,specify_structure,IMPLEMENTED and DEPRECATED (.Deprecated() warning); formula syntax + linear()/auto_monotone()/monotone_increasing()/monotone_decreasing()/smooth() shape markers; both resolve to the same internal object
+Structural / associational,cssem_associate,associate,none
+Structural / associational,cssem_route,route,none
+Structural / associational,cssem_effect,(removed - folded into specify_structure() shape markers),DEPRECATED (.Deprecated() warning); replaced by linear()/auto_monotone()/monotone_increasing()/monotone_decreasing()/smooth() formula markers inside specify_structure()
+Structural / associational,cssem_effect_card,effect_card,none
+Structural / associational,cssem_effect_ledger,effect_ledger,none
+Structural / associational,cssem_specification_gap,specification_gap,none
+Structural / associational,cssem_residual_diagnostics,residual_diagnostics,none
+Structural / associational,cssem_supported_envelope,supported_envelope,none
+Causal,cssem_causal_edge,causal_edge,none
+Causal,cssem_causal_effect,causal_effect,none
+Causal,cssem_causal_mediation,causal_indirect_effect,renamed off "mediation" vocabulary; see Mediation/moderation notes
+Mediation / moderation,cssem_mediation,indirect_effect,avoids mediation-the-package (mediate(), mediations(), medsens()) brand collision
+Mediation / moderation,cssem_mediation_ledger,indirect_effect_ledger,follows from cssem_mediation rename
+Mediation / moderation,cssem_moderated_mediation,conditional_indirect_effect,matches Hayes' standard term; avoids mediation::test.modmed() adjacency
+Mediation / moderation,cssem_simple_slopes,conditional_slopes,EXACT collision with reghelper::simple_slopes()
+Evidence reporting,cssem_evidence_ledger,evidence_ledger,none
+Evidence reporting,cssem_evidence_report,evidence_report,none
+Evidence reporting,cssem_validation_design,validation_design,none
+Evidence reporting,cssem_validation_report,validation_report,none
+Validation manifests,cssem_measurement_validation_manifest,measurement_manifest,none
+Validation manifests,cssem_mediation_validation_manifest,indirect_effect_manifest,follows from cssem_mediation rename
+Validation manifests,cssem_moderated_mediation_validation_manifest,conditional_indirect_effect_manifest,follows from cssem_moderated_mediation rename
+Validation manifests,cssem_structural_validation_manifest,structural_manifest,none
+Validation runners,cssem_run_measurement_validation,validate_measurement,none
+Validation runners,cssem_run_mediation_validation,validate_indirect_effect,follows from cssem_mediation rename
+Validation runners,cssem_run_moderated_mediation_validation,validate_conditional_indirect_effect,follows from cssem_moderated_mediation rename
+Validation runners,cssem_run_structural_validation,validate_structure,none
+Validation runners,cssem_run_comparator_validation,validate_comparator,none
+Validation runners,cssem_run_mediation_comparator_validation,validate_indirect_effect_comparator,follows from cssem_mediation rename
+Validation runners,cssem_run_moderated_mediation_comparator_validation,validate_conditional_indirect_effect_comparator,follows from cssem_moderated_mediation rename
+Validation runners,cssem_run_structural_comparator_validation,validate_structure_comparator,none
+Benchmarking,run_measurement_benchmark,benchmark_measurement,none

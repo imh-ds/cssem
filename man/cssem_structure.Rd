@@ -17,6 +17,10 @@ order of all constructs.}
 An object of class \code{cssem_structure}.
 }
 \description{
+\strong{Deprecated.} Use \code{\link[=specify_structure]{specify_structure()}}, which declares the same
+specification with formulas instead of nested lists.
+}
+\details{
 Character-vector declarations remain supported. Named edge declarations use
 \code{\link[=cssem_effect]{cssem_effect()}} to state each predictor's shape policy.
 }

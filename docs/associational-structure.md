@@ -27,14 +27,15 @@ effects, nor configuration rules.
 Declare an ordering when the theory makes one available:
 
 ```r
-structure <- cssem_structure(
-  list(
-    Quality = list(Trust = cssem_effect("auto_monotone")),
-    Loyalty = list(Trust = cssem_effect("linear"), Quality = cssem_effect("auto"))
-  ),
+structure <- specify_structure(
+  Quality ~ auto_monotone(Trust),
+  Loyalty ~ linear(Trust) + Quality,
   order = c("Trust", "Quality", "Loyalty")
 )
 ```
+
+(`cssem_structure(list(Quality = list(Trust = cssem_effect("auto_monotone")), Loyalty = list(Trust = cssem_effect("linear"), Quality = cssem_effect("auto"))), order = c("Trust", "Quality", "Loyalty"))`
+is the equivalent list-based declaration and remains supported.)
 
 With the default `shadow_scope = "both"`, every outcome receives two
 cross-validated shallow-tree benchmarks.

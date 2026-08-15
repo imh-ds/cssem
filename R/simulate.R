@@ -89,7 +89,7 @@ run_measurement_benchmark <- function(reps = 20L, n = 400L, seed = 1L, tolerance
   for (scenario in seq_len(nrow(design))) for (r in seq_len(reps)) {
     row <- row + 1L; d <- design[scenario, ]
     dat <- simulate_cssem_data(n = d$n, loading = d$loading, missing = d$missing, local_dependence = d$local_dependence, cross_loading = d$cross_loading, seed = seed + row); truth <- attr(dat, "truth")
-    model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"), B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = folds)
+    model <- .build_measurement(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"), B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = folds)
     fit <- cssem_fit(model, dat, seed = seed + row, iterations = iterations, diagnostics = FALSE)
     cs <- mean(abs(diag(stats::cor(fit$locked_scores, truth))))
     blocks <- list(1:4, 5:8)

@@ -1,4 +1,17 @@
+# Shared validated construction for cssem_effect(), used internally so package
+# code never triggers cssem_effect()'s own deprecation warning.
+.build_effect <- function(shape) {
+  shape <- match.arg(shape, c("auto", "linear", "auto_monotone",
+                              "monotone_increasing", "monotone_decreasing", "smooth"))
+  structure(list(shape = shape), class = "cssem_effect")
+}
+
 #' Declare an edge-level CS-SEM associational effect policy
+#'
+#' **Deprecated.** Use the shape-wrapper markers (`linear()`,
+#' `auto_monotone()`, `monotone_increasing()`, `monotone_decreasing()`,
+#' `smooth()`) inside a [specify_structure()] formula instead.
+#' `cssem_structure()` still accepts `cssem_effect()` declarations unchanged.
 #'
 #' @param shape A declared shape policy: `"auto"`, `"linear"`,
 #'   `"auto_monotone"`, `"monotone_increasing"`,
@@ -7,13 +20,15 @@
 #' @export
 cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
                                   "monotone_increasing", "monotone_decreasing", "smooth")) {
+  .Deprecated("specify_structure", package = "cssem",
+    msg = "cssem_effect() is deprecated; declare edge shapes with linear()/auto_monotone()/monotone_increasing()/monotone_decreasing()/smooth() inside a specify_structure() formula instead.")
   shape <- match.arg(shape)
-  structure(list(shape = shape), class = "cssem_effect")
+  .build_effect(shape)
 }
 
 .effect_policy <- function(value) {
   if (inherits(value, "cssem_effect")) return(value)
-  if (is.character(value) && length(value) == 1L) return(cssem_effect(value))
+  if (is.character(value) && length(value) == 1L) return(.build_effect(value))
   stop("Each named edge must be a cssem_effect() declaration or a supported shape string.", call. = FALSE)
 }
 
@@ -21,7 +36,7 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
   if (is.character(value)) {
     if (!length(value) || any(!nzchar(value)) || anyDuplicated(value))
       stop("Each outcome needs one or more unique predictor names.", call. = FALSE)
-    result <- lapply(value, function(x) cssem_effect("auto")); names(result) <- value
+    result <- lapply(value, function(x) .build_effect("auto")); names(result) <- value
     return(result)
   }
   if (!is.list(value) || is.null(names(value)) || any(names(value) == "") || anyDuplicated(names(value)))
@@ -29,7 +44,26 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
   lapply(value, .effect_policy)
 }
 
+# Shared validated construction for cssem_structure() and specify_structure().
+# Both front doors resolve to this identical internal representation, so every
+# downstream consumer of a `cssem_structure` object (cssem_associate() and
+# everything built on it) is unaffected by which front door built it.
+.build_structure <- function(effects, order) {
+  if (!is.list(effects) || is.null(names(effects)) || any(names(effects) == ""))
+    stop("effects must be a named list of outcome-predictor declarations.", call. = FALSE)
+  parsed <- lapply(effects, .parse_effects)
+  for (outcome in names(parsed)) if (outcome %in% names(parsed[[outcome]]))
+    stop("An outcome cannot be its own predictor.", call. = FALSE)
+  if (!is.null(order) && (anyDuplicated(order) || any(!nzchar(order))))
+    stop("order must contain unique, non-empty construct names.", call. = FALSE)
+  structure(list(effects = parsed, order = if (is.null(order)) NULL else as.character(order),
+    status = "associational"), class = "cssem_structure")
+}
+
 #' Declare an associational CS-SEM structural model
+#'
+#' **Deprecated.** Use [specify_structure()], which declares the same
+#' specification with formulas instead of nested lists.
 #'
 #' Character-vector declarations remain supported. Named edge declarations use
 #' [cssem_effect()] to state each predictor's shape policy.
@@ -41,15 +75,75 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
 #' @return An object of class `cssem_structure`.
 #' @export
 cssem_structure <- function(effects, order = NULL) {
-  if (!is.list(effects) || is.null(names(effects)) || any(names(effects) == ""))
-    stop("effects must be a named list of outcome-predictor declarations.", call. = FALSE)
-  parsed <- lapply(effects, .parse_effects)
-  for (outcome in names(parsed)) if (outcome %in% names(parsed[[outcome]]))
-    stop("An outcome cannot be its own predictor.", call. = FALSE)
-  if (!is.null(order) && (anyDuplicated(order) || any(!nzchar(order))))
-    stop("order must contain unique, non-empty construct names.", call. = FALSE)
-  structure(list(effects = parsed, order = if (is.null(order)) NULL else as.character(order),
-    status = "associational"), class = "cssem_structure")
+  .Deprecated("specify_structure", package = "cssem",
+    msg = "cssem_structure() is deprecated; use specify_structure() with formulas instead.")
+  .build_structure(effects, order)
+}
+
+# Shape-wrapper names recognized inside specify_structure() formulas. These are
+# never called as functions - stats::terms() only uses them as syntactic
+# markers on the unevaluated formula, the same mechanism mgcv::s() relies on -
+# so none of them need to be defined or exported, which keeps them from ever
+# shadowing base/stats functions such as stats::smooth().
+.shape_specials <- c("linear", "auto_monotone", "monotone_increasing", "monotone_decreasing", "smooth")
+
+# Parse one `Outcome ~ predictors` formula into the named list of cssem_effect()
+# declarations that .parse_effects() already accepts. A predictor wrapped in a
+# recognized shape special (e.g. `smooth(Consc)`) declares that shape; every
+# other term defaults to "auto". Interaction terms use the formula's native
+# colon syntax and pass through term.labels unchanged, matching the existing
+# "A:B" predictor-name convention.
+.formula_effects <- function(f) {
+  if (!inherits(f, "formula") || length(f) != 3L)
+    stop("Every structural declaration must be a two-sided formula, e.g. Outcome ~ predictor1 + predictor2.", call. = FALSE)
+  labels <- attr(stats::terms(f, specials = .shape_specials), "term.labels")
+  if (!length(labels)) stop("Every structural formula needs at least one predictor.", call. = FALSE)
+  effects <- list()
+  for (label in labels) {
+    expr <- str2lang(label)
+    if (is.call(expr) && length(expr) == 2L && as.character(expr[[1L]]) %in% .shape_specials) {
+      shape <- as.character(expr[[1L]]); predictor <- deparse(expr[[2L]])
+      if (grepl(":", predictor, fixed = TRUE))
+        stop("Shape wrappers cannot be applied to interaction terms.", call. = FALSE)
+      effects[[predictor]] <- .build_effect(shape)
+    } else {
+      effects[[label]] <- .build_effect("auto")
+    }
+  }
+  effects
+}
+
+#' Declare an associational CS-SEM structural model with formulas
+#'
+#' Friendly front door for [cssem_structure()]. Each outcome is declared with
+#' a formula, `Outcome ~ predictor1 + predictor2`. Interaction predictors use
+#' standard formula colon syntax (`A:B`). Wrap a predictor in `linear()`,
+#' `auto_monotone()`, `monotone_increasing()`, `monotone_decreasing()`, or
+#' `smooth()` to declare a non-default shape policy for that edge (these are
+#' formula markers only, not callable functions); undeclared predictors
+#' default to `"auto"`, matching [cssem_effect()].
+#'
+#' @param ... One formula per declared outcome.
+#' @param order Optional character vector giving the user-declared temporal
+#'   order of all constructs.
+#' @return An object of class `cssem_structure`.
+#' @examples
+#' structure <- specify_structure(
+#'   Satisfaction ~ Trust,
+#'   Loyalty ~ Trust + monotone_increasing(Satisfaction),
+#'   order = c("Trust", "Satisfaction", "Loyalty")
+#' )
+#' @family model specification functions
+#' @export
+specify_structure <- function(..., order = NULL) {
+  formulas <- list(...)
+  if (!length(formulas) || !all(vapply(formulas, inherits, logical(1), what = "formula")))
+    stop("Every declaration must be a formula, e.g. specify_structure(Outcome ~ predictor1 + predictor2).", call. = FALSE)
+  outcomes <- vapply(formulas, function(f) deparse(f[[2L]]), character(1))
+  if (anyDuplicated(outcomes)) stop("Each outcome may appear in only one formula.", call. = FALSE)
+  effects <- lapply(formulas, .formula_effects)
+  names(effects) <- outcomes
+  .build_structure(effects, order)
 }
 
 .effect_predictors <- function(effect_specs) names(effect_specs)

@@ -21,7 +21,11 @@ defaults while iterating locally.}
 An object of class \code{cssem_model}.
 }
 \description{
-Creates the theory-declared measurement specification used by \code{\link[=cssem_fit]{cssem_fit()}}.
+\strong{Deprecated.} Use \code{\link[=specify_measurement]{specify_measurement()}}, which declares the same
+specification with \code{\link[=ordinal]{ordinal()}}/\code{\link[=continuous]{continuous()}} helpers instead of nested
+lists.
+}
+\details{
 Version 0.1 supports one-dimensional manifestation constructs only; an item
 may belong to one construct only.
 }
@@ -29,5 +33,12 @@ may belong to one construct only.
 model <- cssem_model(list(
   Trust = list(indicators = c("trust_1", "trust_2"), scales = "ordinal")
 ))
+}
+\seealso{
+Other model specification functions:
+\code{\link[=continuous]{continuous()}},
+\code{\link[=ordinal]{ordinal()}},
+\code{\link[=specify_measurement]{specify_measurement()}},
+\code{\link[=specify_structure]{specify_structure()}}
 }
 \concept{model specification functions}

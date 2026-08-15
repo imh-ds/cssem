@@ -11,12 +11,12 @@
 # auto-selected as smooth), which also speeds the bootstrap refits.
 .mediation_structure <- function(scenario, edge_shape = "auto") {
   edge <- function(predictors) {
-    if (identical(edge_shape, "linear")) stats::setNames(lapply(predictors, function(p) cssem_effect("linear")), predictors) else predictors
+    if (identical(edge_shape, "linear")) stats::setNames(lapply(predictors, function(p) .build_effect("linear")), predictors) else predictors
   }
   switch(scenario,
-    single = cssem_structure(list(M = edge("X"), Y = edge(c("X", "M"))), order = c("X", "M", "Y")),
-    parallel = cssem_structure(list(M1 = edge("X"), M2 = edge("X"), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
-    serial = cssem_structure(list(M1 = edge("X"), M2 = edge(c("X", "M1")), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
+    single = .build_structure(list(M = edge("X"), Y = edge(c("X", "M"))), order = c("X", "M", "Y")),
+    parallel = .build_structure(list(M1 = edge("X"), M2 = edge("X"), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
+    serial = .build_structure(list(M1 = edge("X"), M2 = edge(c("X", "M1")), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
     stop("Unknown mediation scenario: ", scenario, call. = FALSE)
   )
 }
@@ -52,7 +52,7 @@
     .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
     list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
-  list(data = data, model = cssem_model(specifications), structure = structure,
+  list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure,
        states = as.data.frame(states), truth = .mediation_truth(as.data.frame(states), structure))
 }
 
