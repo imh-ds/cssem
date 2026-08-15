@@ -6,7 +6,7 @@
 # effect is the interventional indirect effect, so the two agree numerically. The
 # causal content is the discipline layer -- adjustment-set gating, a
 # post-treatment-adjustment guard, overlap / nuisance / sensitivity diagnostics,
-# and an explicit causal-admissibility label -- exactly as cssem_causal_effect()
+# and an explicit causal-admissibility label -- exactly as causal_effect()
 # adds to a single structural coefficient. Exposure-induced mediator-outcome
 # confounding and mediator interactions are not yet handled and are flagged.
 
@@ -65,7 +65,7 @@
 
 #' Estimate an interventional (causal) mediation effect on locked construct states
 #'
-#' Elevates the disattenuated mediation decomposition of [cssem_mediation()] to a
+#' Elevates the disattenuated mediation decomposition of [indirect_effect()] to a
 #' causal estimand. The effect of `x` on `y` is decomposed into interventional
 #' total, direct, and indirect effects by simulating an `x` shift and propagating
 #' it through the disattenuated construct-level models while holding the declared
@@ -73,7 +73,7 @@
 #' declare. For additive mediator models this g-computed indirect effect equals
 #' the interventional indirect effect.
 #'
-#' Unlike [cssem_mediation()], this estimator enforces causal discipline: it
+#' Unlike [indirect_effect()], this estimator enforces causal discipline: it
 #' requires a non-empty adjustment set, requires those constructs to be declared
 #' predictors of the outcome and of each mediator (so every stage model conditions
 #' on them), refuses to adjust for any construct that is downstream of the
@@ -83,7 +83,7 @@
 #' adjusted association. Exposure-induced mediator-outcome confounding and
 #' mediator interactions are not yet modeled.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
+#' @param association A `cssem_association` from [associate()].
 #' @param x Name of the locked treatment construct.
 #' @param y Name of the locked outcome construct.
 #' @param adjust Character vector of adjustment-set (confounder) construct names.
@@ -99,22 +99,22 @@
 #'   intervals. Zero (default) omits intervals.
 #' @param delta Size of the `x` contrast in standardized units. Defaults to one.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_causal_mediation`.
+#' @return An object of class `causal_indirect_effect`.
 #' @examples
-#' # cssem_causal_mediation(association, x = "Satisfaction", y = "Loyalty",
+#' # causal_indirect_effect(association, x = "Satisfaction", y = "Loyalty",
 #' #   adjust = "Trust", temporal_order = c("Trust", "Satisfaction", "Commitment", "Loyalty"))
 #' @export
-cssem_causal_mediation <- function(association, x, y, adjust, mediators = NULL,
+causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
                                    temporal_order = NULL, estimand = c("interventional"),
                                    disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
   estimand <- match.arg(estimand)
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
-  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
   all_names <- names(scores)
   if (length(x) != 1L || length(y) != 1L || !all(c(x, y) %in% all_names)) stop("x and y must be locked construct names.", call. = FALSE)
   if (identical(x, y)) stop("x and y must differ.", call. = FALSE)
-  if (missing(adjust) || !length(adjust)) stop("cssem_causal_mediation() requires a non-empty adjustment set; use cssem_mediation() for an associational decomposition.", call. = FALSE)
+  if (missing(adjust) || !length(adjust)) stop("causal_indirect_effect() requires a non-empty adjustment set; use indirect_effect() for an associational decomposition.", call. = FALSE)
   if (!all(adjust %in% all_names)) stop("adjust must be locked construct names.", call. = FALSE)
   if (any(adjust %in% c(x, y))) stop("adjust must be distinct from x and y.", call. = FALSE)
   if (!is.null(mediators) && !all(mediators %in% all_names)) stop("mediators must be locked construct names.", call. = FALSE)
@@ -172,16 +172,16 @@ cssem_causal_mediation <- function(association, x, y, adjust, mediators = NULL,
   structure(c(core, list(x = x, y = y, adjust = adjust, mediators = mediators, estimand = estimand,
     n = nrow(scores), delta = delta, disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap,
     temporal_order_declared = has_order, label = label, status = label), panel),
-    class = "cssem_causal_mediation")
+    class = "causal_indirect_effect")
 }
 
 #' Print an interventional CS-SEM mediation decomposition
 #'
-#' @param x A `cssem_causal_mediation` object.
+#' @param x A `causal_indirect_effect` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_causal_mediation <- function(x, ...) {
+print.causal_indirect_effect <- function(x, ...) {
   cat(sprintf("CS-SEM interventional mediation: %s -> %s  (n = %d, mediator%s: %s)\n",
     x$x, x$y, x$n, if (length(x$mediators) == 1L) "" else "s", paste(x$mediators, collapse = ", ")))
   labels <- c(causal_under_assumptions = "Causal under assumptions",

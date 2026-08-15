@@ -78,10 +78,10 @@
   model <- generated$model; model$folds <- job$folds
   constructs <- names(generated$states)
   elapsed <- system.time({
-    fit <- cssem_fit(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
-    association <- cssem_associate(fit, generated$structure, structural_repeats = job$structural_repeats,
+    fit <- fit_states(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
-    mediation <- cssem_mediation(association, constructs[[1L]], constructs[[length(constructs)]],
+    mediation <- indirect_effect(association, constructs[[1L]], constructs[[length(constructs)]],
       eiv_bootstrap = job$eiv_bootstrap, seed = job$seed)
   })["elapsed"]
   summary <- mediation$summary
@@ -112,11 +112,11 @@
 #'
 #' @param tier `"screening"` for a compact local suite or `"full"` for a larger
 #'   factorial grid.
-#' @return A scenario data frame for [cssem_run_mediation_validation()].
+#' @return A scenario data frame for [validate_indirect_effect()].
 #' @examples
-#' cssem_mediation_validation_manifest("screening")
+#' indirect_effect_manifest("screening")
 #' @export
-cssem_mediation_validation_manifest <- function(tier = c("screening", "full", "benchmark")) {
+indirect_effect_manifest <- function(tier = c("screening", "full", "benchmark")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     scenario = c("single", "single", "parallel", "serial"),
@@ -147,7 +147,7 @@ cssem_mediation_validation_manifest <- function(tier = c("screening", "full", "b
 #' bootstrap-interval coverage. Establishes the workflow that the publication
 #' benchmark (with native PLS-SEM and CB-SEM mediation) will extend.
 #'
-#' @param manifest A manifest from [cssem_mediation_validation_manifest()].
+#' @param manifest A manifest from [indirect_effect_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
@@ -159,11 +159,11 @@ cssem_mediation_validation_manifest <- function(tier = c("screening", "full", "b
 #'   true, naive, and disattenuated indirect effects, absolute biases, and
 #'   interval coverage.
 #' @examples
-#' results <- cssem_run_mediation_validation(
-#'   cssem_mediation_validation_manifest("screening")[1, ], reps = 1, eiv_bootstrap = 50
+#' results <- validate_indirect_effect(
+#'   indirect_effect_manifest("screening")[1, ], reps = 1, eiv_bootstrap = 50
 #' )
 #' @export
-cssem_run_mediation_validation <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
+validate_indirect_effect <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
                                            iterations = 8L, structural_repeats = 3L,
                                            eiv_bootstrap = 200L, workers = 1L) {
   if (!is.data.frame(manifest) || !all(c("scenario", "n", "loading") %in% names(manifest)))

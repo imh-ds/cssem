@@ -123,12 +123,12 @@ test_that("a path through a smooth edge is not disattenuated", {
   expect_true(is.na(out$path_specific$disattenuated_effect[[1L]]))
 })
 
-test_that("public cssem_mediation runs end to end through the real pipeline", {
+test_that("public indirect_effect runs end to end through the real pipeline", {
   generated <- cssem:::.structural_validation_data("linear", 400, 5, items = 4L)
-  fit <- cssem_fit(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
-  association <- cssem_associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
-  med <- cssem_mediation(association, "Trust", "Loyalty", eiv_bootstrap = 50L, seed = 5)
-  expect_s3_class(med, "cssem_mediation")
+  fit <- fit_states(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
+  med <- indirect_effect(association, "Trust", "Loyalty", eiv_bootstrap = 50L, seed = 5)
+  expect_s3_class(med, "indirect_effect")
   # Trust -> Quality -> Loyalty is the declared mediating path.
   expect_true(nrow(med$path_specific) >= 1L)
   expect_true(all(c("total", "direct", "indirect_total") %in% med$summary$component))
@@ -136,20 +136,20 @@ test_that("public cssem_mediation runs end to end through the real pipeline", {
 })
 
 test_that("mediation validation harness recovers the latent indirect effect", {
-  manifest <- cssem_mediation_validation_manifest("screening")
+  manifest <- indirect_effect_manifest("screening")
   expect_true(all(c("scenario", "n", "loading", "items") %in% names(manifest)))
-  results <- cssem_run_mediation_validation(manifest[1, ], reps = 1, seed = 4026, iterations = 4, eiv_bootstrap = 60)
+  results <- validate_indirect_effect(manifest[1, ], reps = 1, seed = 4026, iterations = 4, eiv_bootstrap = 60)
   expect_true(all(c("true_indirect", "naive_indirect", "disattenuated_indirect",
     "naive_abs_bias", "disattenuated_abs_bias", "disattenuated_covers_truth") %in% names(results)))
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
 })
 
 test_that("mediation benchmark scores every engine against the latent truth", {
-  manifest <- cssem_mediation_validation_manifest("benchmark")
+  manifest <- indirect_effect_manifest("benchmark")
   expect_true(all(c("scenario", "n", "loading", "items", "edge_shape") %in% names(manifest)))
   expect_true(all(manifest$edge_shape == "linear"))
   row <- manifest[manifest$scenario == "single" & manifest$loading == .80 & manifest$n == 400L, ]
-  results <- cssem_run_mediation_comparator_validation(row, reps = 1, seed = 4026, iterations = 4,
+  results <- validate_indirect_effect_comparator(row, reps = 1, seed = 4026, iterations = 4,
     eiv_bootstrap = 40, seminr_bootstrap = 40)
   expect_setequal(unique(results$engine), c("cssem_disattenuated", "cssem_naive", "lavaan_native", "seminr_native"))
   disattenuated <- results[results$engine == "cssem_disattenuated", ]
@@ -163,13 +163,13 @@ test_that("mediation guards reject bad inputs", {
   models <- stats::setNames(fx$models, names(fx$scores))
   association <- structure(list(structure = fx$structure, full_models = Filter(Negate(is.null), models),
     reliability = stats::setNames(rep(0.8, 3), c("X", "M", "Y")), scores = fx$scores), class = "cssem_association")
-  expect_error(cssem_mediation(association, "Y", "X"), "precede")
-  expect_error(cssem_mediation(association, "X", "Q"), "locked construct")
-  expect_error(cssem_mediation(association, "X", "X"), "differ")
+  expect_error(indirect_effect(association, "Y", "X"), "precede")
+  expect_error(indirect_effect(association, "X", "Q"), "locked construct")
+  expect_error(indirect_effect(association, "X", "X"), "differ")
 
-  med <- cssem_mediation(association, "X", "Y", eiv_bootstrap = 50L, seed = 1L)
-  expect_s3_class(med, "cssem_mediation")
-  ledger <- cssem_mediation_ledger(med)
+  med <- indirect_effect(association, "X", "Y", eiv_bootstrap = 50L, seed = 1L)
+  expect_s3_class(med, "indirect_effect")
+  ledger <- indirect_effect_ledger(med)
   expect_true(all(c("total", "direct", "indirect_total", "path_indirect") %in% ledger$component))
   expect_true(all(c("ci_low", "ci_high", "basis", "status") %in% names(ledger)))
   expect_output(print(med), "associational mediation")

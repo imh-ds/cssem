@@ -91,7 +91,7 @@
 #' adjustment set and a declared temporal order; otherwise the effect is reported
 #' as an association.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
+#' @param association A `cssem_association` from [associate()].
 #' @param treatment Treatment construct name.
 #' @param outcome Outcome construct name.
 #' @param adjust Character vector of adjustment-set construct names.
@@ -118,18 +118,18 @@
 #' @param spline_df Spline degrees of freedom per confounder (and per treatment,
 #'   for `"adjusted_ame"`) for the flexible-estimand nuisances.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_causal_effect`.
+#' @return An object of class `causal_effect`.
 #' @examples
-#' # cssem_causal_effect(association, "Satisfaction", "Loyalty",
+#' # causal_effect(association, "Satisfaction", "Loyalty",
 #' #   adjust = c("Trust", "PriorLoyalty"),
 #' #   temporal_order = c("Trust", "PriorLoyalty", "Satisfaction", "Loyalty"),
 #' #   eiv_bootstrap = 500)
 #' # # Flexible adjustment for nonlinear confounding:
-#' # cssem_causal_effect(association, "Satisfaction", "Loyalty",
+#' # causal_effect(association, "Satisfaction", "Loyalty",
 #' #   adjust = "Trust", estimand = "adjusted_dml",
 #' #   temporal_order = c("Trust", "Satisfaction", "Loyalty"))
 #' @export
-cssem_causal_effect <- function(association, treatment, outcome, adjust = character(0),
+causal_effect <- function(association, treatment, outcome, adjust = character(0),
                                 estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
                                 temporal_order = NULL, disattenuate = TRUE, eiv_bootstrap = 0L,
                                 reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L) {
@@ -137,7 +137,7 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
   flexible <- estimand %in% c("adjusted_dml", "adjusted_ame")
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
-  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
   constructs <- c(treatment, outcome, adjust)
   if (!all(constructs %in% names(scores))) stop("treatment, outcome, and adjust must be locked construct names.", call. = FALSE)
   if (treatment %in% c(outcome, adjust) || outcome %in% adjust) stop("treatment, outcome, and adjust must be distinct.", call. = FALSE)
@@ -155,7 +155,7 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
       paste0("Adjustment set contains post-treatment construct(s): %s. ",
         "Conditioning on variables that follow the treatment in temporal_order ",
         "induces post-treatment bias; remove them, or analyze mediators with ",
-        "cssem_causal_mediation()."),
+        "causal_indirect_effect()."),
       paste(post, collapse = ", ")), call. = FALSE)
   }
 
@@ -221,16 +221,16 @@ cssem_causal_effect <- function(association, treatment, outcome, adjust = charac
     bootstrap = eiv_bootstrap, n = nrow(scores), temporal_order_declared = has_order,
     identification_strength = identification_strength, treatment_r2 = treatment_r2, outcome_r2 = outcome_r2,
     robustness_value = robustness_value, reliability_sensitivity = reliability_sensitivity,
-    label = label, status = label), class = "cssem_causal_effect")
+    label = label, status = label), class = "causal_effect")
 }
 
 #' Print a declared causal effect
 #'
-#' @param x A `cssem_causal_effect` object.
+#' @param x A `causal_effect` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_causal_effect <- function(x, ...) {
+print.causal_effect <- function(x, ...) {
   cat(sprintf("CS-SEM effect: %s -> %s  (n = %d)\n", x$treatment, x$outcome, x$n))
   labels <- c(causal_under_assumptions = "Causal under assumptions",
     adjusted_association = "Adjusted association (not causal: no declared temporal order)",

@@ -1,11 +1,11 @@
 # Measurement validation protocol
 
-Start with `cssem_validation_design("screening")`: six representative
+Start with `validation_design("screening")`: six representative
 conditions across sample size, loading, missingness, local dependence, and
 cross-loading. Use three replications during development. It is intended to
 finish on an ordinary local machine.
 
-`cssem_validation_design("full")` produces the 32-condition confirmation grid.
+`validation_design("full")` produces the 32-condition confirmation grid.
 Run that larger design only after screening identifies a promising encoder, and
 increase replications gradually (for example 5, then 20) rather than starting
 at 20. Each benchmark row contains construct recovery, dependency-free

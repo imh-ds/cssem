@@ -62,11 +62,11 @@
   model <- generated$model; model$folds <- job$folds
   constructs <- names(generated$states); x <- constructs[[1L]]; y <- constructs[[length(constructs)]]
   elapsed <- system.time({
-    fit <- cssem_fit(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
-    association <- cssem_associate(fit, generated$structure, structural_repeats = job$structural_repeats,
+    fit <- fit_states(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
-    disattenuated <- cssem_moderated_mediation(association, x, y, "W", eiv_bootstrap = job$eiv_bootstrap, seed = job$seed, disattenuate = TRUE)
-    naive <- cssem_moderated_mediation(association, x, y, "W", eiv_bootstrap = 0L, disattenuate = FALSE)
+    disattenuated <- conditional_indirect_effect(association, x, y, "W", eiv_bootstrap = job$eiv_bootstrap, seed = job$seed, disattenuate = TRUE)
+    naive <- conditional_indirect_effect(association, x, y, "W", eiv_bootstrap = 0L, disattenuate = FALSE)
   })["elapsed"]
   true_index <- generated$truth$index
   ci <- disattenuated$index$ci
@@ -81,11 +81,11 @@
 #' Create a deterministic moderated mediation validation manifest
 #'
 #' @param tier `"screening"` for a compact suite or `"full"` for a larger grid.
-#' @return A scenario data frame for [cssem_run_moderated_mediation_validation()].
+#' @return A scenario data frame for [validate_conditional_indirect_effect()].
 #' @examples
-#' cssem_moderated_mediation_validation_manifest("screening")
+#' conditional_indirect_effect_manifest("screening")
 #' @export
-cssem_moderated_mediation_validation_manifest <- function(tier = c("screening", "full")) {
+conditional_indirect_effect_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     scenario = c("b_path", "a_path", "b_path"),
@@ -105,7 +105,7 @@ cssem_moderated_mediation_validation_manifest <- function(tier = c("screening", 
 #' interaction.
 #'
 #' @param manifest A manifest from
-#'   [cssem_moderated_mediation_validation_manifest()].
+#'   [conditional_indirect_effect_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
@@ -117,11 +117,11 @@ cssem_moderated_mediation_validation_manifest <- function(tier = c("screening", 
 #'   true, naive, and disattenuated index of moderated mediation, absolute
 #'   biases, and interval coverage.
 #' @examples
-#' results <- cssem_run_moderated_mediation_validation(
-#'   cssem_moderated_mediation_validation_manifest("screening")[1, ], reps = 1, eiv_bootstrap = 50
+#' results <- validate_conditional_indirect_effect(
+#'   conditional_indirect_effect_manifest("screening")[1, ], reps = 1, eiv_bootstrap = 50
 #' )
 #' @export
-cssem_run_moderated_mediation_validation <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
+validate_conditional_indirect_effect <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
                                                      iterations = 8L, structural_repeats = 3L,
                                                      eiv_bootstrap = 200L, workers = 1L) {
   if (!is.data.frame(manifest) || !all(c("scenario", "n", "loading") %in% names(manifest)))

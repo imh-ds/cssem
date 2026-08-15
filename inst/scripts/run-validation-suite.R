@@ -5,8 +5,8 @@ library(cssem)
 
 # Screening first: six representative conditions times three replications.
 # Run the full design only after this identifies a promising encoder.
-design <- cssem_validation_design("screening")
-results <- run_measurement_benchmark(design = design, reps = 3, seed = 2026)
+design <- validation_design("screening")
+results <- benchmark_measurement(design = design, reps = 3, seed = 2026)
 
 summary_by_scenario <- aggregate(
   cbind(cssem_recovery, cbsem_ordinal_factor_proxy_recovery,

@@ -26,21 +26,21 @@ structure <- cssem_structure(list(
 # Compare declared linear, monotone, and low-complexity smooth effects using
 # structural-fold CV. At most one nonlinear edge is retained per outcome.
 # The shadow model is an adequacy benchmark, not an alternative theory.
-association <- cssem_associate(fit, structure)
+association <- associate(fit, structure)
 
 print(association)
 cat("\nCandidate model metrics:\n")
 print(association$candidate_metrics)
 
 cat("\nQuality effect card:\n")
-print(cssem_effect_card(association, "Quality"))
+print(effect_card(association, "Quality"))
 cat("\nLoyalty effect card:\n")
-print(cssem_effect_card(association, "Loyalty"))
+print(effect_card(association, "Loyalty"))
 cat("\nEffect evidence ledger:\n")
-print(cssem_effect_ledger(association))
+print(effect_ledger(association))
 
 cat("\nShadow-model specification gaps (positive favors the declared model):\n")
-print(cssem_specification_gap(association))
+print(specification_gap(association))
 
 # Optional visual checks in an interactive R session:
 # plot(fit, type = "scores")

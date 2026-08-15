@@ -92,11 +92,11 @@
 
   cssem_elapsed <- system.time({
     model <- generated$model; model$folds <- job$folds
-    fit <- cssem_fit(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
-    association <- cssem_associate(fit, generated$structure, structural_repeats = job$structural_repeats,
+    fit <- fit_states(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
-    disattenuated <- cssem_moderated_mediation(association, "X", "Y", "W", eiv_bootstrap = job$eiv_bootstrap, seed = job$seed, disattenuate = TRUE)
-    naive <- cssem_moderated_mediation(association, "X", "Y", "W", eiv_bootstrap = 0L, disattenuate = FALSE)
+    disattenuated <- conditional_indirect_effect(association, "X", "Y", "W", eiv_bootstrap = job$eiv_bootstrap, seed = job$seed, disattenuate = TRUE)
+    naive <- conditional_indirect_effect(association, "X", "Y", "W", eiv_bootstrap = 0L, disattenuate = FALSE)
   })["elapsed"]
   rows[[1L]] <- .moderated_comparator_row("cssem_disattenuated", setting, job$replication, truth,
     disattenuated$index$estimate, disattenuated$index$ci[[1L]], disattenuated$index$ci[[2L]], cssem_elapsed)
@@ -125,7 +125,7 @@
 #' absent.
 #'
 #' @param manifest A manifest from
-#'   [cssem_moderated_mediation_validation_manifest()].
+#'   [conditional_indirect_effect_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
@@ -138,13 +138,13 @@
 #'   carrying the index estimate, absolute bias against truth, interval, and
 #'   coverage.
 #' @examples
-#' results <- cssem_run_moderated_mediation_comparator_validation(
-#'   cssem_moderated_mediation_validation_manifest("screening")[1, ], reps = 1,
+#' results <- validate_conditional_indirect_effect_comparator(
+#'   conditional_indirect_effect_manifest("screening")[1, ], reps = 1,
 #'   eiv_bootstrap = 50, seminr_bootstrap = 50
 #' )
 #' unique(results$engine)
 #' @export
-cssem_run_moderated_mediation_comparator_validation <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
+validate_conditional_indirect_effect_comparator <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
                                                                 iterations = 8L, structural_repeats = 3L,
                                                                 eiv_bootstrap = 200L, seminr_bootstrap = 200L,
                                                                 workers = 1L) {

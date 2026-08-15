@@ -5,10 +5,10 @@ library(cssem)
 
 # Local v0.3 developer screening: representative scenarios, one replication
 # each, separate from the release confirmation workflow.
-measurement <- cssem_run_measurement_validation(
-  cssem_measurement_validation_manifest("screening"), reps = 1, seed = 2026
+measurement <- validate_measurement(
+  measurement_manifest("screening"), reps = 1, seed = 2026
 )
-structural <- cssem_run_structural_validation(
-  cssem_structural_validation_manifest("screening"), reps = 1, seed = 3026
+structural <- validate_structure(
+  structural_manifest("screening"), reps = 1, seed = 3026
 )
-print(cssem_validation_report(measurement, structural))
+print(validation_report(measurement, structural))

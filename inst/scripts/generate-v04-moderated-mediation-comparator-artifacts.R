@@ -6,10 +6,10 @@ library(cssem)
 output_dir <- file.path("tests", "internal", "validation_results")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-manifest <- cssem_moderated_mediation_validation_manifest("full")
+manifest <- conditional_indirect_effect_manifest("full")
 workers <- max(1L, parallel::detectCores() - 1L)
 started <- Sys.time()
-results <- cssem_run_moderated_mediation_comparator_validation(
+results <- validate_conditional_indirect_effect_comparator(
   manifest, reps = 10, seed = 9026, eiv_bootstrap = 200, seminr_bootstrap = 200, workers = workers
 )
 elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))

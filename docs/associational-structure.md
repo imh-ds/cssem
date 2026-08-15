@@ -1,6 +1,6 @@
 # Associational structural layer
 
-`cssem_associate()` accepts a theory-declared `cssem_structure` and uses only
+`associate()` accepts a theory-declared `cssem_structure` and uses only
 the measurement fit's locked construct states. It begins with the complete
 declared linear model, then tests one declared edge at a time as nonlinear.
 At most one nonlinear edge is retained for an outcome in v0.3. This limits
@@ -64,18 +64,18 @@ heterogeneity, or same-wave network dependence. They do not automatically
 replace theory or establish causal direction.
 
 ```r
-association <- cssem_associate(fit, structure)
-cssem_effect_card(association, "Loyalty")
-cssem_effect_ledger(association)
-cssem_specification_gap(association, "temporal")
-cssem_specification_gap(association, "unrestricted")
+association <- associate(fit, structure)
+effect_card(association, "Loyalty")
+effect_ledger(association)
+specification_gap(association, "temporal")
+specification_gap(association, "unrestricted")
 ```
 
 If the unrestricted gap is much more negative than the temporal gap, report
 that as same-wave interdependence outside the acyclic theory model. Consider
 longitudinal or dynamic designs before assigning directional meaning.
 
-`cssem_effect_ledger()` reports each edge's selected shape, repeated-CV
+`effect_ledger()` reports each edge's selected shape, repeated-CV
 selection stability, predictive contribution when the edge is removed, and
 both shadow gaps. It is an evidence profile, not a causal verdict or a
 confirmatory confidence interval.

@@ -17,18 +17,18 @@
 #'   item warnings. Disable for high-throughput simulation benchmarks.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight fitting
 #'   defaults while iterating on a live project.
-#' @return An object of class `cssem_fit` containing locked scores, full-data
+#' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
-#' data <- simulate_cssem_data(n = 80, seed = 1)
+#' data <- simulate_states(n = 80, seed = 1)
 #' model <- cssem_model(list(
 #'   A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
 #'   B = list(indicators = paste0("b", 1:4), scales = "ordinal")
 #' ), folds = 3)
-#' fit <- cssem_fit(model, data, seed = 1, diagnostics = FALSE)
+#' fit <- fit_states(model, data, seed = 1, diagnostics = FALSE)
 #' @family measurement fitting functions
 #' @export
-cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
+fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
                       diagnostics = TRUE, preset = c("default", "exploratory")) {
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
@@ -108,7 +108,7 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
     warnings = warnings, residual_dependence = residual_dependence,
     uncertainty_draws = bags, seed = seed,
-    measurement_engine = lapply(full, function(x) list(estimator = x$estimator, converged = x$converged, iterations = x$iterations))), class = "cssem_fit")
+    measurement_engine = lapply(full, function(x) list(estimator = x$estimator, converged = x$converged, iterations = x$iterations))), class = "fit_states")
 }
 
 # Build the latent-state bag from real posterior draws. Each draw samples one
@@ -157,17 +157,17 @@ cssem_fit <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
 #' inverse-variance information weight (normalized to mean one). Respondents with
 #' wide posteriors carry less measurement information; the weights are the basis
 #' for the optional inverse-variance respondent weighting in
-#' [cssem_associate()].
+#' [associate()].
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @return A data frame with one row per respondent, per-construct posterior SD
 #'   columns, and an `information_weight` column. Empty when no construct was
 #'   scored with a latent grid.
 #' @examples
-#' # cssem_respondent_information(fit)
+#' # respondent_information(fit)
 #' @export
-cssem_respondent_information <- function(fit) {
-  if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+respondent_information <- function(fit) {
+  if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   sd <- fit$score_posterior_sd
   if (is.null(sd) || !ncol(as.data.frame(sd))) return(data.frame())
   out <- as.data.frame(sd)
@@ -232,19 +232,19 @@ cssem_respondent_information <- function(fit) {
 
 #' Score new compatible data
 #'
-#' Applies the full-data encoders retained in a [cssem_fit()] object. This is
+#' Applies the full-data encoders retained in a [fit_states()] object. This is
 #' intended for new observations; use `fit$locked_scores` for analyses of the
 #' estimation sample.
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @param new_data A data frame whose columns exactly match all model indicators
 #'   in their declared order.
 #' @return A data frame of construct scores.
 #' @examples
-#' # cssem_score(fit, new_survey_rows)
+#' # score_states(fit, new_survey_rows)
 #' @export
-cssem_score <- function(fit, new_data) {
-  if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+score_states <- function(fit, new_data) {
+  if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   expected <- unlist(lapply(fit$model$constructs, `[[`, "indicators"), use.names = FALSE)
   if (!identical(names(new_data), expected))
     stop("Scoring data columns must exactly match all declared indicators in their declared order.", call. = FALSE)
@@ -254,15 +254,15 @@ cssem_score <- function(fit, new_data) {
 
 #' Create a construct evidence card
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @param construct Name of a declared construct.
 #' @return A list containing measurement-engine metadata, held-out item metrics,
 #'   stability, relevant warnings, and exploratory residual dependence.
 #' @examples
-#' # cssem_construct_card(fit, "Trust")
+#' # construct_card(fit, "Trust")
 #' @export
-cssem_construct_card <- function(fit, construct) {
-  if (!inherits(fit, "cssem_fit") || !construct %in% names(fit$full_encoders)) stop("Unknown construct.", call. = FALSE)
+construct_card <- function(fit, construct) {
+  if (!inherits(fit, "fit_states") || !construct %in% names(fit$full_encoders)) stop("Unknown construct.", call. = FALSE)
   indicators <- fit$model$constructs[[construct]]$indicators
   # Item-level warnings carry the exact indicator name as their target; match on
   # exact membership so item "a1" does not also capture a warning for "a10".
@@ -282,30 +282,30 @@ cssem_construct_card <- function(fit, construct) {
 #' These values are reported for inspection and are not automatically treated
 #' as warnings until the simulation calibration study establishes a threshold.
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @param construct Optional construct name. If `NULL`, returns diagnostics for
 #'   all constructs.
 #' @return A data frame of pairwise leave-one-item-out residual correlations.
 #' @examples
-#' # cssem_residual_diagnostics(fit, "Trust")
+#' # residual_diagnostics(fit, "Trust")
 #' @export
-cssem_residual_diagnostics <- function(fit, construct = NULL) {
-  if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+residual_diagnostics <- function(fit, construct = NULL) {
+  if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (is.null(construct)) return(fit$residual_dependence)
   fit$residual_dependence[fit$residual_dependence$construct == construct, , drop = FALSE]
 }
 
 #' Create the construct evidence ledger
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @return A data frame of construct stability, mean held-out loss, maximum
 #'   redundancy, and warning count.
 #' @examples
-#' # cssem_evidence_ledger(fit)
+#' # evidence_ledger(fit)
 #' @export
-cssem_evidence_ledger <- function(fit) {
+evidence_ledger <- function(fit) {
   average_loss <- vapply(names(fit$stability), function(nm) mean(fit$item_metrics$value[fit$item_metrics$construct == nm], na.rm = TRUE), numeric(1))
-  warning_count <- vapply(names(fit$stability), function(nm) nrow(cssem_construct_card(fit, nm)$warnings), integer(1))
+  warning_count <- vapply(names(fit$stability), function(nm) nrow(construct_card(fit, nm)$warnings), integer(1))
   data.frame(construct = names(fit$stability), stability = unname(fit$stability), held_out_loss = average_loss,
     redundancy_max = vapply(seq_along(fit$stability), function(i) if (length(fit$stability) == 1L) 0 else max(abs(fit$redundancy[i, -i]), na.rm = TRUE), numeric(1)),
     warnings = warning_count,
@@ -314,7 +314,7 @@ cssem_evidence_ledger <- function(fit) {
 
 #' Plot CS-SEM measurement diagnostics
 #'
-#' @param x A `cssem_fit` object.
+#' @param x A `fit_states` object.
 #' @param type Diagnostic to plot: locked construct `"scores"`, construct
 #'   `"redundancy"`, or held-out `"item_loss"`.
 #' @param ... Additional arguments passed to the underlying base graphics call.
@@ -322,7 +322,7 @@ cssem_evidence_ledger <- function(fit) {
 #' @examples
 #' # plot(fit, type = "redundancy")
 #' @export
-plot.cssem_fit <- function(x, type = c("scores", "redundancy", "item_loss"), ...) {
+plot.fit_states <- function(x, type = c("scores", "redundancy", "item_loss"), ...) {
   type <- match.arg(type)
   if (type == "scores") {
     graphics::pairs(x$locked_scores, main = "CS-SEM locked construct states", ...)
@@ -338,8 +338,8 @@ plot.cssem_fit <- function(x, type = c("scores", "redundancy", "item_loss"), ...
 
 #' Print a CS-SEM fit
 #'
-#' @param x A `cssem_fit` object.
+#' @param x A `fit_states` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_fit <- function(x, ...) { cat("CS-SEM fit: ", ncol(x$locked_scores), " locked construct state(s), ", length(unique(x$folds)), " folds\n", sep=""); invisible(x) }
+print.fit_states <- function(x, ...) { cat("CS-SEM fit: ", ncol(x$locked_scores), " locked construct state(s), ", length(unique(x$folds)), " folds\n", sep=""); invisible(x) }

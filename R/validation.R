@@ -52,11 +52,11 @@
 
 .validation_fit <- function(model, data, seed, folds, iterations, max_iterations, diagnostics) {
   model$folds <- folds
-  fit <- cssem_fit(model, data, seed = seed, iterations = iterations, diagnostics = diagnostics)
+  fit <- fit_states(model, data, seed = seed, iterations = iterations, diagnostics = diagnostics)
   converged <- all(vapply(fit$measurement_engine, function(x) isTRUE(x$converged), logical(1)))
   attempts <- 1L
   if (!converged && max_iterations > iterations) {
-    fit <- cssem_fit(model, data, seed = seed, iterations = max_iterations, diagnostics = diagnostics)
+    fit <- fit_states(model, data, seed = seed, iterations = max_iterations, diagnostics = diagnostics)
     converged <- all(vapply(fit$measurement_engine, function(x) isTRUE(x$converged), logical(1)))
     attempts <- 2L
   }
@@ -107,9 +107,9 @@
 #'
 #' @return A one-row data frame describing the initial supported conditions.
 #' @examples
-#' cssem_supported_envelope()
+#' supported_envelope()
 #' @export
-cssem_supported_envelope <- function() {
+supported_envelope <- function() {
   data.frame(
     constructs = "one-dimensional ordinal manifestation blocks",
     minimum_indicators = 4L, minimum_n = 200L, minimum_loading = .70,
@@ -124,9 +124,9 @@ cssem_supported_envelope <- function() {
 #'   factorial confirmation manifest.
 #' @return A scenario data frame.
 #' @examples
-#' cssem_measurement_validation_manifest("screening")
+#' measurement_manifest("screening")
 #' @export
-cssem_measurement_validation_manifest <- function(tier = c("screening", "diagnostic", "full")) {
+measurement_manifest <- function(tier = c("screening", "diagnostic", "full")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     scenario = c("clean", "moderate_missing", "weak_signal", "cross_loading", "local_dependence", "sparse_categories", "high_overlap"),
@@ -154,7 +154,7 @@ cssem_measurement_validation_manifest <- function(tier = c("screening", "diagnos
 
 #' Run deterministic measurement validation simulations
 #'
-#' @param manifest A measurement manifest from [cssem_measurement_validation_manifest()].
+#' @param manifest A measurement manifest from [measurement_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Measurement cross-fitting folds.
@@ -166,11 +166,11 @@ cssem_measurement_validation_manifest <- function(tier = c("screening", "diagnos
 #' @return A machine-readable data frame with recovery, loss, stability,
 #'   convergence, runtime, and diagnostic metrics.
 #' @examples
-#' results <- cssem_run_measurement_validation(
-#'   cssem_measurement_validation_manifest("screening")[1, ], reps = 1
+#' results <- validate_measurement(
+#'   measurement_manifest("screening")[1, ], reps = 1
 #' )
 #' @export
-cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
+validate_measurement <- function(manifest, reps = 3L, seed = 1L,
                                              folds = 3L, iterations = 8L,
                                              max_iterations = 16L, diagnostics = FALSE,
                                              workers = 1L) {
@@ -244,9 +244,9 @@ cssem_run_measurement_validation <- function(manifest, reps = 3L, seed = 1L,
 #' @param tier `"screening"` or `"full"`.
 #' @return A structural scenario data frame.
 #' @examples
-#' cssem_structural_validation_manifest()
+#' structural_manifest()
 #' @export
-cssem_structural_validation_manifest <- function(tier = c("screening", "full")) {
+structural_manifest <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
   types <- c("linear", "monotone_increasing", "monotone_decreasing", "smooth_subtle", "smooth_strong", "null", "interaction", "omitted", "downstream")
   if (tier == "screening") {
@@ -288,12 +288,12 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
   generated <- do.call(.structural_validation_data, .structural_data_args(setting, job$seed))
   elapsed <- system.time({
     validation_fit <- .validation_fit(generated$model, generated$data, job$seed, job$folds, job$iterations, job$max_iterations, FALSE)
-    association <- cssem_associate(validation_fit$fit, generated$structure,
+    association <- associate(validation_fit$fit, generated$structure,
       structural_repeats = job$structural_repeats, seed = job$seed, shadow_scope = "both")
   })["elapsed"]
   gaps <- association$specification_gap
   candidates <- association$candidate_metrics
-  ledger <- cssem_effect_ledger(association)
+  ledger <- effect_ledger(association)
   rows <- lapply(seq_len(nrow(ledger)), function(index) {
     selected <- ledger[index, , drop = FALSE]; outcome <- selected$outcome[[1L]]; predictor <- selected$predictor[[1L]]
     linear <- candidates[candidates$outcome == outcome & candidates$predictor == predictor & candidates$shape == "linear", , drop = FALSE]
@@ -316,7 +316,7 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 
 #' Run deterministic v0.3 associational structural validation simulations
 #'
-#' @param manifest A manifest from [cssem_structural_validation_manifest()].
+#' @param manifest A manifest from [structural_manifest()].
 #' @param reps Replications per structural scenario.
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds for measurement and structure.
@@ -330,11 +330,11 @@ cssem_structural_validation_manifest <- function(tier = c("screening", "full")) 
 #' @return A machine-readable data frame containing model selection, R-squared,
 #'   temporal and unrestricted gaps, and runtime for every outcome.
 #' @examples
-#' results <- cssem_run_structural_validation(
-#'   cssem_structural_validation_manifest("screening")[1, ], reps = 1
+#' results <- validate_structure(
+#'   structural_manifest("screening")[1, ], reps = 1
 #' )
 #' @export
-cssem_run_structural_validation <- function(manifest, reps = 3L, seed = 1L,
+validate_structure <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
                                             max_iterations = 16L,
                                             structural_repeats = 5L, workers = 1L) {
@@ -351,15 +351,15 @@ cssem_run_structural_validation <- function(manifest, reps = 3L, seed = 1L,
 
 #' Evaluate v0.3 simulation release gates
 #'
-#' @param measurement_results Results from [cssem_run_measurement_validation()].
-#' @param structural_results Results from [cssem_run_structural_validation()].
+#' @param measurement_results Results from [validate_measurement()].
+#' @param structural_results Results from [validate_structure()].
 #' @return A list with gate-level evidence, pass/fail status, and the supported
 #'   operating envelope.
 #' @examples
-#' # cssem_validation_report(measurement_results, structural_results)
+#' # validation_report(measurement_results, structural_results)
 #' @export
-cssem_validation_report <- function(measurement_results, structural_results) {
-  envelope <- cssem_supported_envelope()
+validation_report <- function(measurement_results, structural_results) {
+  envelope <- supported_envelope()
   inside <- measurement_results$n >= envelope$minimum_n & measurement_results$loading >= envelope$minimum_loading &
     measurement_results$missing <= envelope$maximum_missing & measurement_results$cross_loading == 0 &
     measurement_results$local_dependence == 0 & !measurement_results$sparse & measurement_results$overlap < .80

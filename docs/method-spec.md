@@ -16,9 +16,9 @@ mixed-scale fallback. Missing item responses contribute no likelihood term.
 Scores are standardized and positive keys make larger states correspond to
 larger item responses.
 
-`cssem_fit()` uses K-fold cross-fitting. Every returned locked score is
+`fit_states()` uses K-fold cross-fitting. Every returned locked score is
 predicted by an encoder trained without that observation. Full-data encoders
-are retained only for `cssem_score()` on new records. The API rejects missing,
+are retained only for `score_states()` on new records. The API rejects missing,
 extra, or reordered scoring columns rather than aligning them silently.
 
 Version 0.3 reports held-out decoder log loss/RMSE, fold stability, item
@@ -29,7 +29,7 @@ rate.
 
 The structural extension is deliberately associational. A `cssem_structure`
 declares locked-state predictors and may declare edge-level shape policies via
-`cssem_effect()`. `cssem_associate()` cross-validates linear, constrained
+`cssem_effect()`. `associate()` cross-validates linear, constrained
 monotone, and low-complexity smooth candidates one declared edge at a time,
 then reports temporal and unrestricted shadow-model specification gaps and an
 effect evidence ledger. These effects are not causal claims and do not provide
@@ -38,11 +38,11 @@ mediation, adjustment, or treatment-effect estimates. See
 
 Measurement uncertainty is now propagated rather than discarded. The marginal
 graded-response model retains each respondent's out-of-fold posterior, from
-which `cssem_fit()` reports a per-construct marginal reliability
+which `fit_states()` reports a per-construct marginal reliability
 (`fit$reliability`) and a per-respondent posterior SD
 (`fit$score_posterior_sd`). Locked construct states carry measurement error, so
 naive structural slopes among them are attenuated exactly as composite and PLS
-scores are. For linear and monotone edges, `cssem_associate()` applies a
+scores are. For linear and monotone edges, `associate()` applies a
 classical (Fuller) errors-in-variables correction that subtracts the predictor
 error covariance `diag((1 - reliability) * var)` before solving the structural
 normal equations, recovering the disattenuated slope. A percentile bootstrap
@@ -54,10 +54,10 @@ posterior draws (plausible values), replacing the earlier fixed-variance
 placeholder.
 
 Per-respondent measurement information is reported through
-`cssem_respondent_information()` and the Construct Card, exposing wide-posterior
+`respondent_information()` and the Construct Card, exposing wide-posterior
 (for example careless) respondents that covariance- and composite-based methods
 cannot flag. An experimental inverse-variance `respondent_weighting` option in
-`cssem_associate()` is off by default: because posterior width is
+`associate()` is off by default: because posterior width is
 score-dependent, weighting induces range restriction and did not reduce
 structural point-estimate bias in validation, so it is excluded from
 confirmatory estimation.

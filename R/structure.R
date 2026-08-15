@@ -46,7 +46,7 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
 
 # Shared validated construction for cssem_structure() and specify_structure().
 # Both front doors resolve to this identical internal representation, so every
-# downstream consumer of a `cssem_structure` object (cssem_associate() and
+# downstream consumer of a `cssem_structure` object (associate() and
 # everything built on it) is unaffected by which front door built it.
 .build_structure <- function(effects, order) {
   if (!is.list(effects) || is.null(names(effects)) || any(names(effects) == ""))
@@ -530,7 +530,7 @@ specify_structure <- function(..., order = NULL) {
 #' Selects at most one nonlinear declared edge per outcome. Candidate shape
 #' selection is repeated cross-validation only; it does not make causal claims.
 #'
-#' @param fit A `cssem_fit` object.
+#' @param fit A `fit_states` object.
 #' @param structure A `cssem_structure` object.
 #' @param folds Optional structural validation folds.
 #' @param spline_df Degrees of freedom for low-complexity unconstrained spline
@@ -556,13 +556,13 @@ specify_structure <- function(..., order = NULL) {
 #'   structural selection defaults while iterating locally.
 #' @return An object of class `cssem_association`.
 #' @export
-cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
+associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
                              shape_stability_min = .70, structural_repeats = 5L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
                              preset = c("default", "exploratory")) {
-  if (!inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+  if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
   preset <- match.arg(preset)
   eiv_bootstrap <- as.integer(eiv_bootstrap)
@@ -697,7 +697,7 @@ cssem_associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L),
 #' @param outcome Declared endogenous construct name.
 #' @return A list of selected effects, candidates, contributions, and shadow gaps.
 #' @export
-cssem_effect_card <- function(association, outcome) {
+effect_card <- function(association, outcome) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   if (!outcome %in% names(association$full_models)) stop("Unknown structural outcome.", call. = FALSE)
   list(outcome = outcome,
@@ -713,7 +713,7 @@ cssem_effect_card <- function(association, outcome) {
 #' @return A data frame with shape, predictive contribution, stability, shadow
 #'   gaps, and associational status for each declared edge.
 #' @export
-cssem_effect_ledger <- function(association) {
+effect_ledger <- function(association) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   selected <- association$candidate_metrics[association$candidate_metrics$selected, c("outcome", "predictor", "shape", "r_squared", "mean_mse_improvement", "mse_improvement_se", "selection_frequency"), drop = FALSE]
   names(selected)[names(selected) == "r_squared"] <- "theory_r_squared"
@@ -734,7 +734,7 @@ cssem_effect_ledger <- function(association) {
 #' @param scope Optional shadow scope.
 #' @return A data frame of theory-minus-shadow cross-validated R-squared gaps.
 #' @export
-cssem_specification_gap <- function(association, scope = NULL) {
+specification_gap <- function(association, scope = NULL) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   if (is.null(scope)) return(association$specification_gap)
   scope <- match.arg(scope, c("temporal", "unrestricted"))

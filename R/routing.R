@@ -12,17 +12,17 @@
 #' @param estimand Causal estimand: `"adjusted_linear"` (disattenuated, linear
 #'   adjustment), `"adjusted_dml"` (flexible spline adjustment for nonlinear
 #'   confounding), or `"adjusted_ame"` (doubly-robust average marginal effect).
-#'   See [cssem_causal_effect()].
-#' @return A `cssem_causal_edge` specification for [cssem_route()].
+#'   See [causal_effect()].
+#' @return A `causal_edge` specification for [route()].
 #' @examples
-#' cssem_causal_edge("Satisfaction", "Loyalty", adjust = c("Trust", "PriorLoyalty"))
+#' causal_edge("Satisfaction", "Loyalty", adjust = c("Trust", "PriorLoyalty"))
 #' @export
-cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame")) {
+causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame")) {
   estimand <- match.arg(estimand)
   if (!is.character(from) || length(from) != 1L || !is.character(to) || length(to) != 1L)
     stop("from and to must be single construct names.", call. = FALSE)
   if (missing(adjust) || !length(adjust)) stop("A causal edge requires a non-empty adjustment set.", call. = FALSE)
-  structure(list(from = from, to = to, adjust = as.character(adjust), estimand = estimand), class = "cssem_causal_edge")
+  structure(list(from = from, to = to, adjust = as.character(adjust), estimand = estimand), class = "causal_edge")
 }
 
 .declared_edges <- function(structure) {
@@ -51,11 +51,11 @@ cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", 
 #' Assigns every declared structural edge a status and reports its allowed
 #' interpretation. Edges default to `associational`; edges listed in `causal`
 #' (which require an adjustment set and a declared `temporal_order`) are estimated
-#' with [cssem_causal_effect()], while `predictive` and `representational` edges
+#' with [causal_effect()], while `predictive` and `representational` edges
 #' are flagged as not for structural interpretation.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
-#' @param causal A list of [cssem_causal_edge()] specifications.
+#' @param association A `cssem_association` from [associate()].
+#' @param causal A list of [causal_edge()] specifications.
 #' @param predictive A list of `c(from, to)` pairs marked predictive.
 #' @param representational A list of `c(from, to)` pairs marked representational.
 #' @param temporal_order Optional temporal order; required for causal edges.
@@ -63,16 +63,16 @@ cssem_causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", 
 #' @param seed Bootstrap seed.
 #' @return An object of class `cssem_routing`.
 #' @examples
-#' # cssem_route(association,
-#' #   causal = list(cssem_causal_edge("Satisfaction", "Loyalty", adjust = "Trust")),
+#' # route(association,
+#' #   causal = list(causal_edge("Satisfaction", "Loyalty", adjust = "Trust")),
 #' #   temporal_order = c("Trust", "Satisfaction", "Loyalty"))
 #' @export
-cssem_route <- function(association, causal = list(), predictive = list(), representational = list(),
+route <- function(association, causal = list(), predictive = list(), representational = list(),
                         temporal_order = NULL, eiv_bootstrap = 0L, seed = 1L) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
-  causal <- if (inherits(causal, "cssem_causal_edge")) list(causal) else causal
-  if (length(causal) && !all(vapply(causal, inherits, logical(1), "cssem_causal_edge")))
-    stop("causal must be a list of cssem_causal_edge() specifications.", call. = FALSE)
+  causal <- if (inherits(causal, "causal_edge")) list(causal) else causal
+  if (length(causal) && !all(vapply(causal, inherits, logical(1), "causal_edge")))
+    stop("causal must be a list of causal_edge() specifications.", call. = FALSE)
   if (length(causal) && is.null(temporal_order)) stop("Causal edges require a declared temporal_order.", call. = FALSE)
 
   edges <- .declared_edges(association$structure)
@@ -95,7 +95,7 @@ cssem_route <- function(association, causal = list(), predictive = list(), repre
     key <- paste(edge$from, edge$to, sep = "→")
     if (!key %in% names(status)) stop(sprintf("Causal edge %s is not a declared structural edge.", key), call. = FALSE)
     status[[key]] <- "causal"
-    effect <- cssem_causal_effect(association, edge$from, edge$to, adjust = edge$adjust,
+    effect <- causal_effect(association, edge$from, edge$to, adjust = edge$adjust,
       estimand = edge$estimand, temporal_order = temporal_order, eiv_bootstrap = eiv_bootstrap, seed = seed)
     causal_effects[[key]] <- effect; causal_lookup[[key]] <- edge
   }

@@ -7,21 +7,21 @@ test_that("associational layer uses locked scores and reports a shadow gap", {
   fit <- structure(list(
     locked_scores = data.frame(Trust = trust, Satisfaction = satisfaction, Loyalty = loyalty),
     folds = rep(1:3, length.out = n)
-  ), class = "cssem_fit")
+  ), class = "fit_states")
   structure_spec <- cssem_structure(list(
     Satisfaction = "Trust",
     Loyalty = c("Trust", "Satisfaction")
   ), order = c("Trust", "Satisfaction", "Loyalty"))
-  association <- cssem_associate(fit, structure_spec)
+  association <- associate(fit, structure_spec)
   expect_s3_class(association, "cssem_association")
-  expect_equal(nrow(cssem_specification_gap(association)), 4)
-  expect_equal(nrow(cssem_specification_gap(association, "temporal")), 2)
-  expect_true(all(cssem_specification_gap(association)$specification_gap ==
-    cssem_specification_gap(association)$theory_r_squared - cssem_specification_gap(association)$shadow_r_squared))
+  expect_equal(nrow(specification_gap(association)), 4)
+  expect_equal(nrow(specification_gap(association, "temporal")), 2)
+  expect_true(all(specification_gap(association)$specification_gap ==
+    specification_gap(association)$theory_r_squared - specification_gap(association)$shadow_r_squared))
   expect_equal(sum(association$candidate_metrics$selected), 3)
   expect_true(all(c("mean_mse_improvement", "mse_improvement_se") %in% names(association$candidate_metrics)))
   expect_equal(association$structural_repeats, 5L)
-  expect_equal(nrow(cssem_effect_ledger(association)), 3L)
+  expect_equal(nrow(effect_ledger(association)), 3L)
   expect_identical(association$status, "associational")
 })
 
@@ -42,16 +42,16 @@ test_that("monotone candidates are constrained and selected edge by edge", {
   quality <- .70 * trust + .85 * pmax(trust, 0) + rnorm(n, sd = .30)
   loyalty <- .45 * trust + .35 * quality + rnorm(n, sd = .60)
   fit <- structure(list(locked_scores = data.frame(Trust = trust, Quality = quality, Loyalty = loyalty),
-    folds = sample(rep(1:3, length.out = n))), class = "cssem_fit")
+    folds = sample(rep(1:3, length.out = n))), class = "fit_states")
   specification <- cssem_structure(list(
     Quality = list(Trust = cssem_effect("auto")),
     Loyalty = list(Trust = cssem_effect("auto"), Quality = cssem_effect("auto"))
   ), order = c("Trust", "Quality", "Loyalty"))
-  association <- cssem_associate(fit, specification, structural_repeats = 3, seed = 44, shape_stability_min = .50)
+  association <- associate(fit, specification, structural_repeats = 3, seed = 44, shape_stability_min = .50)
   quality <- association$candidate_metrics[association$candidate_metrics$outcome == "Quality", , drop = FALSE]
   expect_true(any(quality$shape == "monotone_increasing"))
   expect_lte(sum(association$candidate_metrics$selected & association$candidate_metrics$outcome == "Loyalty" & association$candidate_metrics$shape != "linear"), 1L)
-  expect_true(all(c("edge_drop_mse_increase", "selection_frequency", "status") %in% names(cssem_effect_ledger(association))))
+  expect_true(all(c("edge_drop_mse_increase", "selection_frequency", "status") %in% names(effect_ledger(association))))
 })
 
 test_that("default selector retains a clear monotone-increasing edge", {
@@ -63,12 +63,12 @@ test_that("default selector retains a clear monotone-increasing edge", {
   fit <- structure(list(
     locked_scores = data.frame(Trust = trust, Quality = quality, Loyalty = loyalty),
     folds = sample(rep(1:3, length.out = n))
-  ), class = "cssem_fit")
+  ), class = "fit_states")
   specification <- cssem_structure(list(
     Quality = list(Trust = cssem_effect("monotone_increasing")),
     Loyalty = list(Trust = cssem_effect("auto"), Quality = cssem_effect("auto"))
   ), order = c("Trust", "Quality", "Loyalty"))
-  association <- cssem_associate(fit, specification, structural_repeats = 5, seed = 144)
+  association <- associate(fit, specification, structural_repeats = 5, seed = 144)
   quality <- association$candidate_metrics[association$candidate_metrics$outcome == "Quality" &
     association$candidate_metrics$predictor == "Trust" & association$candidate_metrics$selected, , drop = FALSE]
   expect_equal(quality$shape[[1L]], "monotone_increasing")
@@ -98,9 +98,9 @@ test_that("monotone basis retains training-fold knots for scoring", {
 })
 
 test_that("structural repeated CV validates its repeat count", {
-  fit <- structure(list(locked_scores = data.frame(A = rnorm(30), B = rnorm(30)), folds = rep(1:3, 10)), class = "cssem_fit")
+  fit <- structure(list(locked_scores = data.frame(A = rnorm(30), B = rnorm(30)), folds = rep(1:3, 10)), class = "fit_states")
   specification <- cssem_structure(list(B = "A"), order = c("A", "B"))
-  expect_error(cssem_associate(fit, specification, structural_repeats = 0L), "at least 1")
+  expect_error(associate(fit, specification, structural_repeats = 0L), "at least 1")
 })
 
 test_that("structural declarations reject invalid self-effects", {
@@ -151,10 +151,10 @@ test_that("specify_structure() requires formulas and unique outcomes", {
 })
 
 test_that("temporal shadows require a valid ordering for cyclic declarations", {
-  fit <- structure(list(locked_scores = data.frame(A = rnorm(30), B = rnorm(30)), folds = rep(1:3, 10)), class = "cssem_fit")
+  fit <- structure(list(locked_scores = data.frame(A = rnorm(30), B = rnorm(30)), folds = rep(1:3, 10)), class = "fit_states")
   cyclic <- cssem_structure(list(A = "B", B = "A"))
-  expect_error(cssem_associate(fit, cyclic, shadow_scope = "temporal"))
-  expect_s3_class(cssem_associate(fit, cyclic, shadow_scope = "unrestricted"), "cssem_association")
+  expect_error(associate(fit, cyclic, shadow_scope = "temporal"))
+  expect_s3_class(associate(fit, cyclic, shadow_scope = "unrestricted"), "cssem_association")
 })
 
 test_that("exploratory preset lightens structural defaults", {
@@ -162,12 +162,12 @@ test_that("exploratory preset lightens structural defaults", {
   fit <- structure(list(
     locked_scores = data.frame(Trust = rnorm(60), Quality = rnorm(60), Loyalty = rnorm(60)),
     folds = sample(rep(1:3, length.out = 60))
-  ), class = "cssem_fit")
+  ), class = "fit_states")
   specification <- cssem_structure(list(
     Quality = "Trust",
     Loyalty = c("Trust", "Quality")
   ), order = c("Trust", "Quality", "Loyalty"))
-  association <- cssem_associate(fit, specification, preset = "exploratory")
+  association <- associate(fit, specification, preset = "exploratory")
   expect_equal(association$structural_repeats, 2L)
   expect_identical(association$shadow_scope, "temporal")
 })

@@ -100,7 +100,7 @@
 #' `predictor`-by-`moderator` interaction on the outcome. The focal main effect is
 #' disattenuated; the interaction term is treated as observed.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
+#' @param association A `cssem_association` from [associate()].
 #' @param outcome Outcome construct carrying the moderated effect.
 #' @param predictor Focal predictor whose slope is conditioned.
 #' @param moderator Moderator construct.
@@ -109,15 +109,15 @@
 #' @param eiv_bootstrap Percentile-bootstrap resamples for intervals. Zero omits.
 #' @param johnson_neyman Whether to locate the Johnson-Neyman region.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_simple_slopes`.
+#' @return An object of class `conditional_slopes`.
 #' @examples
-#' # cssem_simple_slopes(association, "Y", "M", "W", eiv_bootstrap = 500)
+#' # conditional_slopes(association, "Y", "M", "W", eiv_bootstrap = 500)
 #' @export
-cssem_simple_slopes <- function(association, outcome, predictor, moderator, levels = c(-1, 0, 1),
+conditional_slopes <- function(association, outcome, predictor, moderator, levels = c(-1, 0, 1),
                                 disattenuate = TRUE, eiv_bootstrap = 0L, johnson_neyman = TRUE, seed = 1L) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
-  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
   if (!all(c(outcome, predictor, moderator) %in% names(scores))) stop("outcome, predictor, and moderator must be locked construct names.", call. = FALSE)
   model <- association$full_models[[outcome]]
   if (is.null(model)) stop("outcome is not a declared endogenous construct.", call. = FALSE)
@@ -162,16 +162,16 @@ cssem_simple_slopes <- function(association, outcome, predictor, moderator, leve
 
   structure(list(outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
     slopes = slopes, interaction = interaction, disattenuated = disattenuated, bootstrap = eiv_bootstrap,
-    johnson_neyman = jn, status = "associational"), class = "cssem_simple_slopes")
+    johnson_neyman = jn, status = "associational"), class = "conditional_slopes")
 }
 
 #' Print conditional (simple) slopes
 #'
-#' @param x A `cssem_simple_slopes` object.
+#' @param x A `conditional_slopes` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_simple_slopes <- function(x, ...) {
+print.conditional_slopes <- function(x, ...) {
   cat(sprintf("CS-SEM simple slopes: %s -> %s, moderated by %s\n", x$predictor, x$outcome, x$moderator))
   basis <- if (isTRUE(x$disattenuated)) "disattenuated focal effect" else "naive"
   intervals <- if (x$bootstrap > 0L) sprintf("; 95%% bootstrap intervals (%d resamples)", x$bootstrap) else ""
@@ -206,10 +206,10 @@ print.cssem_simple_slopes <- function(x, ...) {
 #' standard-deviation unit of the moderator). The moderator must appear in a
 #' declared interaction term (colon syntax, e.g. `"M:W"`) in the association's
 #' structure. Linear and monotone edges are disattenuated as in
-#' [cssem_mediation()]; the decomposition is associational and makes no causal
+#' [indirect_effect()]; the decomposition is associational and makes no causal
 #' claim.
 #'
-#' @param association A `cssem_association` from [cssem_associate()] whose
+#' @param association A `cssem_association` from [associate()] whose
 #'   structure declares the mediating paths and the moderating interaction.
 #' @param x Predictor construct name.
 #' @param y Outcome construct name.
@@ -221,15 +221,15 @@ print.cssem_simple_slopes <- function(x, ...) {
 #' @param eiv_bootstrap Percentile-bootstrap resamples for intervals. Zero omits.
 #' @param delta Predictor contrast in standard-deviation units. Defaults to one.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_moderated_mediation`.
+#' @return An object of class `conditional_indirect_effect`.
 #' @examples
-#' # cssem_moderated_mediation(association, "X", "Y", "W", eiv_bootstrap = 500)
+#' # conditional_indirect_effect(association, "X", "Y", "W", eiv_bootstrap = 500)
 #' @export
-cssem_moderated_mediation <- function(association, x, y, moderator, levels = c(-1, 0, 1),
+conditional_indirect_effect <- function(association, x, y, moderator, levels = c(-1, 0, 1),
                                       disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
-  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
   all_names <- names(scores)
   if (!all(c(x, y, moderator) %in% all_names)) stop("x, y, and moderator must be locked construct names.", call. = FALSE)
   if (length(unique(c(x, y, moderator))) != 3L) stop("x, y, and moderator must be distinct.", call. = FALSE)
@@ -291,16 +291,16 @@ cssem_moderated_mediation <- function(association, x, y, moderator, levels = c(-
 
   structure(list(x = x, y = y, moderator = moderator, levels = levels, conditional = conditional, index = index,
     n = nrow(scores), disattenuated = disattenuated, bootstrap = eiv_bootstrap,
-    min_reliability = min_reliability, status = "associational"), class = "cssem_moderated_mediation")
+    min_reliability = min_reliability, status = "associational"), class = "conditional_indirect_effect")
 }
 
 #' Print a moderated mediation decomposition
 #'
-#' @param x A `cssem_moderated_mediation` object.
+#' @param x A `conditional_indirect_effect` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_moderated_mediation <- function(x, ...) {
+print.conditional_indirect_effect <- function(x, ...) {
   mediators <- setdiff(names(x$conditional), NA)
   cat(sprintf("CS-SEM moderated mediation: %s -> %s, moderated by %s  (n = %d)\n", x$x, x$y, x$moderator, x$n))
   basis <- if (isTRUE(x$disattenuated)) "disattenuated (errors-in-variables)" else "naive"

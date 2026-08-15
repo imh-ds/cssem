@@ -1,16 +1,16 @@
 test_that("validation manifests are deterministic and expose required scenarios", {
-  measurement <- cssem_measurement_validation_manifest("screening")
-  structural <- cssem_structural_validation_manifest("screening")
+  measurement <- measurement_manifest("screening")
+  structural <- structural_manifest("screening")
   expect_true(all(c("clean", "moderate_missing", "sparse_categories") %in% measurement$scenario))
-  expect_true(all(c("diagnostic_clean", "diagnostic_local_dependence") %in% cssem_measurement_validation_manifest("diagnostic")$scenario))
+  expect_true(all(c("diagnostic_clean", "diagnostic_local_dependence") %in% measurement_manifest("diagnostic")$scenario))
   expect_true(all(c("linear", "monotone_increasing", "monotone_decreasing", "smooth_strong", "null", "interaction", "omitted", "downstream") %in% structural$scenario))
-  expect_equal(cssem_supported_envelope()$minimum_n, 200)
+  expect_equal(supported_envelope()$minimum_n, 200)
 })
 
 test_that("measurement validation is deterministic for a fixed seed", {
-  manifest <- cssem_measurement_validation_manifest("screening")[1, ]
-  first <- cssem_run_measurement_validation(manifest, reps = 1, seed = 7, folds = 2, iterations = 2, max_iterations = 2)
-  second <- cssem_run_measurement_validation(manifest, reps = 1, seed = 7, folds = 2, iterations = 2, max_iterations = 2)
+  manifest <- measurement_manifest("screening")[1, ]
+  first <- validate_measurement(manifest, reps = 1, seed = 7, folds = 2, iterations = 2, max_iterations = 2)
+  second <- validate_measurement(manifest, reps = 1, seed = 7, folds = 2, iterations = 2, max_iterations = 2)
   expect_equal(first$cssem_recovery, second$cssem_recovery)
   expect_true(is.finite(first$held_out_loss))
 })
@@ -27,21 +27,21 @@ test_that("release report applies the declared gap sign convention", {
     data.frame(scenario = "omitted", outcome = "Quality", predictor = "Trust", selected_shape = "linear", temporal_gap = -.04, unrestricted_minus_temporal = 0),
     data.frame(scenario = "downstream", outcome = "Quality", predictor = "Trust", selected_shape = "linear", temporal_gap = 0, unrestricted_minus_temporal = -.04)
   )
-  report <- cssem_validation_report(measurement, structural)
+  report <- validation_report(measurement, structural)
   expect_true(report$passed)
 })
 
 test_that("structural validation records both shadow scopes", {
   manifest <- data.frame(scenario = "linear", n = 80L)
-  result <- cssem_run_structural_validation(manifest, reps = 1, seed = 9, folds = 2, iterations = 2, max_iterations = 2)
+  result <- validate_structure(manifest, reps = 1, seed = 9, folds = 2, iterations = 2, max_iterations = 2)
   expect_true(all(c("temporal_gap", "unrestricted_gap", "selected_shape") %in% names(result)))
   expect_equal(nrow(result), 3)
   expect_true(all(is.finite(result$temporal_gap)))
 })
 
 test_that("comparator validation skips optional engines cleanly when unavailable", {
-  manifest <- cssem_measurement_validation_manifest("screening")[1, ]
-  result <- cssem_run_comparator_validation(manifest, reps = 1, seed = 11, folds = 2, iterations = 2, workers = 1)
+  manifest <- measurement_manifest("screening")[1, ]
+  result <- validate_comparator(manifest, reps = 1, seed = 11, folds = 2, iterations = 2, workers = 1)
   expect_true(all(c("cssem_locked", "ordinal_factor_proxy", "composite_proxy", "lavaan_dwls", "seminr_pls") %in% result$engine))
   expect_true(all(c("downstream_rmse", "downstream_r_squared") %in% names(result)))
   expect_true(all(result$status[result$engine %in% c("cssem_locked", "ordinal_factor_proxy", "composite_proxy")] == "success"))
@@ -49,8 +49,8 @@ test_that("comparator validation skips optional engines cleanly when unavailable
 })
 
 test_that("structural comparator validation returns structural benchmark columns", {
-  manifest <- cssem_structural_validation_manifest("screening")[1, , drop = FALSE]
-  result <- cssem_run_structural_comparator_validation(
+  manifest <- structural_manifest("screening")[1, , drop = FALSE]
+  result <- validate_structure_comparator(
     manifest,
     reps = 1,
     seed = 13,

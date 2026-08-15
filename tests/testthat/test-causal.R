@@ -7,11 +7,11 @@
     class = "cssem_association")
 }
 
-test_that("cssem_causal_effect decomposes confounding and attenuation", {
+test_that("causal_effect decomposes confounding and attenuation", {
   association <- .causal_fixture()
-  effect <- cssem_causal_effect(association, "X", "Y", adjust = "C",
+  effect <- causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "Y"), eiv_bootstrap = 60, seed = 11)
-  expect_s3_class(effect, "cssem_causal_effect")
+  expect_s3_class(effect, "causal_effect")
   # Adjustment removes upward confounding.
   expect_gt(effect$unadjusted, effect$adjusted_effect)
   # Disattenuation increases the adjusted effect relative to the attenuated one.
@@ -35,7 +35,7 @@ test_that("cssem_causal_effect decomposes confounding and attenuation", {
 
 test_that("the DML estimand removes nonlinear confounding a linear adjustment leaves", {
   association <- .causal_nonlinear_fixture()
-  dml <- cssem_causal_effect(association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
+  dml <- causal_effect(association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
     temporal_order = c("C", "X", "Y"))
   expect_identical(dml$estimand, "adjusted_dml")
   expect_false(dml$disattenuated)
@@ -53,7 +53,7 @@ test_that("the DML estimand removes nonlinear confounding a linear adjustment le
 
 test_that("the DML estimand requires an adjustment set", {
   association <- .causal_nonlinear_fixture(n = 500)
-  expect_error(cssem_causal_effect(association, "X", "Y", estimand = "adjusted_dml"), "requires an adjustment set")
+  expect_error(causal_effect(association, "X", "Y", estimand = "adjusted_dml"), "requires an adjustment set")
 })
 
 .causal_ame_fixture <- function(n = 5000, seed = 4) {
@@ -70,9 +70,9 @@ test_that("the DML estimand requires an adjustment set", {
 
 test_that("the AME estimand recovers the average derivative under a nonlinear dose-response", {
   fixture <- .causal_ame_fixture()
-  ame <- cssem_causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
+  ame <- causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
     temporal_order = c("C", "X", "Y"))
-  pl <- cssem_causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
+  pl <- causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
     temporal_order = c("C", "X", "Y"))
   expect_identical(ame$estimand, "adjusted_ame")
   expect_false(ame$disattenuated)
@@ -88,38 +88,38 @@ test_that("the AME estimand recovers the average derivative under a nonlinear do
 
 test_that("the AME estimand requires an adjustment set and routes through an edge", {
   fixture <- .causal_ame_fixture(n = 1500)
-  expect_error(cssem_causal_effect(fixture$association, "X", "Y", estimand = "adjusted_ame"), "requires an adjustment set")
-  routing <- cssem_route(fixture$association,
-    causal = list(cssem_causal_edge("X", "Y", adjust = "C", estimand = "adjusted_ame")),
+  expect_error(causal_effect(fixture$association, "X", "Y", estimand = "adjusted_ame"), "requires an adjustment set")
+  routing <- route(fixture$association,
+    causal = list(causal_edge("X", "Y", adjust = "C", estimand = "adjusted_ame")),
     temporal_order = c("C", "X", "Y"))
   expect_identical(routing$causal_effects[[1L]]$estimand, "adjusted_ame")
 })
 
-test_that("cssem_route carries the DML estimand through to a causal edge", {
+test_that("route carries the DML estimand through to a causal edge", {
   association <- .causal_nonlinear_fixture(n = 1500)
-  routing <- cssem_route(association,
-    causal = list(cssem_causal_edge("X", "Y", adjust = "C", estimand = "adjusted_dml")),
+  routing <- route(association,
+    causal = list(causal_edge("X", "Y", adjust = "C", estimand = "adjusted_dml")),
     temporal_order = c("C", "X", "Y"))
   causal_row <- routing$table[routing$table$status == "causal", ]
   expect_equal(causal_row$estimand, "adjusted_dml")
   expect_identical(routing$causal_effects[[1L]]$estimand, "adjusted_dml")
-  expect_error(cssem_causal_edge("X", "Y", adjust = "C", estimand = "bogus"), "should be one of")
+  expect_error(causal_edge("X", "Y", adjust = "C", estimand = "bogus"), "should be one of")
 })
 
 test_that("a causal label requires both an adjustment set and a temporal order", {
   association <- .causal_fixture()
-  expect_identical(cssem_causal_effect(association, "X", "Y", adjust = "C",
+  expect_identical(causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "Y"))$label, "causal_under_assumptions")
-  expect_identical(cssem_causal_effect(association, "X", "Y", adjust = "C")$label, "adjusted_association")
-  expect_identical(cssem_causal_effect(association, "X", "Y")$label, "unadjusted_association")
+  expect_identical(causal_effect(association, "X", "Y", adjust = "C")$label, "adjusted_association")
+  expect_identical(causal_effect(association, "X", "Y")$label, "unadjusted_association")
 })
 
-test_that("cssem_route builds a Path Routing Table with honest defaults", {
+test_that("route builds a Path Routing Table with honest defaults", {
   generated <- cssem:::.structural_validation_data("linear", 400, 5, items = 4L)
-  fit <- cssem_fit(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
-  association <- cssem_associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
-  routing <- cssem_route(association,
-    causal = list(cssem_causal_edge("Quality", "Loyalty", adjust = "Trust")),
+  fit <- fit_states(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
+  routing <- route(association,
+    causal = list(causal_edge("Quality", "Loyalty", adjust = "Trust")),
     temporal_order = c("Trust", "Quality", "Loyalty"))
   expect_s3_class(routing, "cssem_routing")
   expect_true(all(c("path", "status", "effect", "interpretation") %in% names(routing$table)))
@@ -128,18 +128,18 @@ test_that("cssem_route builds a Path Routing Table with honest defaults", {
   expect_equal(nrow(causal_row), 1L)
   expect_true(is.finite(causal_row$robustness_value))
   # Discipline: a causal edge without a temporal order is rejected.
-  expect_error(cssem_route(association, causal = list(cssem_causal_edge("Quality", "Loyalty", adjust = "Trust"))), "temporal_order")
-  expect_error(cssem_causal_edge("Quality", "Loyalty"), "adjustment set")
+  expect_error(route(association, causal = list(causal_edge("Quality", "Loyalty", adjust = "Trust"))), "temporal_order")
+  expect_error(causal_edge("Quality", "Loyalty"), "adjustment set")
   expect_output(print(routing), "Path Routing Table")
 })
 
-test_that("cssem_causal_effect guards reject bad inputs", {
+test_that("causal_effect guards reject bad inputs", {
   association <- .causal_fixture()
-  expect_error(cssem_causal_effect(association, "X", "X"), "distinct")
-  expect_error(cssem_causal_effect(association, "X", "Q"), "locked construct")
-  expect_error(cssem_causal_effect(association, "X", "Y", adjust = "C",
+  expect_error(causal_effect(association, "X", "X"), "distinct")
+  expect_error(causal_effect(association, "X", "Q"), "locked construct")
+  expect_error(causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "Y", "X")), "must precede")
-  expect_output(print(cssem_causal_effect(association, "X", "Y", adjust = "C",
+  expect_output(print(causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "Y"))), "Causal under assumptions")
 })
 
@@ -150,19 +150,19 @@ test_that("post-treatment adjustment is refused under a declared temporal order"
   scores$M <- .6 * scores$X + rnorm(n, sd = .7)
   scores$Y <- .5 * scores$X + .4 * scores$M + rnorm(n, sd = .7)
   fit <- structure(list(locked_scores = scores, folds = sample(rep(1:3, length.out = n)),
-    reliability = c(X = .85, M = .85, Y = .9)), class = "cssem_fit")
-  assoc <- cssem_associate(fit,
+    reliability = c(X = .85, M = .85, Y = .9)), class = "fit_states")
+  assoc <- associate(fit,
     cssem_structure(list(M = "X", Y = c("X", "M")), order = c("X", "M", "Y")),
     structural_repeats = 2L, seed = 91, shadow_scope = "temporal")
   expect_error(
-    cssem_causal_effect(assoc, "X", "Y", adjust = "M", temporal_order = c("X", "M", "Y")),
+    causal_effect(assoc, "X", "Y", adjust = "M", temporal_order = c("X", "M", "Y")),
     "post-treatment")
   expect_error(
-    cssem_route(assoc,
-      causal = list(cssem_causal_edge("X", "Y", adjust = "M")),
+    route(assoc,
+      causal = list(causal_edge("X", "Y", adjust = "M")),
       temporal_order = c("X", "M", "Y")),
     "post-treatment")
   # A pre-treatment adjustment set still routes.
-  ok <- cssem_causal_effect(assoc, "M", "Y", adjust = "X", temporal_order = c("X", "M", "Y"))
+  ok <- causal_effect(assoc, "M", "Y", adjust = "X", temporal_order = c("X", "M", "Y"))
   expect_identical(ok$label, "causal_under_assumptions")
 })

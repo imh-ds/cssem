@@ -20,14 +20,14 @@ model <- specify_measurement(
   trust = ordinal("t1", "t2", "t3", keys = c(1, 1, -1)),
   folds = 5
 )
-fit <- cssem_fit(model, survey_data, seed = 42)
-cssem_construct_card(fit, "trust")
+fit <- fit_states(model, survey_data, seed = 42)
+construct_card(fit, "trust")
 ```
 
 ```r
 structure <- specify_structure(loyalty ~ trust)
-association <- cssem_associate(fit, structure)
-cssem_specification_gap(association)
+association <- associate(fit, structure)
+specification_gap(association)
 ```
 
 `specify_measurement()`/`specify_structure()` are friendlier front doors for
@@ -53,17 +53,17 @@ validation suites directly.
 For a local v0.3 screening run, use:
 
 ```r
-measurement <- cssem_run_measurement_validation(
-  cssem_measurement_validation_manifest("screening"),
+measurement <- validate_measurement(
+  measurement_manifest("screening"),
   reps = 1,
   seed = 2026
 )
-structural <- cssem_run_structural_validation(
-  cssem_structural_validation_manifest("screening"),
+structural <- validate_structure(
+  structural_manifest("screening"),
   reps = 1,
   seed = 3026
 )
-cssem_validation_report(measurement, structural)
+validation_report(measurement, structural)
 ```
 
 CI keeps a tiny one-rep smoke run separate from the release workflow. Release

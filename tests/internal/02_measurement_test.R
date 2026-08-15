@@ -27,7 +27,7 @@ model <- cssem_model(
 )
 
 # Estimate locked, out-of-fold construct states.
-fit <- cssem_fit(model, survey, seed = 2026, draws = 10)
+fit <- fit_states(model, survey, seed = 2026, draws = 10)
 locked_scores <- fit$locked_scores
 
 print(fit)
@@ -39,13 +39,13 @@ cat("\nConstruct recovery against simulated truth:\n")
 print(cor(locked_scores, truth))
 
 cat("\nTrust construct card:\n")
-print(cssem_construct_card(fit, "Trust"))
+print(construct_card(fit, "Trust"))
 cat("\nMeasurement evidence ledger:\n")
-print(cssem_evidence_ledger(fit))
+print(evidence_ledger(fit))
 cat("\nAutomatic measurement warnings:\n")
 print(fit$warnings)
 cat("\nExploratory residual-dependence diagnostics:\n")
-print(cssem_residual_diagnostics(fit))
+print(residual_diagnostics(fit))
 
 # Save the fitted measurement layer for 03_structural_test.R.
 saveRDS(fit, file.path(script_dir, "measurement_fit.rds"))

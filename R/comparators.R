@@ -10,7 +10,7 @@
 #' installed.
 #'
 #' @param manifest A measurement manifest from
-#'   [cssem_measurement_validation_manifest()].
+#'   [measurement_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Measurement cross-fitting folds used for the CS-SEM encoder.
@@ -23,15 +23,15 @@
 #'   `status`, `converged`, `runtime_seconds`, `recovery`,
 #'   `downstream_rmse`, and `downstream_r_squared`.
 #' @examples
-#' comparators <- cssem_run_comparator_validation(
-#'   cssem_measurement_validation_manifest("screening")[1, ],
+#' comparators <- validate_comparator(
+#'   measurement_manifest("screening")[1, ],
 #'   reps = 1,
 #'   seed = 1,
 #'   workers = 1
 #' )
 #' unique(comparators$engine)
 #' @export
-cssem_run_comparator_validation <- function(manifest, reps = 3L, seed = 1L,
+validate_comparator <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
                                             workers = 1L) {
   required <- c("scenario", "n", "loading", "missing", "local_dependence", "cross_loading", "overlap", "sparse")
@@ -66,7 +66,7 @@ cssem_run_comparator_validation <- function(manifest, reps = 3L, seed = 1L,
 #' same truth-referenced bias and coverage metrics.
 #'
 #' @param manifest A structural manifest from
-#'   [cssem_structural_validation_manifest()].
+#'   [structural_manifest()].
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Measurement cross-fitting folds used for the CS-SEM encoder.
@@ -85,15 +85,15 @@ cssem_run_comparator_validation <- function(manifest, reps = 3L, seed = 1L,
 #'   `theory_r_squared`, `temporal_gap`, `unrestricted_gap`,
 #'   `selection_stability`, `score_coverage`, and runtime metadata.
 #' @examples
-#' structural_comparators <- cssem_run_structural_comparator_validation(
-#'   cssem_structural_validation_manifest("screening")[1, ],
+#' structural_comparators <- validate_structure_comparator(
+#'   structural_manifest("screening")[1, ],
 #'   reps = 1,
 #'   seed = 1,
 #'   workers = 1
 #' )
 #' unique(structural_comparators$engine)
 #' @export
-cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
+validate_structure_comparator <- function(manifest, reps = 3L,
                                                        seed = 1L, folds = 3L,
                                                        iterations = 8L,
                                                        max_iterations = 16L,
@@ -143,7 +143,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
   index <- 0L
 
   cssem_elapsed <- system.time(
-    fit <- cssem_fit(model, data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    fit <- fit_states(model, data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
   )["elapsed"]
   proxy <- .proxy_scores(data)
   cssem_version <- as.character(utils::packageVersion("cssem"))
@@ -307,7 +307,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
 
 .make_pseudo_fit <- function(scores, folds, reliability = NULL, score_posterior_sd = NULL) {
   structure(list(locked_scores = as.data.frame(scores), folds = folds, reliability = reliability,
-    score_posterior_sd = score_posterior_sd), class = "cssem_fit")
+    score_posterior_sd = score_posterior_sd), class = "fit_states")
 }
 
 .lavaan_measurement_syntax <- function(model) {
@@ -733,7 +733,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
     }
     association_elapsed <- system.time({
       pseudo_fit <- .make_pseudo_fit(scored$scores, validation_fit$fit$folds, scored$reliability, scored$score_posterior_sd)
-      association <- cssem_associate(
+      association <- associate(
         pseudo_fit,
         generated$structure,
         structural_repeats = job$structural_repeats,
@@ -743,7 +743,7 @@ cssem_run_structural_comparator_validation <- function(manifest, reps = 3L,
         respondent_weighting = "none"
       )
     })["elapsed"]
-    ledger <- cssem_effect_ledger(association)
+    ledger <- effect_ledger(association)
     ledger <- merge(ledger, truth_slopes, by = c("outcome", "predictor"), all.x = TRUE, sort = FALSE)
     for (row_index in seq_len(nrow(ledger))) {
       selected <- ledger[row_index, , drop = FALSE]

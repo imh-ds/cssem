@@ -1,9 +1,9 @@
 .evidence_pipeline <- function(n = 500, seed = 5) {
   generated <- cssem:::.structural_validation_data("linear", n, 5, items = 4L)
-  fit <- cssem_fit(generated$model, generated$data, seed = seed, iterations = 4, diagnostics = FALSE)
-  association <- cssem_associate(fit, generated$structure, structural_repeats = 2L, seed = seed, shadow_scope = "temporal")
-  routing <- cssem_route(association,
-    causal = list(cssem_causal_edge("Quality", "Loyalty", adjust = "Trust")),
+  fit <- fit_states(generated$model, generated$data, seed = seed, iterations = 4, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 2L, seed = seed, shadow_scope = "temporal")
+  routing <- route(association,
+    causal = list(causal_edge("Quality", "Loyalty", adjust = "Trust")),
     temporal_order = c("Trust", "Quality", "Loyalty"))
   list(fit = fit, association = association, routing = routing)
 }
@@ -22,13 +22,13 @@
     Y = cssem:::.fit_shape_model(scores, "Y", c(X = "linear", M = "linear", C = "linear")))
   assoc <- structure(list(scores = scores, reliability = stats::setNames(as.numeric(rho), c("X", "C", "M", "Y")),
     full_models = full, structure = structure), class = "cssem_association")
-  cssem_causal_mediation(assoc, "X", "Y", adjust = "C", temporal_order = c("C", "X", "M", "Y"))
+  causal_indirect_effect(assoc, "X", "Y", adjust = "C", temporal_order = c("C", "X", "M", "Y"))
 }
 
 test_that("evidence report composes constructs, effects, and causal claims", {
   p <- .evidence_pipeline()
-  report <- cssem_evidence_report(p$association, fit = p$fit, routing = p$routing)
-  expect_s3_class(report, "cssem_evidence_report")
+  report <- evidence_report(p$association, fit = p$fit, routing = p$routing)
+  expect_s3_class(report, "evidence_report")
   expect_equal(nrow(report$constructs), 3L)
   expect_true(all(c("path", "shape", "estimate", "causal_status", "verdict") %in% names(report$effects)))
   # Causal status is routed in, not hardcoded associational.
@@ -55,7 +55,7 @@ test_that("a smooth edge (no scalar estimate) is scored on contribution", {
 
 test_that("without routing, all effect edges are associational and optional sections are absent", {
   p <- .evidence_pipeline()
-  report <- cssem_evidence_report(p$association)
+  report <- evidence_report(p$association)
   expect_true(all(report$effects$causal_status == "associational"))
   expect_null(report$causal_claims)
   expect_null(report$constructs)
@@ -64,7 +64,7 @@ test_that("without routing, all effect edges are associational and optional sect
 test_that("interventional-mediation claims appear in the causal-claims section", {
   p <- .evidence_pipeline()
   med <- .evidence_mediation()
-  report <- cssem_evidence_report(p$association, causal = list(med))
+  report <- evidence_report(p$association, causal = list(med))
   expect_equal(nrow(report$causal_claims), 1L)
   expect_match(report$causal_claims$type, "interventional")
   expect_identical(report$causal_claims$estimand, "interventional")
@@ -73,9 +73,9 @@ test_that("interventional-mediation claims appear in the causal-claims section",
 
 test_that("evidence report guards reject bad inputs", {
   p <- .evidence_pipeline()
-  expect_error(cssem_evidence_report(list()), "cssem_association")
-  expect_error(cssem_evidence_report(p$association, fit = list()), "cssem_fit")
-  expect_error(cssem_evidence_report(p$association, routing = list()), "cssem_routing")
-  expect_error(cssem_evidence_report(p$association, causal = list(1)), "cssem_causal")
-  expect_output(print(cssem_evidence_report(p$association, fit = p$fit, routing = p$routing)), "Evidence Report")
+  expect_error(evidence_report(list()), "cssem_association")
+  expect_error(evidence_report(p$association, fit = list()), "fit_states")
+  expect_error(evidence_report(p$association, routing = list()), "cssem_routing")
+  expect_error(evidence_report(p$association, causal = list(1)), "causal_effect or causal_indirect_effect")
+  expect_output(print(evidence_report(p$association, fit = p$fit, routing = p$routing)), "Evidence Report")
 })

@@ -98,10 +98,10 @@
 
   cssem_elapsed <- system.time({
     model <- generated$model; model$folds <- job$folds
-    fit <- cssem_fit(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
-    association <- cssem_associate(fit, generated$structure, structural_repeats = job$structural_repeats,
+    fit <- fit_states(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
-    mediation <- cssem_mediation(association, x, y, eiv_bootstrap = job$eiv_bootstrap, seed = job$seed)
+    mediation <- indirect_effect(association, x, y, eiv_bootstrap = job$eiv_bootstrap, seed = job$seed)
   })["elapsed"]
   indirect <- mediation$summary[mediation$summary$component == "indirect_total", , drop = FALSE]
   rows[[1L]] <- .mediation_comparator_row("cssem_disattenuated", setting, job$replication, truth,
@@ -130,7 +130,7 @@
 #' removes. Optional comparators are skipped when their packages are absent.
 #'
 #' @param manifest A manifest from
-#'   [cssem_mediation_validation_manifest()] (use the `"benchmark"` tier).
+#'   [indirect_effect_manifest()] (use the `"benchmark"` tier).
 #' @param reps Replications per scenario.
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
@@ -143,13 +143,13 @@
 #'   carrying the indirect estimate, absolute bias against truth, interval, and
 #'   coverage.
 #' @examples
-#' results <- cssem_run_mediation_comparator_validation(
-#'   cssem_mediation_validation_manifest("benchmark")[1, ], reps = 1,
+#' results <- validate_indirect_effect_comparator(
+#'   indirect_effect_manifest("benchmark")[1, ], reps = 1,
 #'   eiv_bootstrap = 50, seminr_bootstrap = 50
 #' )
 #' unique(results$engine)
 #' @export
-cssem_run_mediation_comparator_validation <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
+validate_indirect_effect_comparator <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
                                                       iterations = 8L, structural_repeats = 3L,
                                                       eiv_bootstrap = 200L, seminr_bootstrap = 200L,
                                                       workers = 1L) {

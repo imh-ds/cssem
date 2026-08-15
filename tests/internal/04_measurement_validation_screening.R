@@ -6,8 +6,8 @@ dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 workers <- min(4L, max(1L, parallel::detectCores(logical = FALSE) - 1L))
 
 started <- proc.time()[["elapsed"]]
-measurement_results <- cssem_run_measurement_validation(
-  cssem_measurement_validation_manifest("screening"), reps = 3, seed = 2026, workers = workers
+measurement_results <- validate_measurement(
+  measurement_manifest("screening"), reps = 3, seed = 2026, workers = workers
 )
 elapsed <- proc.time()[["elapsed"]] - started
 utils::write.csv(measurement_results, file.path(results_dir, "measurement_screening.csv"), row.names = FALSE)

@@ -6,11 +6,11 @@ library(cssem)
 output_dir <- file.path("tests", "internal", "validation_results")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-measurement_manifest <- cssem_measurement_validation_manifest("screening")
-structural_manifest <- cssem_structural_validation_manifest("screening")
+measurement_manifest <- measurement_manifest("screening")
+structural_manifest <- structural_manifest("screening")
 
 measurement_started <- Sys.time()
-measurement_confirmation <- cssem_run_measurement_validation(
+measurement_confirmation <- validate_measurement(
   measurement_manifest,
   reps = 10,
   seed = 2026,
@@ -34,7 +34,7 @@ measurement_metadata <- data.frame(
 )
 
 structural_started <- Sys.time()
-structural_confirmation <- cssem_run_structural_validation(
+structural_confirmation <- validate_structure(
   structural_manifest,
   reps = 10,
   seed = 3026,
@@ -64,7 +64,7 @@ utils::write.csv(
   row.names = FALSE
 )
 
-release_report <- cssem_validation_report(
+release_report <- validation_report(
   measurement_confirmation,
   structural_confirmation
 )
@@ -74,7 +74,7 @@ utils::write.csv(
   row.names = FALSE
 )
 
-envelope <- cssem_supported_envelope()
+envelope <- supported_envelope()
 inside <- measurement_confirmation$n >= envelope$minimum_n &
   measurement_confirmation$loading >= envelope$minimum_loading &
   measurement_confirmation$missing <= envelope$maximum_missing &

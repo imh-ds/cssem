@@ -14,10 +14,10 @@
 #' @param seed Integer random seed.
 #' @return A data frame with `a*` and `b*` ordinal items and a `truth` attribute.
 #' @examples
-#' simulated <- simulate_cssem_data(n = 200, seed = 42)
+#' simulated <- simulate_states(n = 200, seed = 42)
 #' attr(simulated, "truth")
 #' @export
-simulate_cssem_data <- function(n = 400L, items = 4L, loading = .8, missing = .05,
+simulate_states <- function(n = 400L, items = 4L, loading = .8, missing = .05,
                                 local_dependence = 0, cross_loading = 0, seed = 1L) {
   set.seed(seed); z1 <- stats::rnorm(n); z2 <- stats::rnorm(n)
   make_block <- function(z, other, prefix) {
@@ -36,11 +36,11 @@ simulate_cssem_data <- function(n = 400L, items = 4L, loading = .8, missing = .0
 #'
 #' @param tier `"screening"` for six representative local scenarios or `"full"`
 #'   for the 32-scenario confirmation grid.
-#' @return A data frame accepted by [run_measurement_benchmark()].
+#' @return A data frame accepted by [benchmark_measurement()].
 #' @examples
-#' cssem_validation_design("screening")
+#' validation_design("screening")
 #' @export
-cssem_validation_design <- function(tier = c("screening", "full")) {
+validation_design <- function(tier = c("screening", "full")) {
   tier <- match.arg(tier)
   if (tier == "screening") return(data.frame(
     n = c(200L, 500L, 200L, 500L, 500L, 200L),
@@ -75,12 +75,12 @@ cssem_validation_design <- function(tier = c("screening", "full")) {
 #' @return A data frame of scenario results. Its `success_criterion` and
 #'   `success` attributes describe the predeclared screening gate.
 #' @examples
-#' benchmark <- run_measurement_benchmark(
-#'   design = cssem_validation_design("screening"), reps = 1, seed = 1
+#' benchmark <- benchmark_measurement(
+#'   design = validation_design("screening"), reps = 1, seed = 1
 #' )
 #' attr(benchmark, "success")
 #' @export
-run_measurement_benchmark <- function(reps = 20L, n = 400L, seed = 1L, tolerance = .02,
+benchmark_measurement <- function(reps = 20L, n = 400L, seed = 1L, tolerance = .02,
                                       design = NULL, folds = 3L, iterations = 4L) {
   if (is.null(design)) design <- data.frame(n = n, loading = .8, missing = .05, local_dependence = 0, cross_loading = 0)
   required <- c("n", "loading", "missing", "local_dependence", "cross_loading")
@@ -88,9 +88,9 @@ run_measurement_benchmark <- function(reps = 20L, n = 400L, seed = 1L, tolerance
   rows <- vector("list", reps * nrow(design)); row <- 0L
   for (scenario in seq_len(nrow(design))) for (r in seq_len(reps)) {
     row <- row + 1L; d <- design[scenario, ]
-    dat <- simulate_cssem_data(n = d$n, loading = d$loading, missing = d$missing, local_dependence = d$local_dependence, cross_loading = d$cross_loading, seed = seed + row); truth <- attr(dat, "truth")
+    dat <- simulate_states(n = d$n, loading = d$loading, missing = d$missing, local_dependence = d$local_dependence, cross_loading = d$cross_loading, seed = seed + row); truth <- attr(dat, "truth")
     model <- .build_measurement(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"), B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = folds)
-    fit <- cssem_fit(model, dat, seed = seed + row, iterations = iterations, diagnostics = FALSE)
+    fit <- fit_states(model, dat, seed = seed + row, iterations = iterations, diagnostics = FALSE)
     cs <- mean(abs(diag(stats::cor(fit$locked_scores, truth))))
     blocks <- list(1:4, 5:8)
     pls <- mean(vapply(blocks, function(ix) abs(stats::cor(rowMeans(dat[ix], na.rm=TRUE), truth[, if (min(ix)==1) 1 else 2], use="complete.obs")), numeric(1)))

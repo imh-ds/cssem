@@ -19,9 +19,9 @@
 
 test_that("interventional mediation recovers the indirect effect composites attenuate", {
   fixture <- .causal_mediation_fixture()
-  cm <- cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C",
+  cm <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"))
-  expect_s3_class(cm, "cssem_causal_mediation")
+  expect_s3_class(cm, "causal_indirect_effect")
   indirect <- cm$summary
   disattenuated <- indirect$disattenuated_effect[indirect$component == "indirect_total"]
   naive <- indirect$naive_effect[indirect$component == "indirect_total"]
@@ -33,15 +33,15 @@ test_that("interventional mediation recovers the indirect effect composites atte
 
 test_that("a causal label requires a declared temporal order", {
   fixture <- .causal_mediation_fixture(n = 2000)
-  expect_identical(cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C",
+  expect_identical(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"))$label, "causal_under_assumptions")
-  expect_identical(cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C")$label,
+  expect_identical(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C")$label,
     "adjusted_association")
 })
 
 test_that("the admissibility panel is populated", {
   fixture <- .causal_mediation_fixture(n = 2000)
-  cm <- cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C",
+  cm <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"))
   expect_true(is.finite(cm$identification_strength) && cm$identification_strength > 0.5)
   expect_true(is.finite(cm$outcome_r2) && cm$outcome_r2 > 0)
@@ -55,9 +55,9 @@ test_that("causal-mediation discipline guards reject bad specifications", {
   fixture <- .causal_mediation_fixture(n = 1500)
   association <- fixture$association
   # No adjustment set.
-  expect_error(cssem_causal_mediation(association, "X", "Y"), "adjustment set")
+  expect_error(causal_indirect_effect(association, "X", "Y"), "adjustment set")
   # Adjusting for a post-treatment (downstream) construct.
-  expect_error(cssem_causal_mediation(association, "X", "Y", adjust = "M"), "downstream of the treatment")
+  expect_error(causal_indirect_effect(association, "X", "Y", adjust = "M"), "downstream of the treatment")
   # A confounder that is not a declared predictor of the outcome/mediator cannot
   # adjust the effect. Build a structure where C does not predict M.
   scores <- association$scores
@@ -66,10 +66,10 @@ test_that("causal-mediation discipline guards reject bad specifications", {
     Y = cssem:::.fit_shape_model(scores, "Y", c(X = "linear", M = "linear", C = "linear")))
   association2 <- structure(list(scores = scores, reliability = association$reliability,
     full_models = full2, structure = structure2), class = "cssem_association")
-  expect_error(cssem_causal_mediation(association2, "X", "Y", adjust = "C",
+  expect_error(causal_indirect_effect(association2, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y")), "declared as predictor")
   # Requesting a non-mediator as a mediator.
-  expect_error(cssem_causal_mediation(association, "X", "Y", adjust = "C", mediators = "C"),
+  expect_error(causal_indirect_effect(association, "X", "Y", adjust = "C", mediators = "C"),
     "intermediate constructs")
 })
 
@@ -94,7 +94,7 @@ test_that("an endogenous treatment propagates through causal mediation", {
   association <- structure(list(scores = scores,
     reliability = stats::setNames(rep(1, 4), c("C", "X", "M", "Y")),
     full_models = full_models, structure = structure), class = "cssem_association")
-  cm <- cssem_causal_mediation(association, "X", "Y", adjust = "C",
+  cm <- causal_indirect_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"))
   indirect <- cm$summary$naive_effect[cm$summary$component == "indirect_total"]
   expect_gt(abs(indirect), 0.05)
@@ -103,7 +103,7 @@ test_that("an endogenous treatment propagates through causal mediation", {
 
 test_that("bootstrap intervals attach to the interventional decomposition", {
   fixture <- .causal_mediation_fixture(n = 1500)
-  cm <- cssem_causal_mediation(fixture$association, "X", "Y", adjust = "C",
+  cm <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"), eiv_bootstrap = 60, seed = 5)
   indirect <- cm$summary[cm$summary$component == "indirect_total", ]
   expect_true(is.finite(indirect$disattenuated_ci_low) && is.finite(indirect$disattenuated_ci_high))

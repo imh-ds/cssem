@@ -45,7 +45,7 @@ evidence of same-wave dependence, not reverse causal direction.
 
 ## Release gates
 
-`cssem_validation_report()` checks measurement non-inferiority within `.02`,
+`validation_report()` checks measurement non-inferiority within `.02`,
 linear selection, correctly signed monotone selection, strong smooth
 selection, false nonlinear selection, sensitivity to an omitted eligible
 predictor, and temporal/unrestricted downstream divergence. A failed gate
@@ -64,7 +64,7 @@ requested workers, and the worker process IDs actually used.
 
 ## Diagnostic calibration
 
-`cssem_measurement_validation_manifest("diagnostic")` and internal script 07
+`measurement_manifest("diagnostic")` and internal script 07
 run sparse-category and local-dependence cases with diagnostics enabled. The
 result records residual-dependence signals and their simulated false/true
 positive rates. Residual correlations remain exploratory until those rates are

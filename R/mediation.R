@@ -261,7 +261,7 @@
 # Internal entry point for development steps 1-3: decompose the effect of x on y,
 # add errors-in-variables disattenuated effects when per-construct reliability is
 # supplied, and attach percentile bootstrap intervals when requested. Public
-# cssem_mediation() (validation and reporting) is added in step 4.
+# indirect_effect() (validation and reporting) is added in step 4.
 .cssem_mediation_core <- function(models, scores, structure, x, y, reliability = NULL,
                                   delta = 1, eiv_bootstrap = 0L, seed = 1L) {
   order <- .resolve_temporal_order(structure, names(scores))
@@ -306,13 +306,13 @@
 #' so the decomposition is correct for nonlinear edges, not only linear paths.
 #'
 #' Linear and monotone edges are disattenuated with the same errors-in-variables
-#' correction used by [cssem_associate()], recovering the latent-scale indirect
+#' correction used by [associate()], recovering the latent-scale indirect
 #' effect that measurement error attenuates (the bias is largest for indirect
 #' effects, which compound error across paths). Any path through a smooth edge is
 #' reported without disattenuation. The decomposition is associational: it
 #' requires the structure's declared temporal order and makes no causal claim.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
+#' @param association A `cssem_association` from [associate()].
 #' @param x Name of the locked predictor construct.
 #' @param y Name of the locked outcome construct.
 #' @param mediators Optional character vector restricting the displayed
@@ -326,16 +326,16 @@
 #'   standardized construct states. Defaults to one. Effects are reported per
 #'   `delta`; for linear models they are scale-invariant.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_mediation`.
+#' @return An object of class `indirect_effect`.
 #' @examples
-#' # association <- cssem_associate(fit, structure)
-#' # cssem_mediation(association, x = "Trust", y = "Loyalty", eiv_bootstrap = 200)
+#' # association <- associate(fit, structure)
+#' # indirect_effect(association, x = "Trust", y = "Loyalty", eiv_bootstrap = 200)
 #' @export
-cssem_mediation <- function(association, x, y, mediators = NULL, disattenuate = TRUE,
+indirect_effect <- function(association, x, y, mediators = NULL, disattenuate = TRUE,
                             eiv_bootstrap = 0L, delta = 1, seed = 1L) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
-  if (is.null(scores)) stop("association does not carry locked scores; re-run cssem_associate().", call. = FALSE)
+  if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
   all_names <- names(scores)
   if (length(x) != 1L || length(y) != 1L || !all(c(x, y) %in% all_names)) stop("x and y must be locked construct names.", call. = FALSE)
   if (identical(x, y)) stop("x and y must differ.", call. = FALSE)
@@ -365,20 +365,20 @@ cssem_mediation <- function(association, x, y, mediators = NULL, disattenuate = 
 
   structure(c(core, list(x = x, y = y, n = nrow(scores), delta = delta,
     disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap, status = "associational")),
-    class = "cssem_mediation")
+    class = "indirect_effect")
 }
 
 #' Return a tidy mediation effect ledger
 #'
-#' @param mediation A `cssem_mediation` object.
+#' @param mediation A `indirect_effect` object.
 #' @return A data frame with one row per total, direct, indirect, and
 #'   path-specific effect, carrying the reported effect, interval, estimation
 #'   basis, and associational status.
 #' @examples
-#' # cssem_mediation_ledger(mediation)
+#' # indirect_effect_ledger(mediation)
 #' @export
-cssem_mediation_ledger <- function(mediation) {
-  if (!inherits(mediation, "cssem_mediation")) stop("mediation must be a cssem_mediation.", call. = FALSE)
+indirect_effect_ledger <- function(mediation) {
+  if (!inherits(mediation, "indirect_effect")) stop("mediation must be a indirect_effect.", call. = FALSE)
   summary <- .mediation_reported(mediation$summary, isTRUE(mediation$disattenuated))
   ledger <- data.frame(component = summary$component, path = NA_character_,
     effect = summary$reported_effect, ci_low = summary$reported_ci_low, ci_high = summary$reported_ci_high,
@@ -395,11 +395,11 @@ cssem_mediation_ledger <- function(mediation) {
 
 #' Print an associational CS-SEM mediation decomposition
 #'
-#' @param x A `cssem_mediation` object.
+#' @param x A `indirect_effect` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_mediation <- function(x, ...) {
+print.indirect_effect <- function(x, ...) {
   paths <- nrow(x$path_specific)
   cat(sprintf("CS-SEM associational mediation: %s -> %s  (n = %d, %d mediating path%s)\n",
     x$x, x$y, x$n, paths, if (paths == 1L) "" else "s"))

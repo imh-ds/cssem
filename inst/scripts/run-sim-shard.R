@@ -30,8 +30,8 @@ cat("cssem", as.character(utils::packageVersion("cssem")), "| part =", part,
 
 if (identical(part, "measurement")) {
   # S1 latent recovery across the screening measurement conditions.
-  res <- cssem_run_comparator_validation(
-    cssem_measurement_validation_manifest("screening"),
+  res <- validate_comparator(
+    measurement_manifest("screening"),
     reps = reps, seed = seed, folds = 3L, iterations = 8L, workers = workers)
   utils::write.csv(res, file.path(outdir, "measurement.csv"), row.names = FALSE)
   cat("measurement done: rows", nrow(res), "\n")
@@ -39,7 +39,7 @@ if (identical(part, "measurement")) {
   # S2/S3 structural on the full grid capped at N <= 500, strided across shards
   # for load balance. Each shard gets a unique seed offset so draws never
   # collide across shards while staying fully reproducible.
-  manifest <- cssem_structural_validation_manifest("full")
+  manifest <- structural_manifest("full")
   manifest <- manifest[manifest$n <= 500L, , drop = FALSE]
   keep <- (((seq_len(nrow(manifest)) - 1L) %% nshards) + 1L) == shard
   shard_manifest <- manifest[keep, , drop = FALSE]
@@ -47,7 +47,7 @@ if (identical(part, "measurement")) {
   if (nrow(shard_manifest) == 0L) {
     cat("empty shard; nothing to do\n")
   } else {
-    res <- cssem_run_structural_comparator_validation(
+    res <- validate_structure_comparator(
       shard_manifest, reps = reps, seed = seed + (shard - 1L) * 10000L,
       folds = 3L, iterations = 8L, workers = workers)
     utils::write.csv(res, file.path(outdir, sprintf("structural_shard_%02d.csv", shard)),

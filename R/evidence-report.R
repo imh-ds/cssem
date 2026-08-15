@@ -39,7 +39,7 @@
 
 # Per-edge effect rows, with causal status merged in from a routing table.
 .evidence_effects <- function(association, routing) {
-  ledger <- cssem_effect_ledger(association)
+  ledger <- effect_ledger(association)
   estimate <- ifelse(is.finite(ledger$corrected_estimate), ledger$corrected_estimate, ledger$naive_estimate)
   key <- paste(ledger$predictor, ledger$outcome, sep = "→")
   status <- rep("associational", nrow(ledger)); robustness <- rep(NA_real_, nrow(ledger)); estimand <- rep(NA_character_, nrow(ledger))
@@ -59,16 +59,16 @@
 }
 
 .evidence_constructs <- function(fit) {
-  ledger <- cssem_evidence_ledger(fit)
+  ledger <- evidence_ledger(fit)
   ledger$distinctiveness <- 1 - ledger$redundancy_max
   ledger$verdict <- vapply(seq_len(nrow(ledger)), function(i)
     .construct_verdict(ledger$stability[i], ledger$redundancy_max[i], ledger$warnings[i]), character(1))
   ledger[, c("construct", "stability", "held_out_loss", "distinctiveness", "warnings", "verdict")]
 }
 
-# One causal-claims row from a cssem_causal_effect or cssem_causal_mediation.
+# One causal-claims row from a causal_effect or causal_indirect_effect.
 .causal_claim_row <- function(effect) {
-  if (inherits(effect, "cssem_causal_mediation")) {
+  if (inherits(effect, "causal_indirect_effect")) {
     indirect <- .mediation_reported(effect$summary, isTRUE(effect$disattenuated))
     row <- indirect[indirect$component == "indirect_total", ]
     data.frame(claim = sprintf("%s → %s", effect$x, effect$y), type = "indirect (interventional)",
@@ -76,13 +76,13 @@
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
       label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
       stringsAsFactors = FALSE)
-  } else if (inherits(effect, "cssem_causal_effect")) {
+  } else if (inherits(effect, "causal_effect")) {
     data.frame(claim = sprintf("%s → %s", effect$treatment, effect$outcome), type = "direct",
       estimand = effect$estimand, effect = effect$adjusted_effect, ci_low = effect$ci_low, ci_high = effect$ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
       label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
       stringsAsFactors = FALSE)
-  } else stop("causal claims must be cssem_causal_effect or cssem_causal_mediation objects.", call. = FALSE)
+  } else stop("causal claims must be causal_effect or causal_indirect_effect objects.", call. = FALSE)
 }
 
 .evidence_causal_claims <- function(routing, causal) {
@@ -102,42 +102,42 @@
 #' causal-claims section (declared direct and interventional-mediation effects
 #' with identification and robustness). Every row carries a plain-language verdict
 #' derived from transparent rules over the raw signals. Unlike the standalone
-#' `cssem_effect_ledger()`, edge status is routed in from `routing` rather than
+#' `effect_ledger()`, edge status is routed in from `routing` rather than
 #' fixed at associational, so a declared causal edge is reported as such.
 #'
-#' @param association A `cssem_association` from [cssem_associate()].
-#' @param fit Optional `cssem_fit`; adds the construct evidence section.
-#' @param routing Optional `cssem_routing` from [cssem_route()]; supplies per-edge
+#' @param association A `cssem_association` from [associate()].
+#' @param fit Optional `fit_states`; adds the construct evidence section.
+#' @param routing Optional `cssem_routing` from [route()]; supplies per-edge
 #'   causal status and contributes its causal edges to the causal-claims section.
-#' @param causal Optional list of [cssem_causal_effect()] and/or
-#'   [cssem_causal_mediation()] objects to add to the causal-claims section.
-#' @return An object of class `cssem_evidence_report`.
+#' @param causal Optional list of [causal_effect()] and/or
+#'   [causal_indirect_effect()] objects to add to the causal-claims section.
+#' @return An object of class `evidence_report`.
 #' @examples
-#' # cssem_evidence_report(association, fit = fit, routing = routing,
-#' #   causal = list(cssem_causal_mediation(association, "Trust", "Loyalty", adjust = "Quality")))
+#' # evidence_report(association, fit = fit, routing = routing,
+#' #   causal = list(causal_indirect_effect(association, "Trust", "Loyalty", adjust = "Quality")))
 #' @export
-cssem_evidence_report <- function(association, fit = NULL, routing = NULL, causal = list()) {
+evidence_report <- function(association, fit = NULL, routing = NULL, causal = list()) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
-  if (!is.null(fit) && !inherits(fit, "cssem_fit")) stop("fit must be a cssem_fit.", call. = FALSE)
+  if (!is.null(fit) && !inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!is.null(routing) && !inherits(routing, "cssem_routing")) stop("routing must be a cssem_routing.", call. = FALSE)
-  if (inherits(causal, c("cssem_causal_effect", "cssem_causal_mediation"))) causal <- list(causal)
-  if (length(causal) && !all(vapply(causal, inherits, logical(1), "cssem_causal_effect") | vapply(causal, inherits, logical(1), "cssem_causal_mediation")))
-    stop("causal must be a list of cssem_causal_effect or cssem_causal_mediation objects.", call. = FALSE)
+  if (inherits(causal, c("causal_effect", "causal_indirect_effect"))) causal <- list(causal)
+  if (length(causal) && !all(vapply(causal, inherits, logical(1), "causal_effect") | vapply(causal, inherits, logical(1), "causal_indirect_effect")))
+    stop("causal must be a list of causal_effect or causal_indirect_effect objects.", call. = FALSE)
 
   structure(list(
     constructs = if (!is.null(fit)) .evidence_constructs(fit) else NULL,
     effects = .evidence_effects(association, routing),
     causal_claims = .evidence_causal_claims(routing, causal),
-    status = "reported"), class = "cssem_evidence_report")
+    status = "reported"), class = "evidence_report")
 }
 
 #' Print the unified CS-SEM evidence report
 #'
-#' @param x A `cssem_evidence_report` object.
+#' @param x A `evidence_report` object.
 #' @param ... Unused.
 #' @return `x`, invisibly.
 #' @export
-print.cssem_evidence_report <- function(x, ...) {
+print.evidence_report <- function(x, ...) {
   cat("CS-SEM Evidence Report\n")
   cat("======================\n")
   num <- function(v, digits = 3) ifelse(is.finite(v), formatC(v, format = "f", digits = digits), "-")

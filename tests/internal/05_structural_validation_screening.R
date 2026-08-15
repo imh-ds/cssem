@@ -6,8 +6,8 @@ dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
 workers <- min(4L, max(1L, parallel::detectCores(logical = FALSE) - 1L))
 
 started <- proc.time()[["elapsed"]]
-structural_results <- cssem_run_structural_validation(
-  cssem_structural_validation_manifest("screening"), reps = 3, seed = 2026, workers = workers
+structural_results <- validate_structure(
+  structural_manifest("screening"), reps = 3, seed = 2026, workers = workers
 )
 elapsed <- proc.time()[["elapsed"]] - started
 utils::write.csv(structural_results, file.path(results_dir, "structural_screening.csv"), row.names = FALSE)

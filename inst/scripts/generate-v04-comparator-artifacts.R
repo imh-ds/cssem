@@ -6,9 +6,9 @@ library(cssem)
 output_dir <- file.path("tests", "internal", "validation_results")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-manifest <- cssem_measurement_validation_manifest("screening")
+manifest <- measurement_manifest("screening")
 started <- Sys.time()
-comparators <- cssem_run_comparator_validation(
+comparators <- validate_comparator(
   manifest,
   reps = 3,
   seed = 4026,

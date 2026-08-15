@@ -6,12 +6,12 @@ library(cssem)
 output_dir <- file.path("tests", "internal", "validation_results")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-manifest <- cssem_structural_validation_manifest("screening")
+manifest <- structural_manifest("screening")
 # Each scenario-replication job is seed-deterministic, so parallel workers change
 # only runtime, not results. Leave one core free for the OS.
 workers <- max(1L, parallel::detectCores() - 1L)
 started <- Sys.time()
-comparators <- cssem_run_structural_comparator_validation(
+comparators <- validate_structure_comparator(
   manifest,
   reps = 3,
   seed = 5026,

@@ -1,40 +1,40 @@
 category,current_name,proposed_name,collision_note
 Model / measurement,cssem_model,specify_measurement,IMPLEMENTED and DEPRECATED (.Deprecated() warning); ordinal()/continuous() helpers; both resolve to the same internal object
-Model / measurement,cssem_construct_card,construct_card,none
-Model / measurement,cssem_score,score_states,avoids base::structure-class ambiguity around bare `score`
-Model / measurement,cssem_fit,fit_states,bare `fit` sits near lavaan::fitted()/fitMeasures()
-Model / measurement,cssem_respondent_information,respondent_information,none
-Model / measurement,simulate_cssem_data,simulate_states,none
+Model / measurement,cssem_construct_card,construct_card,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Model / measurement,cssem_score,score_states,IMPLEMENTED and DEPRECATED (.Deprecated() warning); avoids base::structure-class ambiguity around bare `score`
+Model / measurement,cssem_fit,fit_states,IMPLEMENTED and DEPRECATED (.Deprecated() warning); bare `fit` sits near lavaan::fitted()/fitMeasures(); class "cssem_fit" renamed to "fit_states" consistently (print/plot methods follow)
+Model / measurement,cssem_respondent_information,respondent_information,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Model / measurement,simulate_cssem_data,simulate_states,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
 Structural / associational,cssem_structure,specify_structure,IMPLEMENTED and DEPRECATED (.Deprecated() warning); formula syntax + linear()/auto_monotone()/monotone_increasing()/monotone_decreasing()/smooth() shape markers; both resolve to the same internal object
-Structural / associational,cssem_associate,associate,none
-Structural / associational,cssem_route,route,none
+Structural / associational,cssem_associate,associate,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Structural / associational,cssem_route,route,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
 Structural / associational,cssem_effect,(removed - folded into specify_structure() shape markers),DEPRECATED (.Deprecated() warning); replaced by linear()/auto_monotone()/monotone_increasing()/monotone_decreasing()/smooth() formula markers inside specify_structure()
-Structural / associational,cssem_effect_card,effect_card,none
-Structural / associational,cssem_effect_ledger,effect_ledger,none
-Structural / associational,cssem_specification_gap,specification_gap,none
-Structural / associational,cssem_residual_diagnostics,residual_diagnostics,none
-Structural / associational,cssem_supported_envelope,supported_envelope,none
-Causal,cssem_causal_edge,causal_edge,none
-Causal,cssem_causal_effect,causal_effect,none
-Causal,cssem_causal_mediation,causal_indirect_effect,renamed off "mediation" vocabulary; see Mediation/moderation notes
-Mediation / moderation,cssem_mediation,indirect_effect,avoids mediation-the-package (mediate(), mediations(), medsens()) brand collision
-Mediation / moderation,cssem_mediation_ledger,indirect_effect_ledger,follows from cssem_mediation rename
-Mediation / moderation,cssem_moderated_mediation,conditional_indirect_effect,matches Hayes' standard term; avoids mediation::test.modmed() adjacency
-Mediation / moderation,cssem_simple_slopes,conditional_slopes,EXACT collision with reghelper::simple_slopes()
-Evidence reporting,cssem_evidence_ledger,evidence_ledger,none
-Evidence reporting,cssem_evidence_report,evidence_report,none
-Evidence reporting,cssem_validation_design,validation_design,none
-Evidence reporting,cssem_validation_report,validation_report,none
-Validation manifests,cssem_measurement_validation_manifest,measurement_manifest,none
-Validation manifests,cssem_mediation_validation_manifest,indirect_effect_manifest,follows from cssem_mediation rename
-Validation manifests,cssem_moderated_mediation_validation_manifest,conditional_indirect_effect_manifest,follows from cssem_moderated_mediation rename
-Validation manifests,cssem_structural_validation_manifest,structural_manifest,none
-Validation runners,cssem_run_measurement_validation,validate_measurement,none
-Validation runners,cssem_run_mediation_validation,validate_indirect_effect,follows from cssem_mediation rename
-Validation runners,cssem_run_moderated_mediation_validation,validate_conditional_indirect_effect,follows from cssem_moderated_mediation rename
-Validation runners,cssem_run_structural_validation,validate_structure,none
-Validation runners,cssem_run_comparator_validation,validate_comparator,none
-Validation runners,cssem_run_mediation_comparator_validation,validate_indirect_effect_comparator,follows from cssem_mediation rename
-Validation runners,cssem_run_moderated_mediation_comparator_validation,validate_conditional_indirect_effect_comparator,follows from cssem_moderated_mediation rename
-Validation runners,cssem_run_structural_comparator_validation,validate_structure_comparator,none
-Benchmarking,run_measurement_benchmark,benchmark_measurement,none
+Structural / associational,cssem_effect_card,effect_card,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Structural / associational,cssem_effect_ledger,effect_ledger,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Structural / associational,cssem_specification_gap,specification_gap,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Structural / associational,cssem_residual_diagnostics,residual_diagnostics,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Structural / associational,cssem_supported_envelope,supported_envelope,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Causal,cssem_causal_edge,causal_edge,IMPLEMENTED and DEPRECATED (.Deprecated() warning); class "cssem_causal_edge" renamed to "causal_edge" consistently
+Causal,cssem_causal_effect,causal_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); class "cssem_causal_effect" renamed to "causal_effect" consistently (print method follows)
+Causal,cssem_causal_mediation,causal_indirect_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); renamed off "mediation" vocabulary; class "cssem_causal_mediation" renamed to "causal_indirect_effect" consistently (print method follows); see Mediation/moderation notes
+Mediation / moderation,cssem_mediation,indirect_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); avoids mediation-the-package (mediate(), mediations(), medsens()) brand collision; class "cssem_mediation" renamed to "indirect_effect" consistently (print method follows)
+Mediation / moderation,cssem_mediation_ledger,indirect_effect_ledger,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_mediation rename
+Mediation / moderation,cssem_moderated_mediation,conditional_indirect_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); matches Hayes' standard term; avoids mediation::test.modmed() adjacency; class "cssem_moderated_mediation" renamed to "conditional_indirect_effect" consistently (print method follows)
+Mediation / moderation,cssem_simple_slopes,conditional_slopes,IMPLEMENTED and DEPRECATED (.Deprecated() warning); EXACT collision with reghelper::simple_slopes() avoided; class "cssem_simple_slopes" renamed to "conditional_slopes" consistently (print method follows)
+Evidence reporting,cssem_evidence_ledger,evidence_ledger,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Evidence reporting,cssem_evidence_report,evidence_report,IMPLEMENTED and DEPRECATED (.Deprecated() warning); class "cssem_evidence_report" renamed to "evidence_report" consistently (print method follows)
+Evidence reporting,cssem_validation_design,validation_design,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Evidence reporting,cssem_validation_report,validation_report,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation manifests,cssem_measurement_validation_manifest,measurement_manifest,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation manifests,cssem_mediation_validation_manifest,indirect_effect_manifest,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_mediation rename
+Validation manifests,cssem_moderated_mediation_validation_manifest,conditional_indirect_effect_manifest,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_moderated_mediation rename
+Validation manifests,cssem_structural_validation_manifest,structural_manifest,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation runners,cssem_run_measurement_validation,validate_measurement,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation runners,cssem_run_mediation_validation,validate_indirect_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_mediation rename
+Validation runners,cssem_run_moderated_mediation_validation,validate_conditional_indirect_effect,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_moderated_mediation rename
+Validation runners,cssem_run_structural_validation,validate_structure,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation runners,cssem_run_comparator_validation,validate_comparator,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Validation runners,cssem_run_mediation_comparator_validation,validate_indirect_effect_comparator,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_mediation rename
+Validation runners,cssem_run_moderated_mediation_comparator_validation,validate_conditional_indirect_effect_comparator,IMPLEMENTED and DEPRECATED (.Deprecated() warning); follows from cssem_moderated_mediation rename
+Validation runners,cssem_run_structural_comparator_validation,validate_structure_comparator,IMPLEMENTED and DEPRECATED (.Deprecated() warning)
+Benchmarking,run_measurement_benchmark,benchmark_measurement,IMPLEMENTED and DEPRECATED (.Deprecated() warning)

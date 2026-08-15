@@ -21,6 +21,32 @@
     fully functional; both front doors resolve to identical internal
     specifications and are interchangeable.
 
+* Renamed the remaining 36 exported `cssem_*()` functions to bare names
+  (e.g. `cssem_fit()` -> `fit_states()`, `cssem_associate()` -> `associate()`,
+  `cssem_mediation()` -> `indirect_effect()`), so the public API reads as its
+  own vocabulary rather than a forked branch of `lavaan`/`seminr`. The full
+  old-name -> new-name mapping, including the collision analysis behind each
+  choice, is recorded in `docs/naming-convention-v0.5.csv`. Notable renames:
+  * `cssem_mediation()`/`cssem_mediation_ledger()`/`cssem_moderated_mediation()`
+    moved off "mediation" vocabulary entirely (to `indirect_effect()`,
+    `indirect_effect_ledger()`, `conditional_indirect_effect()`) to avoid
+    reading as a fork of the `mediation` package's own `mediate()`/
+    `mediations()`.
+  * `cssem_simple_slopes()` -> `conditional_slopes()`, avoiding an exact name
+    collision with `reghelper::simple_slopes()`.
+  * `cssem_structure()`/`cssem_effect()` -> `specify_structure()` avoids
+    `base::structure()`.
+  * Every old `cssem_*()` name remains exported as a soft-deprecated
+    `.Deprecated()` alias that forwards to its replacement unchanged
+    (see `R/deprecated.R`); no existing code breaks.
+  * S3 classes and their `print()`/`plot()` methods were renamed consistently
+    alongside their constructor (e.g. class `"cssem_fit"` -> `"fit_states"`,
+    `print.cssem_fit()` -> `print.fit_states()`) so dispatch stays coherent
+    with the new names. Classes whose constructor name changed but which
+    already used a different class string (e.g. `cssem_associate()`'s
+    `"cssem_association"`, `cssem_route()`'s `"cssem_routing"`) were left
+    unchanged.
+
 ## Bug fixes and hardening
 
 * `cssem_causal_effect()` (and therefore `cssem_route()`) now refuses an
