@@ -35,6 +35,7 @@ structure <- specify_structure(
 Other model specification functions:
 \code{\link[=continuous]{continuous()}},
 \code{\link[=cssem_model]{cssem_model()}},
+\code{\link[=manifest]{manifest()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_measurement]{specify_measurement()}}
 }

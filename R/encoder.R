@@ -1,9 +1,21 @@
 .safe_scale <- function(x) { s <- stats::sd(x, na.rm = TRUE); if (!is.finite(s) || s == 0) 1 else s }
 
 .prepare_item <- function(x, scale, key, levels = NULL) {
-  if (scale == "continuous") {
+  if (scale %in% c("continuous", "manifest")) {
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(list(y = y, levels = NULL))
+  }
+  # Ordinal category codes must be whole numbers. Silently truncating a
+  # non-integer (e.g. an averaged sub-scale accidentally declared ordinal)
+  # would quietly discard information instead of surfacing the mistake.
+  if (!is.factor(x) && !is.character(x)) {
+    numeric_x <- suppressWarnings(as.numeric(x))
+    non_integer <- !is.na(numeric_x) & abs(numeric_x - round(numeric_x)) > 1e-8
+    if (any(non_integer))
+      stop("Ordinal indicators must have whole-number category codes (e.g. 1, 2, 3); found a non-integer value (",
+        signif(numeric_x[which(non_integer)[1L]], 6),
+        "). Declare this item continuous(), or round/bin it to categories before declaring it ordinal().",
+        call. = FALSE)
   }
   raw <- if (is.factor(x) || is.character(x)) as.integer(factor(x, ordered = TRUE)) else as.integer(x)
   lev <- if (is.null(levels)) sort(unique(raw[!is.na(raw)])) else levels
@@ -13,7 +25,7 @@
 }
 
 .prepare_for_encoder <- function(x, scale, key, levels) {
-  if (scale == "continuous") {
+  if (scale %in% c("continuous", "manifest")) {
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(y)
   }
@@ -51,38 +63,80 @@
   -sum(t(posterior[keep, , drop = FALSE]) * log(likelihood + 1e-12)) + ridge * par[1L]^2
 }
 
+# Closed-form weighted-least-squares M-step for one continuous item in the
+# mixture regression y_j = intercept + slope * z + N(0, sigma^2). Expands
+# each observed respondent's contribution across every quadrature node,
+# weighted by that respondent's posterior probability at the node -- the
+# standard EM M-step for a linear-Gaussian mixture, so no numerical
+# optimizer is needed (unlike the ordinal item's BFGS step).
+.continuous_em_update <- function(nodes, y, posterior) {
+  observed <- !is.na(y)
+  w <- as.vector(posterior[observed, , drop = FALSE])
+  design <- cbind(1, rep(nodes, each = sum(observed)))
+  response <- rep(y[observed], times = length(nodes))
+  fit <- stats::lm.wfit(design, response, w)
+  resid <- response - drop(design %*% fit$coefficients)
+  sigma <- sqrt(sum(w * resid^2) / sum(w))
+  list(type = "continuous", intercept = unname(fit$coefficients[1L]), slope = unname(fit$coefficients[2L]),
+    sigma = max(sigma, 1e-6))
+}
+
+.encoder_params <- function(e) if (identical(e$type, "ordinal")) c(e$a, e$tau) else c(e$intercept, e$slope, e$sigma)
+
+# Respondent-by-node posterior for a marginal mixture measurement model.
+# Ordinal items contribute a graded-response category log-probability;
+# continuous items contribute a Gaussian log-density around intercept +
+# slope * node. Both are summed in log-space onto the same quadrature grid,
+# so ordinal-only, continuous-only, and mixed constructs share one posterior
+# computation.
 .eap_posterior <- function(encoders, Y, nodes, prior_weights) {
   n <- nrow(Y); log_posterior <- matrix(log(prior_weights), n, length(nodes), byrow = TRUE)
   for (j in seq_along(encoders)) {
     y <- Y[, j]; observed <- !is.na(y); if (!any(observed)) next
     e <- encoders[[j]]
-    p <- .ordinal_probability(e$a, e$tau, nodes, e$k)
-    log_posterior[observed, ] <- log_posterior[observed, , drop = FALSE] + t(log(p[, y[observed], drop = FALSE] + 1e-12))
+    if (identical(e$type, "continuous")) {
+      mu <- e$intercept + e$slope * nodes
+      dens <- outer(y[observed], mu, function(yy, mm) stats::dnorm(yy, mm, e$sigma, log = TRUE))
+      log_posterior[observed, ] <- log_posterior[observed, , drop = FALSE] + dens
+    } else {
+      p <- .ordinal_probability(e$a, e$tau, nodes, e$k)
+      log_posterior[observed, ] <- log_posterior[observed, , drop = FALSE] + t(log(p[, y[observed], drop = FALSE] + 1e-12))
+    }
   }
   max_log <- apply(log_posterior, 1L, max)
   unnorm <- exp(log_posterior - max_log)
   unnorm / rowSums(unnorm)
 }
 
-.fit_ordinal_mml <- function(Y, k, iterations = 30L, nodes = seq(-4, 4, length.out = 31L)) {
+# Marginal-ML/EM measurement model for one construct, on a shared quadrature
+# grid. Item types (ordinal graded-response, continuous linear-Gaussian) are
+# dispatched per item within the same E-step/M-step loop, so an all-ordinal
+# construct runs the identical sequence of operations as before generalizing
+# to continuous/mixed items -- this function is a strict superset of the
+# prior ordinal-only estimator, not a rewrite of it.
+.fit_construct_mml <- function(Y, scales, k, iterations = 30L, nodes = seq(-4, 4, length.out = 31L)) {
   prior_weights <- stats::dnorm(nodes); prior_weights <- prior_weights / sum(prior_weights)
   starter <- apply(Y, 2L, function(y) (y - mean(y, na.rm = TRUE)) / .safe_scale(y))
   z <- rowMeans(starter, na.rm = TRUE); z[!is.finite(z)] <- 0; z <- as.numeric(scale(z))
-  encoders <- lapply(seq_len(ncol(Y)), function(j) .fit_ordinal(z, Y[, j], k[j]))
+  encoders <- lapply(seq_len(ncol(Y)), function(j)
+    if (scales[j] == "ordinal") .fit_ordinal(z, Y[, j], k[j]) else .fit_continuous(z, Y[, j]))
   converged <- FALSE
   for (step in seq_len(iterations)) {
     posterior <- .eap_posterior(encoders, Y, nodes, prior_weights)
     next_encoders <- lapply(seq_along(encoders), function(j) {
       old <- encoders[[j]]; y <- Y[, j]
-      start <- c(log(old$a), .threshold_parameters(old$tau))
-      opt <- stats::optim(start, .ordinal_em_nll, nodes = nodes, y = y, posterior = posterior, k = old$k,
-        method = "BFGS", control = list(maxit = 100L))
-      list(type = "ordinal", a = exp(opt$par[1L]),
-        tau = cumsum(c(opt$par[2L], exp(opt$par[-c(1L, 2L)]))), k = old$k,
-        convergence = opt$convergence)
+      if (identical(old$type, "ordinal")) {
+        start <- c(log(old$a), .threshold_parameters(old$tau))
+        opt <- stats::optim(start, .ordinal_em_nll, nodes = nodes, y = y, posterior = posterior, k = old$k,
+          method = "BFGS", control = list(maxit = 100L))
+        list(type = "ordinal", a = exp(opt$par[1L]),
+          tau = cumsum(c(opt$par[2L], exp(opt$par[-c(1L, 2L)]))), k = old$k)
+      } else {
+        .continuous_em_update(nodes, y, posterior)
+      }
     })
     delta <- max(vapply(seq_along(encoders), function(j) {
-      max(abs(c(encoders[[j]]$a, encoders[[j]]$tau) - c(next_encoders[[j]]$a, next_encoders[[j]]$tau)))
+      max(abs(.encoder_params(encoders[[j]]) - .encoder_params(next_encoders[[j]])))
     }, numeric(1)))
     encoders <- next_encoders
     if (delta < 1e-3) { converged <- TRUE; break }
@@ -91,7 +145,7 @@
   scores <- drop(posterior %*% nodes)
   list(encoders = encoders, nodes = nodes, prior_weights = prior_weights,
     training_scores = (scores - mean(scores)) / .safe_scale(scores),
-    converged = converged, iterations = step, estimator = "marginal_graded_response")
+    converged = converged, iterations = step)
 }
 
 .fit_ordinal <- function(z, y, k = NULL) {
@@ -115,70 +169,46 @@
   list(type = "continuous", intercept = beta[1], slope = beta[2], sigma = sqrt(weighted.mean((yy - drop(X %*% beta))^2, w)) + 1e-6)
 }
 
-.row_nll <- function(z, enc, Y) {
-  ans <- z^2 / 2
-  for (j in seq_along(enc)) {
-    y <- Y[[j]]; if (is.na(y)) next
-    e <- enc[[j]]
-    if (e$type == "continuous") ans <- ans + .5 * ((y - e$intercept - e$slope * z) / e$sigma)^2 + log(e$sigma)
-    else {
-      q <- stats::plogis(e$tau - e$a * z)
-      p <- if (y == 1L) q[1] else if (y == e$k) 1 - q[e$k - 1L] else q[y] - q[y - 1L]
-      ans <- ans - log(p + 1e-12)
-    }
-  }
-  ans
-}
-
-.score_rows <- function(encoders, Y) {
-  vapply(seq_len(nrow(Y)), function(i) stats::optimize(.row_nll, c(-5, 5), enc = encoders, Y = as.list(Y[i, ]))$minimum, numeric(1))
-}
-
-.ordinal_expected <- function(encoder, z) {
-  q <- sapply(encoder$tau, function(t) stats::plogis(t - encoder$a * z))
-  if (is.null(dim(q))) q <- matrix(q, ncol = 1L)
-  p <- cbind(q[, 1L], q[, -1L, drop = FALSE] - q[, -ncol(q), drop = FALSE], 1 - q[, ncol(q)])
-  drop(p %*% seq_len(encoder$k))
-}
-
 .fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL) {
+  if (identical(spec$scales[[1L]], "manifest")) {
+    y <- suppressWarnings(as.numeric(data[[spec$indicators]])); if (spec$keys[[1L]] < 0) y <- -y
+    standardize <- isTRUE(spec$standardize)
+    center <- if (standardize) mean(y, na.rm = TRUE) else 0
+    sc <- if (standardize) .safe_scale(y) else 1
+    return(list(type = "manifest", indicators = spec$indicators, key = spec$keys[[1L]],
+      standardize = standardize, center = center, scale = sc,
+      estimator = "manifest", converged = NA, iterations = 0L))
+  }
   if (is.null(category_levels)) category_levels <- vector("list", length(spec$indicators))
   items <- Map(.prepare_item, data[spec$indicators], spec$scales, spec$keys, category_levels)
   Y <- do.call(cbind, lapply(items, `[[`, "y")); colnames(Y) <- spec$indicators
-  if (all(spec$scales == "ordinal")) {
-    fitted <- .fit_ordinal_mml(Y, k = vapply(items, function(x) length(x$levels), integer(1)), iterations = max(8L, iterations * 2L))
-    return(c(fitted, list(indicators = spec$indicators, scales = spec$scales, keys = spec$keys,
-      levels = lapply(items, `[[`, "levels"))))
-  }
-  starter <- apply(Y, 2, function(y) (y - mean(y, na.rm = TRUE)) / .safe_scale(y))
-  z <- rowMeans(starter, na.rm = TRUE); z[!is.finite(z)] <- 0; z <- as.numeric(scale(z))
-  enc <- NULL
-  for (step in seq_len(iterations)) {
-    enc <- Map(function(y, sc, lev) if (sc == "ordinal") .fit_ordinal(z, y, length(lev)) else .fit_continuous(z, y), as.data.frame(Y), spec$scales, lapply(items, `[[`, "levels"))
-    z <- .score_rows(enc, Y); z <- (z - mean(z)) / .safe_scale(z)
-  }
-  list(encoders = enc, indicators = spec$indicators, scales = spec$scales, keys = spec$keys,
-       levels = lapply(items, `[[`, "levels"), training_scores = z,
-       converged = NA, iterations = iterations, estimator = "alternating_mixed_scale")
+  k <- vapply(items, function(x) if (is.null(x$levels)) NA_integer_ else length(x$levels), integer(1))
+  fitted <- .fit_construct_mml(Y, spec$scales, k = k, iterations = max(8L, iterations * 2L))
+  estimator <- if (all(spec$scales == "ordinal")) "marginal_graded_response"
+    else if (all(spec$scales == "continuous")) "marginal_linear_factor"
+    else "marginal_mixed"
+  c(fitted, list(estimator = estimator, indicators = spec$indicators, scales = spec$scales, keys = spec$keys,
+    levels = lapply(items, `[[`, "levels")))
 }
 
 .predict_encoder <- function(encoder, data) {
   if (!identical(names(data), encoder$indicators)) stop("Scoring data columns must exactly match the declared indicator order.", call. = FALSE)
-  Y <- do.call(cbind, Map(.prepare_for_encoder, data, encoder$scales, encoder$keys, encoder$levels))
-  if (!is.null(encoder$nodes)) {
-    posterior <- .eap_posterior(encoder$encoders, Y, encoder$nodes, encoder$prior_weights)
-    return(drop(posterior %*% encoder$nodes))
+  if (identical(encoder$type, "manifest")) {
+    y <- suppressWarnings(as.numeric(data[[encoder$indicators]])); if (encoder$key < 0) y <- -y
+    return((y - encoder$center) / encoder$scale)
   }
-  .score_rows(encoder$encoders, Y)
+  Y <- do.call(cbind, Map(.prepare_for_encoder, data, encoder$scales, encoder$keys, encoder$levels))
+  posterior <- .eap_posterior(encoder$encoders, Y, encoder$nodes, encoder$prior_weights)
+  drop(posterior %*% encoder$nodes)
 }
 
-# Return the full respondent-by-node posterior for a marginal graded-response
-# encoder, or NULL for encoders without a latent grid (the mixed-scale fallback).
-# This is the principled measurement-uncertainty object: the posterior mean is
-# the locked score, the posterior variance is the respondent's measurement
-# information, and posterior draws are plausible latent values.
+# Return the full respondent-by-node posterior for a marginal mixture
+# encoder, or NULL for a manifest (passthrough, no latent grid) encoder.
+# This is the principled measurement-uncertainty object: the posterior mean
+# is the locked score, the posterior variance is the respondent's
+# measurement information, and posterior draws are plausible latent values.
 .encoder_posterior <- function(encoder, data) {
-  if (is.null(encoder$nodes)) return(NULL)
+  if (identical(encoder$type, "manifest")) return(NULL)
   if (!identical(names(data), encoder$indicators)) stop("Scoring data columns must exactly match the declared indicator order.", call. = FALSE)
   Y <- do.call(cbind, Map(.prepare_for_encoder, data, encoder$scales, encoder$keys, encoder$levels))
   .eap_posterior(encoder$encoders, Y, encoder$nodes, encoder$prior_weights)
@@ -202,7 +232,16 @@
   nodes[index]
 }
 
+.ordinal_expected <- function(encoder, z) {
+  q <- sapply(encoder$tau, function(t) stats::plogis(t - encoder$a * z))
+  if (is.null(dim(q))) q <- matrix(q, ncol = 1L)
+  p <- cbind(q[, 1L], q[, -1L, drop = FALSE] - q[, -ncol(q), drop = FALSE], 1 - q[, ncol(q)])
+  drop(p %*% seq_len(encoder$k))
+}
+
 .item_metrics <- function(encoder, data) {
+  if (identical(encoder$type, "manifest"))
+    return(data.frame(item = character(), metric = character(), value = numeric()))
   z <- .predict_encoder(encoder, data[, encoder$indicators, drop = FALSE])
   out <- vector("list", length(encoder$encoders))
   for (j in seq_along(out)) {

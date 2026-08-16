@@ -1,5 +1,40 @@
 # cssem (development version)
 
+## New features
+
+* Added `manifest()`, a single-item, non-construct covariate declaration for
+  [specify_measurement()]. Its locked score is the (by default standardized)
+  observed column itself, computed out-of-fold from training-fold statistics
+  only, exactly like every other construct's cross-fitted score. Its
+  reliability is asserted, not estimated: `1` by default, or an externally
+  supplied value (e.g. a published test-retest reliability for a
+  deliberately single-item measure) that `associate()`'s errors-in-variables
+  correction consumes exactly as a measured construct's estimated
+  reliability. This closes a real gap: previously nothing could enter the
+  structural model without being a fitted multi-item construct, so a raw
+  control (age, a binary group indicator) had no path in at all.
+
+* Continuous-only and mixed ordinal/continuous constructs now share the same
+  marginal-ML/EAP measurement model as ordinal-only constructs, instead of
+  falling back to the weaker, posterior-free `"alternating_mixed_scale"`
+  estimator (removed). Ordinal items contribute a graded-response category
+  log-probability and continuous items a Gaussian log-density to the same
+  quadrature-grid posterior; ordinal items are still updated by BFGS on the
+  posterior-weighted graded-response likelihood, continuous items by
+  closed-form posterior-weighted least squares. This means continuous and
+  mixed constructs now get a real posterior, a real marginal EAP
+  reliability, and therefore real errors-in-variables disattenuation in
+  `associate()` -- previously these constructs always reported `NA`
+  reliability and were silently excluded from correction. An all-ordinal
+  construct runs the identical sequence of operations as before this change
+  (verified via the full existing regression suite); this is a strict
+  superset of the prior ordinal-only estimator, not a rewrite of it.
+
+* `ordinal()`-declared indicators now reject non-integer category codes
+  (e.g. an averaged sub-scale accidentally declared ordinal) with a clear
+  error, instead of `as.integer()` silently truncating them and discarding
+  information.
+
 # cssem 0.5.0 (2026-08-15)
 
 Frozen as a known reference point before work begins on manifest

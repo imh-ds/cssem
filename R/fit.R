@@ -1,9 +1,14 @@
 #' Fit cross-fitted CS-SEM construct states
 #'
 #' Fits a scale-aware measurement encoder for every theory-declared construct.
-#' Ordinal-only blocks use a marginal graded-response model with EAP scoring.
+#' Ordinal, continuous, and mixed-item constructs all share one marginal-ML/
+#' EAP measurement model, dispatched per item (graded-response likelihood for
+#' ordinal items, Gaussian likelihood for continuous items) on a common
+#' quadrature grid. A [manifest()] construct instead passes its single
+#' observed column through directly, with no fitted measurement model.
 #' Each returned locked score is predicted by an encoder trained without that
-#' respondent's fold.
+#' respondent's fold (manifest constructs are standardized out-of-fold too,
+#' from training-fold statistics only).
 #'
 #' @param model A `cssem_model` object.
 #' @param data A data frame containing all declared indicator columns.
@@ -43,8 +48,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
   construct_names <- names(model$constructs)
   locked <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
-  # Raw-scale out-of-fold posterior variance; NA for constructs scored without a
-  # latent grid (the experimental mixed-scale fallback).
+  # Raw-scale out-of-fold posterior variance; NA for manifest constructs (no
+  # latent grid - reliability is asserted, not estimated, for those).
   oof_variance <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
   oof_posterior <- vector("list", length(model$constructs)); names(oof_posterior) <- construct_names
   posterior_nodes <- NULL
@@ -72,7 +77,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
         locked[fold == k, nm] <- .predict_encoder(enc, test)
       }
       fold_scores[fold == k, k] <- locked[fold == k, nm]
-      metric_list[[paste(nm, k)]] <- cbind(construct = nm, fold = k, .item_metrics(enc, test))
+      im <- .item_metrics(enc, test)
+      if (nrow(im)) metric_list[[paste(nm, k)]] <- cbind(construct = nm, fold = k, im)
     }
     full[[nm]] <- .fit_encoder(data[, spec$indicators, drop = FALSE], spec, iterations)
     full_score <- .predict_encoder(full[[nm]], data[, spec$indicators, drop = FALSE])
@@ -83,7 +89,15 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   # used by the errors-in-variables structural correction.
   centers <- apply(locked, 2L, mean, na.rm = TRUE)
   scales_raw <- apply(locked, 2L, .safe_scale)
+  # A manifest() covariate with standardize = FALSE keeps its natural units:
+  # a no-op center/scale rather than the mean/SD computed above.
+  for (nm in construct_names) {
+    spec <- model$constructs[[nm]]
+    if (isTRUE(spec$manifest) && !isTRUE(spec$standardize)) { centers[[nm]] <- 0; scales_raw[[nm]] <- 1 }
+  }
   reliability <- vapply(construct_names, function(nm) {
+    spec <- model$constructs[[nm]]
+    if (isTRUE(spec$manifest)) return(spec$reliability)
     signal <- stats::var(locked[, nm], na.rm = TRUE)
     error <- mean(oof_variance[, nm], na.rm = TRUE)
     if (!is.finite(signal) || !is.finite(error) || signal <= 0) NA_real_ else signal / (signal + error)

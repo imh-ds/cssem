@@ -22,6 +22,7 @@ Declare continuous indicators for a construct
 \seealso{
 Other model specification functions:
 \code{\link[=cssem_model]{cssem_model()}},
+\code{\link[=manifest]{manifest()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_measurement]{specify_measurement()}},
 \code{\link[=specify_structure]{specify_structure()}}

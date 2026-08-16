@@ -37,6 +37,7 @@ model <- cssem_model(list(
 \seealso{
 Other model specification functions:
 \code{\link[=continuous]{continuous()}},
+\code{\link[=manifest]{manifest()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_measurement]{specify_measurement()}},
 \code{\link[=specify_structure]{specify_structure()}}

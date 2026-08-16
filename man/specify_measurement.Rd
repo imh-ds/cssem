@@ -7,8 +7,8 @@
 specify_measurement(..., folds = 5L, preset = c("default", "exploratory"))
 }
 \arguments{
-\item{...}{Named construct declarations, each an \code{\link[=ordinal]{ordinal()}} or
-\code{\link[=continuous]{continuous()}} call.}
+\item{...}{Named construct declarations, each an \code{\link[=ordinal]{ordinal()}},
+\code{\link[=continuous]{continuous()}}, or \code{\link[=manifest]{manifest()}} call.}
 
 \item{folds}{Number of cross-fitting folds. Must be at least two.}
 
@@ -21,7 +21,9 @@ An object of class \code{cssem_model}.
 \description{
 Friendly front door for \code{\link[=cssem_model]{cssem_model()}}. Each construct is declared with
 \code{\link[=ordinal]{ordinal()}} or \code{\link[=continuous]{continuous()}}, removing the need to spell out
-\code{list(indicators = , scales = )} and its defaults by hand.
+\code{list(indicators = , scales = )} and its defaults by hand. Use
+\code{\link[=manifest]{manifest()}} for a single-item covariate that should enter the structural
+model directly rather than through a fitted measurement model.
 }
 \examples{
 model <- specify_measurement(
@@ -32,6 +34,7 @@ model <- specify_measurement(
 Other model specification functions:
 \code{\link[=continuous]{continuous()}},
 \code{\link[=cssem_model]{cssem_model()}},
+\code{\link[=manifest]{manifest()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_structure]{specify_structure()}}
 }

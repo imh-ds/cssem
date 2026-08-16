@@ -39,3 +39,32 @@ test_that("specify_measurement() exploratory preset lightens folds like cssem_mo
     specify_measurement(A = ordinal("x", "y"), preset = "exploratory")$folds
   )
 })
+
+test_that("manifest() declares a single-item passthrough with sensible defaults", {
+  spec <- manifest("age")
+  expect_equal(spec$indicators, "age")
+  expect_equal(spec$scales, "manifest")
+  expect_equal(spec$reliability, 1)
+  expect_true(spec$standardize)
+  expect_error(manifest(c("age", "weight")))
+  expect_error(manifest(1L))
+})
+
+test_that("specify_measurement() builds a manifest construct with declared reliability/standardize", {
+  model <- specify_measurement(
+    Trust = ordinal("t1", "t2"),
+    Age = manifest("age", reliability = .8, standardize = FALSE)
+  )
+  spec <- model$constructs$Age
+  expect_true(spec$manifest)
+  expect_equal(spec$indicators, "age")
+  expect_equal(spec$reliability, .8)
+  expect_false(spec$standardize)
+  expect_false(model$constructs$Trust$manifest)
+})
+
+test_that("manifest() rejects an out-of-range reliability and a multi-indicator construct", {
+  expect_error(specify_measurement(Age = manifest("age", reliability = 0)))
+  expect_error(specify_measurement(Age = manifest("age", reliability = 1.5)))
+  expect_error(cssem_model(list(Age = list(indicators = c("age", "weight"), scales = "manifest"))))
+})

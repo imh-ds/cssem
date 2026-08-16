@@ -7,14 +7,34 @@ scales (`ordinal` or `continuous`), and their direction (`key`, -1 or 1).
 
 For ordinal and binary items, the measurement decoder is a monotone,
 regularized graded-response model: `P(X <= c | z) = logistic(tau[c] - a z)`,
-where `a > 0` and thresholds are ordered. The default ordinal engine estimates
-item parameters by marginal likelihood over a standard-normal latent grid and
-returns posterior-mean (EAP) respondent scores. This avoids optimizing
-respondent scores directly as PLS-style composites. Continuous items currently
-use a robust Gaussian linear decoder through a clearly labeled experimental
-mixed-scale fallback. Missing item responses contribute no likelihood term.
-Scores are standardized and positive keys make larger states correspond to
-larger item responses.
+where `a > 0` and thresholds are ordered. Continuous items use a
+linear-Gaussian decoder: `X = intercept + slope * z + N(0, sigma^2)`. Both
+item types are estimated by the same marginal-ML/EM procedure over a shared
+standard-normal quadrature grid: at each E-step, an item's contribution to
+the respondent-by-node posterior is its graded-response category
+log-probability (ordinal) or its Gaussian log-density (continuous), summed
+across items in log-space; at each M-step, ordinal item parameters are
+updated by BFGS on the posterior-weighted graded-response likelihood and
+continuous item parameters by closed-form posterior-weighted least squares.
+An all-ordinal construct therefore runs the identical estimator it always
+has; a construct built entirely from continuous items, or mixing ordinal and
+continuous items, gets the same posterior-based EAP scoring and reliability
+as an all-ordinal one, rather than a separate weaker path. Missing item
+responses contribute no likelihood term. Ordinal indicators must carry
+whole-number category codes; a non-integer value errors rather than being
+silently truncated. Scores are standardized and positive keys make larger
+states correspond to larger item responses.
+
+A `manifest()` declaration bypasses the measurement model entirely for a
+single observed column that is not itself a multi-item construct (a control
+variable such as age, or a deliberately single-item measure). Its locked
+score is the column's own (by default standardized) value, computed
+out-of-fold from training-fold statistics only, exactly like every other
+construct's cross-fitted score. Its reliability is asserted rather than
+estimated -- `1` by default (treated as measurement-error-free), or an
+externally supplied value (e.g. a published test-retest reliability for a
+single-item scale) that `associate()`'s errors-in-variables correction
+consumes exactly as it would a measured construct's estimated reliability.
 
 `fit_states()` uses K-fold cross-fitting. Every returned locked score is
 predicted by an encoder trained without that observation. Full-data encoders

@@ -40,9 +40,14 @@ encoders for future scoring, diagnostics, and measurement metadata.
 }
 \description{
 Fits a scale-aware measurement encoder for every theory-declared construct.
-Ordinal-only blocks use a marginal graded-response model with EAP scoring.
+Ordinal, continuous, and mixed-item constructs all share one marginal-ML/
+EAP measurement model, dispatched per item (graded-response likelihood for
+ordinal items, Gaussian likelihood for continuous items) on a common
+quadrature grid. A \code{\link[=manifest]{manifest()}} construct instead passes its single
+observed column through directly, with no fitted measurement model.
 Each returned locked score is predicted by an encoder trained without that
-respondent's fold.
+respondent's fold (manifest constructs are standardized out-of-fold too,
+from training-fold statistics only).
 }
 \examples{
 data <- simulate_states(n = 80, seed = 1)
