@@ -1,5 +1,11 @@
 # cssem (development version)
 
+# cssem 0.5.0 (2026-08-15)
+
+Frozen as a known reference point before work begins on manifest
+(single-item, non-construct) covariates and continuous/mixed-scale
+measurement support.
+
 ## New features
 
 * Added `specify_measurement()` and `specify_structure()`, friendlier front
