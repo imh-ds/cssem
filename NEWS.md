@@ -35,6 +35,30 @@
   error, instead of `as.integer()` silently truncating them and discarding
   information.
 
+## Bug fixes
+
+* `indirect_effect()` and `causal_indirect_effect()` no longer fail with
+  "subscript out of bounds" on full-mediation structures (no declared direct
+  `x -> y` edge) when disattenuating. The undeclared direct effect is zero by
+  construction and no longer blocks the disattenuated total.
+
+* `associate(reliability = ...)` now changes the errors-in-variables
+  correction. Previously, whenever the fit carried posterior variances (every
+  `fit_states()` fit does), reliability was re-estimated from them and the
+  supplied values were silently ignored, while `effect_ledger()` still
+  reported them as `predictor_reliability`. Supplied values now override the
+  fit's reliability for the named constructs only; unnamed constructs keep
+  the fit's value (previously a supplied vector replaced all of them). Values
+  must be named by locked constructs and lie in `(0, 1]`.
+
+* `score_states()` now returns new-record scores on the `locked_scores`
+  scale. It previously returned raw posterior means (SD about
+  `sqrt(reliability)` rather than 1), so structural coefficients estimated on
+  locked scores understated effects for new records by roughly
+  `1 - sqrt(reliability)`. `fit_states()` now stores the standardization it
+  applies (`score_center`, `score_scale`); fits created before this change
+  keep the raw scale with a warning to refit.
+
 # cssem 0.5.0 (2026-08-15)
 
 Frozen as a known reference point before work begins on manifest
