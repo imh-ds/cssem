@@ -232,9 +232,18 @@ specify_structure <- function(..., order = NULL) {
   matrix(unlist(columns, use.names = FALSE), ncol = length(predictors), dimnames = list(NULL, predictors))
 }
 
+# Monotone basis: at each knot, a convex hinge (x - knot)_+ and a concave hinge
+# min(x - knot, 0). Both are nondecreasing in x, so any nonnegative combination is
+# nondecreasing (and any nonpositive one nonincreasing), and together they span
+# convex, concave, S-shaped, and linear increasing curves. A convex-only basis
+# (the linear term plus (x - knot)_+ hinges) can only steepen, so it could not
+# represent diminishing returns or saturation. The pair at one knot sums to
+# x - knot, so no separate linear column is needed.
 .hinge_basis <- function(x, knots) {
   if (!length(knots)) return(matrix(x, ncol = 1L))
-  cbind(x, vapply(knots, function(knot) pmax(0, x - knot), numeric(length(x))))
+  convex <- vapply(knots, function(knot) pmax(0, x - knot), numeric(length(x)))
+  concave <- vapply(knots, function(knot) pmin(0, x - knot), numeric(length(x)))
+  matrix(cbind(convex, concave), nrow = length(x))
 }
 
 .train_basis <- function(x, shape) {
@@ -298,10 +307,10 @@ specify_structure <- function(..., order = NULL) {
     blocks[[predictor]] <- built$values; infos[[predictor]] <- built$info
     index <- seq_len(ncol(built$values)) + sum(vapply(blocks[-length(blocks)], ncol, integer(1))) + 1L
     if (.is_monotone_shape(built$info$shape)) {
-      # Constrain the linear term as well as the hinge increments so the basis is
-      # genuinely monotone. Leaving the linear term free lets a negative slope
-      # plus positive hinges trace a U-shape, which would let a symmetric
-      # nonlinear effect masquerade as a monotone one.
+      # Constrain every basis coefficient to one sign so the fit is genuinely
+      # monotone. Mixed signs would let a U-shape masquerade as a monotone
+      # effect; see .hinge_basis() for why one-signed coefficients still span
+      # both convex and concave monotone curves.
       constrained <- c(constrained, index)
       directions <- c(directions, rep(if (built$info$shape == "monotone_increasing") 1L else -1L, length(index)))
     }

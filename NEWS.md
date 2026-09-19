@@ -76,6 +76,19 @@
   scenario, 95% to 83% for monotone-decreasing); strong, smooth, threshold,
   and plateau shapes are detected at unchanged rates.
 
+* Monotone shapes can now be concave as well as convex. The increasing basis
+  was the linear term plus `(x - knot)_+` hinges with nonnegative
+  coefficients, so its slope could only increase: `monotone_increasing()`
+  could not represent diminishing returns or saturation, the most common
+  monotone nonlinearities. The basis now pairs a convex hinge
+  `(x - knot)_+` with a concave hinge `min(x - knot, 0)` at each knot; both
+  are nondecreasing, so the sign constraint still guarantees a monotone fit
+  while spanning convex, concave, S-shaped, and linear curves. In the same
+  benchmark, the monotone family went from never being selected to being
+  selected in 55% of replications for a concave-increasing relation and 38%
+  for a saturating one, overall nonlinear detection there rose from 52% to
+  68% and from 88% to 97%, and false nonlinear selection fell from 3% to 0%.
+
 # cssem 0.5.0 (2026-08-15)
 
 Frozen as a known reference point before work begins on manifest

@@ -125,8 +125,30 @@ test_that("monotone basis retains training-fold knots for scoring", {
   trained <- cssem:::.train_basis(c(-2, -1, 0, 1, 2), "monotone_increasing")
   scored <- cssem:::.predict_basis(c(-10, 10), trained$info)
   expect_equal(ncol(scored), ncol(trained$values))
-  expect_equal(ncol(trained$values), 4L)
+  expect_equal(ncol(trained$values), 6L)
   expect_false(any(trained$info$knots %in% c(-10, 10)))
+})
+
+test_that("monotone fits can be concave or convex but never non-monotone", {
+  # Regression: the increasing basis was the linear term plus (x - knot)_+
+  # hinges with nonnegative coefficients, so its slope could only increase: it
+  # could not represent diminishing returns. The concave hinges fix that while
+  # the sign constraint still rules out non-monotone fits.
+  x <- seq(-2, 2, length.out = 400)
+  fit_curve <- function(y, shape) {
+    model <- cssem:::.fit_shape_model(data.frame(x = x, y = y), "y", c(x = shape))
+    cssem:::.predict_shape_model(model, data.frame(x = x))
+  }
+  concave <- log(x + 2.5)            # increasing, diminishing returns
+  convex <- exp(x)                   # increasing, accelerating
+  u_shape <- x^2                     # not monotone
+  for (truth in list(concave, convex)) {
+    fitted <- fit_curve(truth, "monotone_increasing")
+    expect_true(all(diff(fitted) >= -1e-8))
+    expect_lt(mean((fitted - truth)^2), .01 * stats::var(truth))
+  }
+  expect_true(all(diff(fit_curve(-concave, "monotone_decreasing")) <= 1e-8))
+  expect_true(all(diff(fit_curve(u_shape, "monotone_increasing")) >= -1e-8))
 })
 
 test_that("structural repeated CV validates its repeat count", {
