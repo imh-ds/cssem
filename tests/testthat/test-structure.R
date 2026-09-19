@@ -25,6 +25,24 @@ test_that("associational layer uses locked scores and reports a shadow gap", {
   expect_identical(association$status, "associational")
 })
 
+test_that("a user-supplied reliability is the one the correction uses", {
+  # Regression: with posterior variances on the fit, .eiv_coefficients()
+  # re-estimated reliability from them and silently discarded associate()'s
+  # `reliability` argument, while the ledger still reported the supplied value.
+  d <- simulate_states(n = 300, seed = 21)
+  fit <- fit_states(specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)), folds = 3),
+    d, seed = 2, iterations = 8, diagnostics = FALSE)
+  structure_spec <- specify_structure(B ~ linear(A), order = c("A", "B"))
+  default <- effect_ledger(associate(fit, structure_spec, structural_repeats = 2L, seed = 1))
+  supplied <- effect_ledger(associate(fit, structure_spec, structural_repeats = 2L, seed = 1, reliability = c(A = .5)))
+  # One standardized predictor: the correction is exactly naive / reliability.
+  expect_equal(supplied$corrected_estimate, supplied$naive_estimate / .5, tolerance = 1e-8)
+  expect_equal(supplied$predictor_reliability, .5)
+  expect_false(isTRUE(all.equal(supplied$corrected_estimate, default$corrected_estimate)))
+  expect_error(associate(fit, structure_spec, reliability = c(Z = .5)), "named by locked construct")
+  expect_error(associate(fit, structure_spec, reliability = c(A = 1.5)), "\\(0, 1\\]")
+})
+
 test_that("edge declarations support policies while preserving character vectors", {
   declared <- cssem_structure(list(
     Quality = list(Trust = cssem_effect("monotone_increasing")),

@@ -541,10 +541,12 @@ specify_structure <- function(..., order = NULL) {
 #' @param structural_repeats Number of deterministic structural CV assignments.
 #' @param seed Seed used only for repeated structural folds.
 #' @param shadow_scope Shadow benchmark scope.
-#' @param reliability Optional named vector of per-construct reliabilities used
-#'   by the errors-in-variables correction. Defaults to the posterior
-#'   reliability carried on `fit`; when unavailable the corrected estimate is
-#'   omitted rather than reported uncorrected.
+#' @param reliability Optional numeric vector of reliabilities in `(0, 1]`,
+#'   named by locked construct, used by the errors-in-variables correction in
+#'   place of the fit's values for the named constructs (for example, for a
+#'   sensitivity analysis). Constructs not named keep the posterior (or
+#'   asserted) reliability carried on `fit`; when no reliability is available
+#'   the corrected estimate is omitted rather than reported uncorrected.
 #' @param eiv_bootstrap Number of percentile-bootstrap replicates for the
 #'   corrected-estimate interval. Zero disables the interval.
 #' @param respondent_weighting Experimental. `"information"` applies
@@ -583,14 +585,23 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
   declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
-  # Per-construct reliability used by the errors-in-variables correction. Defaults
-  # to the posterior reliability carried on the fit; NA where unavailable so the
-  # corrected estimate is simply omitted rather than silently wrong.
-  reliability_source <- if (is.null(reliability)) fit$reliability else reliability
+  # Per-construct reliability used by the errors-in-variables correction: the
+  # posterior reliability carried on the fit, overridden construct by construct
+  # by any user-supplied values. NA where unavailable so the corrected estimate is
+  # simply omitted rather than silently wrong.
   reliability_vec <- stats::setNames(rep(NA_real_, length(all_names)), all_names)
-  if (!is.null(reliability_source)) {
-    shared <- intersect(names(reliability_source), all_names)
-    reliability_vec[shared] <- as.numeric(reliability_source[shared])
+  if (!is.null(fit$reliability)) {
+    shared <- intersect(names(fit$reliability), all_names)
+    reliability_vec[shared] <- as.numeric(fit$reliability[shared])
+  }
+  overridden <- character(0)
+  if (!is.null(reliability)) {
+    if (!is.numeric(reliability) || is.null(names(reliability)) || any(!names(reliability) %in% all_names))
+      stop("reliability must be a numeric vector named by locked construct names.", call. = FALSE)
+    if (any(!is.finite(reliability) | reliability <= 0 | reliability > 1))
+      stop("reliability values must be in (0, 1].", call. = FALSE)
+    reliability_vec[names(reliability)] <- as.numeric(reliability)
+    overridden <- names(reliability)
   }
   # Optional inverse-variance respondent weighting, drawn from the per-respondent
   # posterior SD carried on the fit. Unavailable for score-only engines, which
@@ -607,6 +618,11 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     if (length(modeled) && nrow(sd) == nrow(scores)) {
       posterior_var <- sd^2
       if (respondent_weighting == "information") respondent_weights <- .information_weights(sd[, modeled, drop = FALSE])
+      # .eiv_coefficients() re-estimates reliability from posterior variances
+      # wherever they exist, which would silently replace a user-supplied value.
+      # Blank those constructs' variances so the supplied reliability is the one
+      # actually used (and the one reported).
+      for (nm in intersect(overridden, names(posterior_var))) posterior_var[[nm]] <- NA_real_
     }
   }
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope

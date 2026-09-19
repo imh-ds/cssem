@@ -41,10 +41,12 @@ nonlinear candidate.}
 
 \item{shadow_scope}{Shadow benchmark scope.}
 
-\item{reliability}{Optional named vector of per-construct reliabilities used
-by the errors-in-variables correction. Defaults to the posterior
-reliability carried on \code{fit}; when unavailable the corrected estimate is
-omitted rather than reported uncorrected.}
+\item{reliability}{Optional numeric vector of reliabilities in \verb{(0, 1]},
+named by locked construct, used by the errors-in-variables correction in
+place of the fit's values for the named constructs (for example, for a
+sensitivity analysis). Constructs not named keep the posterior (or
+asserted) reliability carried on \code{fit}; when no reliability is available
+the corrected estimate is omitted rather than reported uncorrected.}
 
 \item{eiv_bootstrap}{Number of percentile-bootstrap replicates for the
 corrected-estimate interval. Zero disables the interval.}
