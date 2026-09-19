@@ -352,19 +352,19 @@ specify_structure <- function(..., order = NULL) {
     metrics = .prediction_metrics(scores[[outcome]], predictions[[1L]]))
 }
 
-.selection_frequency <- function(base, candidates, candidate_meta, multiplier, folds_per_repeat) {
+.selection_frequency <- function(base, candidates, multiplier, folds_per_repeat) {
   repeats <- as.integer(length(base$fold_mse) / folds_per_repeat)
   # Stability means that a candidate repeatedly clears the same paired
   # baseline-improvement rule; it is not a winner-take-all contest between
-  # nearly equivalent nonlinear bases.
+  # nearly equivalent nonlinear bases. Every shape family faces the same
+  # standard-error margin: a bare positive improvement is not support, since
+  # with no signal it occurs in about half of all repeats.
   vapply(names(candidates), function(key) {
     candidate <- candidates[[key]]
-    monotone <- .is_monotone_shape(candidate_meta[[key]]$shape)
     supported <- vapply(seq_len(repeats), function(repeat_index) {
       index <- ((repeat_index - 1L) * folds_per_repeat + 1L):(repeat_index * folds_per_repeat)
       difference <- base$fold_mse[index] - candidate$fold_mse[index]
-      threshold <- if (monotone) 0 else multiplier * stats::sd(difference) / sqrt(length(difference))
-      mean(difference) > threshold
+      mean(difference) > multiplier * stats::sd(difference) / sqrt(length(difference))
     }, logical(1))
     mean(supported)
   }, numeric(1))
@@ -644,22 +644,19 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       candidate_meta[[key]] <- list(predictor = predictor, shape = shape, shapes = shapes)
     }
     candidate_keys <- names(nonlinear)
-    frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, candidate_meta, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
+    frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
     improvement <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) mean(baseline$fold_mse - x$fold_mse), numeric(1)), candidate_keys) else numeric()
     improvement_se <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) stats::sd(baseline$fold_mse - x$fold_mse) / sqrt(length(x$fold_mse)), numeric(1)), candidate_keys) else numeric()
     winner <- NA_character_
-    best_key <- NA_character_
     if (length(nonlinear)) {
-      valid <- which(is.finite(improvement) & is.finite(improvement_se))
-      if (length(valid)) best_key <- candidate_keys[valid[which.max(improvement[valid])]]
       winner <- .pick_shape_winner(candidate_keys, candidate_meta, improvement, improvement_se,
         frequency, smooth_uncertainty, shape_stability_min)
     }
-    monotone_winner <- length(winner) == 1L && !is.na(winner) && .is_monotone_shape(candidate_meta[[winner]]$shape)
-    best_significant <- length(best_key) == 1L && !is.na(best_key) && improvement[[best_key]] > smooth_uncertainty * improvement_se[[best_key]]
+    # The accepted shape must itself clear the standard-error margin; a
+    # monotone winner no longer borrows significance from a different
+    # (typically spline) candidate.
     select_nonlinear <- length(nonlinear) && length(winner) == 1L && !is.na(winner) && frequency[[winner]] >= shape_stability_min &&
-      (improvement[[winner]] > smooth_uncertainty * improvement_se[[winner]] ||
-        (monotone_winner && improvement[[winner]] > 0 && best_significant))
+      improvement[[winner]] > smooth_uncertainty * improvement_se[[winner]]
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)

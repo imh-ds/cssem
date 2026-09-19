@@ -107,6 +107,20 @@ test_that("winner selection prefers stable monotone candidates within uncertaint
   expect_equal(winner, "Trust::monotone_increasing")
 })
 
+test_that("a monotone candidate needs the same SE margin as a spline to count as supported", {
+  # Regression: monotone candidates used to count as supported in a repeat
+  # whenever their mean improvement was merely positive, which happens in about
+  # half of all repeats with no signal at all and drove a ~30-40% null
+  # false-nonlinear rate. Two repeats of three folds, improvement positive but
+  # well inside one standard error in each.
+  base <- list(fold_mse = rep(1, 6))
+  noisy <- list(fold_mse = 1 - c(.05, -.04, .02, .05, -.04, .02))
+  clear <- list(fold_mse = 1 - c(.05, .06, .055, .05, .06, .055))
+  frequency <- cssem:::.selection_frequency(base, list(noisy = noisy, clear = clear), multiplier = 1, folds_per_repeat = 3L)
+  expect_equal(unname(frequency[["noisy"]]), 0)
+  expect_equal(unname(frequency[["clear"]]), 1)
+})
+
 test_that("monotone basis retains training-fold knots for scoring", {
   trained <- cssem:::.train_basis(c(-2, -1, 0, 1, 2), "monotone_increasing")
   scored <- cssem:::.predict_basis(c(-10, 10), trained$info)

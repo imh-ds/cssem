@@ -59,6 +59,23 @@
   applies (`score_center`, `score_scale`); fits created before this change
   keep the raw scale with a warning to refit.
 
+## Changes to shape selection
+
+* Monotone shape candidates now face the same acceptance rule as spline
+  candidates in `associate()`. Previously a monotone candidate counted as
+  supported in a cross-validation repeat whenever its mean improvement was
+  merely positive (which happens in about half of all repeats with no signal),
+  and a monotone winner could be accepted on the strength of a different
+  candidate's significance. Every candidate must now improve on the linear
+  baseline by more than `smooth_uncertainty` standard errors, both within
+  repeats (selection frequency) and overall. In a 40-replication benchmark
+  (N = 300, four ordinal items, three folds) this cut false nonlinear
+  selection from 29% to 3% when the predictor is unrelated to the outcome,
+  and from 7% to 0% when the relation is linear. The price is lower detection
+  of modest monotone kinks (88% to 47% for the harness's monotone-increasing
+  scenario, 95% to 83% for monotone-decreasing); strong, smooth, threshold,
+  and plateau shapes are detected at unchanged rates.
+
 # cssem 0.5.0 (2026-08-15)
 
 Frozen as a known reference point before work begins on manifest
