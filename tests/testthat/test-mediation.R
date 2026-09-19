@@ -123,6 +123,23 @@ test_that("a path through a smooth edge is not disattenuated", {
   expect_true(is.na(out$path_specific$disattenuated_effect[[1L]]))
 })
 
+test_that("full mediation (no declared x -> y edge) is disattenuated, not an error", {
+  # Regression: the direct-edge eligibility lookup used `[[` on a name that does
+  # not exist when x -> y is undeclared, so every disattenuated full-mediation
+  # decomposition failed with "subscript out of bounds".
+  fx <- .mediation_fixture("single")
+  structure <- cssem_structure(list(M = "X", Y = "M"), order = c("X", "M", "Y"))
+  models <- list(X = NULL,
+    M = cssem:::.fit_shape_model(fx$scores, "M", c(X = "linear")),
+    Y = cssem:::.fit_shape_model(fx$scores, "Y", c(M = "linear")))
+  out <- cssem:::.cssem_mediation_core(models, fx$scores, structure, "X", "Y", reliability = c(X = .8, M = .8, Y = .8))
+  effect <- function(component) out$summary$disattenuated_effect[out$summary$component == component]
+  expect_equal(effect("direct"), 0)
+  expect_true(is.finite(effect("indirect_total")))
+  expect_equal(effect("total"), effect("indirect_total"))
+  expect_true(out$path_specific$disattenuated[[1L]])
+})
+
 test_that("public indirect_effect runs end to end through the real pipeline", {
   generated <- cssem:::.structural_validation_data("linear", 400, 5, items = 4L)
   fit <- fit_states(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)

@@ -154,7 +154,10 @@
     if (!length(values) || all(is.na(values))) NA_real_ else min(values, na.rm = TRUE)
   }
   mediating <- which(vapply(paths, length, integer(1)) > 2L)
-  direct_ok <- if (is.null(eligible)) NA else isTRUE(eligible[[.edge(x, y)]])
+  # With no declared x -> y edge (full mediation) the direct effect is zero by
+  # construction, so there is nothing to correct and it cannot block the total.
+  direct_edge <- .edge(x, y)
+  direct_ok <- if (is.null(eligible)) NA else if (!direct_edge %in% names(eligible)) TRUE else isTRUE(eligible[[direct_edge]])
   paths_ok <- if (is.null(eligible)) NA else all(vapply(paths[mediating], path_ok, logical(1)))
 
   summary <- data.frame(
