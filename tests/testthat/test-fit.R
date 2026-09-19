@@ -99,6 +99,28 @@ test_that("manifest() constructs pass through standardized (or raw) with asserte
   expect_equal(range(f_raw$locked_scores$Age), range(d$age))
 })
 
+test_that("score_states() returns scores on the locked_scores scale", {
+  # Regression: score_states() returned raw posterior means (SD ~ sqrt(reliability))
+  # while locked scores are standardized, so coefficients estimated on locked
+  # scores did not apply to new-record scores.
+  d <- simulate_states(n = 300, seed = 31)
+  d$age <- round(stats::rnorm(300, 40, 10))
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)),
+    Age = manifest("age", standardize = FALSE), folds = 3)
+  f <- fit_states(m, d, seed = 3, iterations = 10, diagnostics = FALSE)
+  indicators <- unlist(lapply(m$constructs, `[[`, "indicators"), use.names = FALSE)
+  scored <- score_states(f, d[, indicators])
+  for (nm in c("A", "B")) {
+    expect_equal(sd(scored[[nm]]), sd(f$locked_scores[[nm]]), tolerance = .03)
+    expect_equal(unname(stats::coef(stats::lm(f$locked_scores[[nm]] ~ scored[[nm]]))[2L]), 1, tolerance = .03)
+  }
+  # A manifest covariate kept in natural units stays in natural units.
+  expect_equal(scored$Age, d$age)
+  # A fit object without stored standardization falls back to the raw scale, loudly.
+  legacy <- f; legacy$score_center <- NULL
+  expect_warning(score_states(legacy, d[, indicators]), "predates stored score standardization")
+})
+
 test_that("ordinal() rejects non-integer category codes instead of truncating", {
   d <- simulate_states(n = 40, seed = 5)
   d$a1 <- d$a1 + 0.5

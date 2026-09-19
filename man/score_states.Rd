@@ -13,12 +13,14 @@ score_states(fit, new_data)
 in their declared order.}
 }
 \value{
-A data frame of construct scores.
+A data frame of construct scores on the \code{locked_scores} scale.
 }
 \description{
-Applies the full-data encoders retained in a \code{\link[=fit_states]{fit_states()}} object. This is
-intended for new observations; use \code{fit$locked_scores} for analyses of the
-estimation sample.
+Applies the full-data encoders retained in a \code{\link[=fit_states]{fit_states()}} object and
+standardizes the result with the same centering and scaling used for
+\code{fit$locked_scores}, so new-record scores are on the scale the structural
+estimates refer to. This is intended for new observations; use
+\code{fit$locked_scores} for analyses of the estimation sample.
 }
 \examples{
 # score_states(fit, new_survey_rows)

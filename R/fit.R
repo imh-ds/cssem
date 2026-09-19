@@ -122,6 +122,9 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
     warnings = warnings, residual_dependence = residual_dependence,
     uncertainty_draws = bags, seed = seed,
+    # The standardization applied to the out-of-fold scores, retained so that
+    # score_states() can put new records on the same scale as locked_scores.
+    score_center = centers, score_scale = scales_raw,
     measurement_engine = lapply(full, function(x) list(estimator = x$estimator, converged = x$converged, iterations = x$iterations))), class = "fit_states")
 }
 
@@ -246,14 +249,16 @@ respondent_information <- function(fit) {
 
 #' Score new compatible data
 #'
-#' Applies the full-data encoders retained in a [fit_states()] object. This is
-#' intended for new observations; use `fit$locked_scores` for analyses of the
-#' estimation sample.
+#' Applies the full-data encoders retained in a [fit_states()] object and
+#' standardizes the result with the same centering and scaling used for
+#' `fit$locked_scores`, so new-record scores are on the scale the structural
+#' estimates refer to. This is intended for new observations; use
+#' `fit$locked_scores` for analyses of the estimation sample.
 #'
 #' @param fit A `fit_states` object.
 #' @param new_data A data frame whose columns exactly match all model indicators
 #'   in their declared order.
-#' @return A data frame of construct scores.
+#' @return A data frame of construct scores on the `locked_scores` scale.
 #' @examples
 #' # score_states(fit, new_survey_rows)
 #' @export
@@ -262,8 +267,14 @@ score_states <- function(fit, new_data) {
   expected <- unlist(lapply(fit$model$constructs, `[[`, "indicators"), use.names = FALSE)
   if (!identical(names(new_data), expected))
     stop("Scoring data columns must exactly match all declared indicators in their declared order.", call. = FALSE)
-  ans <- lapply(fit$full_encoders, function(e) .predict_encoder(e, new_data[, e$indicators, drop = FALSE]))
-  as.data.frame(ans)
+  ans <- as.data.frame(lapply(fit$full_encoders, function(e) .predict_encoder(e, new_data[, e$indicators, drop = FALSE])))
+  if (is.null(fit$score_center) || is.null(fit$score_scale)) {
+    warning("This fit predates stored score standardization; scores are returned on the raw posterior-mean ",
+      "scale, not the locked_scores scale. Refit with fit_states() to score on the locked_scores scale.", call. = FALSE)
+    return(ans)
+  }
+  for (nm in names(ans)) ans[[nm]] <- (ans[[nm]] - fit$score_center[[nm]]) / fit$score_scale[[nm]]
+  ans
 }
 
 #' Create a construct evidence card
