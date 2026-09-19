@@ -78,6 +78,34 @@
 
 ## Changes to shape selection
 
+* `associate()` now decides whether an edge is nonlinear with a curvature test
+  that has a stated error rate, and uses cross-validation only to choose which
+  shape to report. The test is a heteroskedasticity-robust (HC3) Wald test of
+  the spline terms against the linear fit, Bonferroni-combined over
+  `spline_df` and Holm-adjusted across an outcome's shape-searched predictors,
+  controlled by the new `shape_alpha` argument (default `.05`). Its p-value is
+  reported in `candidate_metrics` and `effect_ledger()` as `nonlinearity_p`. A
+  flagged edge must still improve on the linear baseline out of fold to be
+  reported as curved. Robust standard errors are used because the regressors
+  are cross-fitted posterior means whose precision varies by respondent, which
+  a classical F-test's constant-variance assumption does not cover.
+
+  The previous rule required a tuned repeated-CV margin (`smooth_uncertainty`,
+  `shape_stability_min`) to be cleared both within repeats and overall. A
+  cross-validated loss improvement has no calibrated null distribution, so any
+  threshold on it is tuned rather than justified, and the settings that held
+  the false-curve rate near zero did so by discarding real curvature. Those two
+  arguments are retained, but now govern only which shape is reported: whether
+  a monotone candidate is preferred over a spline that predicts equally well.
+
+  In a 60-replication benchmark (N = 300, four ordinal items, three folds,
+  Quality ~ Trust), detection of modest monotone kinks rose from 55% to 83%
+  (increasing) and 85% to 98% (decreasing), and from 47% to 78% for diminishing
+  returns, while false nonlinear selection stayed at or below 5% for
+  unrelated, linear, and skewed-indicator data. On the true latent scores the
+  same test detects these shapes 100% of the time, so the remaining gap is
+  measurement error, not the selection rule.
+
 * Monotone shape candidates now face the same acceptance rule as spline
   candidates in `associate()`. Previously a monotone candidate counted as
   supported in a cross-validation repeat whenever its mean improvement was

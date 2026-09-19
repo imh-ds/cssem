@@ -11,6 +11,7 @@ associate(
   spline_df = c(3L, 4L),
   smooth_uncertainty = 1,
   shape_stability_min = 0.7,
+  shape_alpha = 0.05,
   structural_repeats = 5L,
   seed = 1L,
   shadow_scope = c("both", "temporal", "unrestricted"),
@@ -30,10 +31,19 @@ associate(
 \item{spline_df}{Degrees of freedom for low-complexity unconstrained spline
 candidates. Defaults to 3 and 4.}
 
-\item{smooth_uncertainty}{Paired foldwise-loss standard-error multiplier.}
+\item{smooth_uncertainty}{Paired foldwise-loss standard-error multiplier used
+when deciding which candidate shapes are predictively indistinguishable.
+It governs the reported shape, not whether an edge is nonlinear.}
 
 \item{shape_stability_min}{Minimum repeated-CV selection frequency for a
-nonlinear candidate.}
+monotone candidate to be reported in place of an equally predictive
+spline. Like \code{smooth_uncertainty}, it affects the reported shape only.}
+
+\item{shape_alpha}{Family-wise error rate for the curvature test that decides
+whether any edge of an outcome is nonlinear. The test is a
+heteroskedasticity-robust Wald test of the spline terms against the linear
+fit, Bonferroni-combined over \code{spline_df} and Holm-adjusted across the
+outcome's shape-searched predictors.}
 
 \item{structural_repeats}{Number of deterministic structural CV assignments.}
 

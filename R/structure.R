@@ -361,6 +361,58 @@ specify_structure <- function(..., order = NULL) {
     metrics = .prediction_metrics(scores[[outcome]], predictions[[1L]]))
 }
 
+# Heteroskedasticity-robust (HC3) Wald test for curvature on one edge, holding
+# every other declared predictor in its baseline (linear or product) form. The
+# spline columns are residualised against the restricted design, so the tested
+# coefficients are exactly the curvature a straight line cannot express, with
+# df - 1 degrees of freedom. Robust standard errors matter here because the
+# regressors are estimated posterior means whose precision varies by respondent,
+# so the classical constant-variance assumption does not hold. Candidate spline
+# sizes are searched, so their p-values are Bonferroni-combined.
+.nonlinearity_p <- function(scores, outcome, predictor, baseline_shapes, spline_df) {
+  y <- scores[[outcome]]; x <- scores[[predictor]]
+  others <- setdiff(names(baseline_shapes), predictor)
+  blocks <- lapply(others, function(other) {
+    if (.is_interaction(other)) {
+      terms <- .interaction_terms(other); scores[[terms[[1L]]]] * scores[[terms[[2L]]]]
+    } else scores[[other]]
+  })
+  restricted <- cbind(1, x, if (length(blocks)) matrix(unlist(blocks, use.names = FALSE), ncol = length(blocks)))
+  if (!all(is.finite(y)) || !all(is.finite(restricted))) return(NA_real_)
+  decomposition <- qr(restricted)
+  tests <- vapply(spline_df, function(df) {
+    basis <- tryCatch(splines::ns(x, df = df), error = function(err) NULL)
+    if (is.null(basis)) return(NA_real_)
+    extra <- qr.resid(decomposition, as.matrix(basis))
+    extra_qr <- qr(extra)
+    if (extra_qr$rank < 1L) return(NA_real_)
+    extra <- extra[, extra_qr$pivot[seq_len(extra_qr$rank)], drop = FALSE]
+    design <- cbind(restricted, extra)
+    fit <- stats::lm.fit(design, y)
+    if (anyNA(fit$coefficients)) return(NA_real_)
+    bread <- tryCatch(chol2inv(qr.R(qr(design))), error = function(err) NULL)
+    if (is.null(bread)) return(NA_real_)
+    leverage <- rowSums((design %*% bread) * design)
+    weighted <- design * (fit$residuals / pmax(1 - leverage, 1e-8))
+    covariance <- bread %*% crossprod(weighted) %*% bread
+    tested <- seq.int(ncol(restricted) + 1L, ncol(design))
+    block <- covariance[tested, tested, drop = FALSE]
+    solved <- tryCatch(solve(block, fit$coefficients[tested]), error = function(err) NULL)
+    if (is.null(solved)) return(NA_real_)
+    statistic <- drop(crossprod(fit$coefficients[tested], solved))
+    if (!is.finite(statistic) || statistic < 0) return(NA_real_)
+    stats::pchisq(statistic, df = length(tested), lower.tail = FALSE)
+  }, numeric(1))
+  tests <- tests[is.finite(tests)]
+  if (!length(tests)) return(NA_real_)
+  min(1, min(tests) * length(tests))
+}
+
+# Reported diagnostic: how often across repeated cross-validation assignments a
+# candidate clears the paired baseline-improvement margin. It no longer gates
+# acceptance (.nonlinearity_p() does), but it still separates a shape supported
+# in every split from one carried by a single lucky one, and it breaks ties
+# between otherwise equivalent shapes.
 .selection_frequency <- function(base, candidates, multiplier, folds_per_repeat) {
   repeats <- as.integer(length(base$fold_mse) / folds_per_repeat)
   # Stability means that a candidate repeatedly clears the same paired
@@ -544,9 +596,17 @@ specify_structure <- function(..., order = NULL) {
 #' @param folds Optional structural validation folds.
 #' @param spline_df Degrees of freedom for low-complexity unconstrained spline
 #'   candidates. Defaults to 3 and 4.
-#' @param smooth_uncertainty Paired foldwise-loss standard-error multiplier.
+#' @param smooth_uncertainty Paired foldwise-loss standard-error multiplier used
+#'   when deciding which candidate shapes are predictively indistinguishable.
+#'   It governs the reported shape, not whether an edge is nonlinear.
 #' @param shape_stability_min Minimum repeated-CV selection frequency for a
-#'   nonlinear candidate.
+#'   monotone candidate to be reported in place of an equally predictive
+#'   spline. Like `smooth_uncertainty`, it affects the reported shape only.
+#' @param shape_alpha Family-wise error rate for the curvature test that decides
+#'   whether any edge of an outcome is nonlinear. The test is a
+#'   heteroskedasticity-robust Wald test of the spline terms against the linear
+#'   fit, Bonferroni-combined over `spline_df` and Holm-adjusted across the
+#'   outcome's shape-searched predictors.
 #' @param structural_repeats Number of deterministic structural CV assignments.
 #' @param seed Seed used only for repeated structural folds.
 #' @param shadow_scope Shadow benchmark scope.
@@ -568,7 +628,8 @@ specify_structure <- function(..., order = NULL) {
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
-                             shape_stability_min = .70, structural_repeats = 5L, seed = 1L,
+                             shape_stability_min = .70, shape_alpha = .05,
+                             structural_repeats = 5L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
@@ -588,6 +649,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     stop("smooth_uncertainty must be a non-negative numeric scalar.", call. = FALSE)
   if (!is.numeric(shape_stability_min) || length(shape_stability_min) != 1L || shape_stability_min < 0 || shape_stability_min > 1)
     stop("shape_stability_min must be between zero and one.", call. = FALSE)
+  if (!is.numeric(shape_alpha) || length(shape_alpha) != 1L || !is.finite(shape_alpha) || shape_alpha <= 0 || shape_alpha >= 1)
+    stop("shape_alpha must be between zero and one.", call. = FALSE)
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
@@ -656,29 +719,44 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
     improvement <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) mean(baseline$fold_mse - x$fold_mse), numeric(1)), candidate_keys) else numeric()
     improvement_se <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) stats::sd(baseline$fold_mse - x$fold_mse) / sqrt(length(x$fold_mse)), numeric(1)), candidate_keys) else numeric()
+    # Curvature is decided by a test with a stated error rate, not by the
+    # cross-validated loss itself: a paired loss improvement has no calibrated
+    # null distribution, so any threshold on it is tuned rather than justified,
+    # and the tuned thresholds that hold the false-curve rate down also discard
+    # real curvature. Cross-validation then only chooses which shape to report.
+    # At most one edge per outcome may be nonlinear, so only the most
+    # significant predictor is eligible, and family-wise error across the
+    # searched predictors is controlled by Holm.
+    searched <- unique(vapply(candidate_meta, `[[`, character(1), "predictor"))
+    shape_p <- if (length(searched)) stats::setNames(vapply(searched, function(predictor)
+      .nonlinearity_p(scores, outcome, predictor, baseline_shapes, spline_df), numeric(1)), searched) else numeric()
+    adjusted <- if (length(shape_p)) stats::p.adjust(shape_p, method = "holm") else numeric()
+    flagged <- if (any(is.finite(adjusted) & adjusted < shape_alpha)) names(adjusted)[[which.min(adjusted)]] else NA_character_
     winner <- NA_character_
-    if (length(nonlinear)) {
-      winner <- .pick_shape_winner(candidate_keys, candidate_meta, improvement, improvement_se,
-        frequency, smooth_uncertainty, shape_stability_min)
+    if (!is.na(flagged)) {
+      eligible <- candidate_keys[vapply(candidate_meta[candidate_keys], function(meta) identical(meta$predictor, flagged), logical(1))]
+      winner <- .pick_shape_winner(eligible, candidate_meta, improvement[eligible], improvement_se[eligible],
+        frequency[eligible], smooth_uncertainty, shape_stability_min)
     }
-    # The accepted shape must itself clear the standard-error margin; a
-    # monotone winner no longer borrows significance from a different
-    # (typically spline) candidate.
-    select_nonlinear <- length(nonlinear) && length(winner) == 1L && !is.na(winner) && frequency[[winner]] >= shape_stability_min &&
-      improvement[[winner]] > smooth_uncertainty * improvement_se[[winner]]
+    # A flagged edge still has to predict better out of fold than the straight
+    # line it would replace; otherwise the reported shape is the linear one.
+    select_nonlinear <- length(winner) == 1L && !is.na(winner) && improvement[[winner]] > 0
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
     corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
       weights = respondent_weights, posterior_var = posterior_var)
+    edge_p <- function(predictor) if (predictor %in% names(adjusted)) unname(adjusted[[predictor]]) else NA_real_
     candidate_rows <- lapply(predictors, function(predictor) data.frame(outcome = outcome, predictor = predictor,
       candidate = "linear", shape = "linear", rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
       mean_mse_improvement = 0, mse_improvement_se = NA_real_, selection_frequency = if (select_nonlinear && candidate_meta[[winner]]$predictor == predictor) 0 else 1,
+      nonlinearity_p = edge_p(predictor),
       selected = !select_nonlinear || candidate_meta[[winner]]$predictor != predictor, stringsAsFactors = FALSE))
     if (length(nonlinear)) for (key in names(nonlinear)) {
       meta <- candidate_meta[[key]]; candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(outcome = outcome, predictor = meta$predictor,
         candidate = meta$shape, shape = meta$shape, rmse = nonlinear[[key]]$metrics[["rmse"]], r_squared = nonlinear[[key]]$metrics[["r_squared"]],
         mean_mse_improvement = improvement[[key]], mse_improvement_se = improvement_se[[key]], selection_frequency = frequency[[key]],
+        nonlinearity_p = edge_p(meta$predictor),
         selected = isTRUE(select_nonlinear) && identical(key, winner), stringsAsFactors = FALSE)
     }
     candidates[[outcome]] <- do.call(rbind, candidate_rows)
@@ -737,7 +815,7 @@ effect_card <- function(association, outcome) {
 #' @export
 effect_ledger <- function(association) {
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
-  selected <- association$candidate_metrics[association$candidate_metrics$selected, c("outcome", "predictor", "shape", "r_squared", "mean_mse_improvement", "mse_improvement_se", "selection_frequency"), drop = FALSE]
+  selected <- association$candidate_metrics[association$candidate_metrics$selected, c("outcome", "predictor", "shape", "r_squared", "mean_mse_improvement", "mse_improvement_se", "selection_frequency", "nonlinearity_p"), drop = FALSE]
   names(selected)[names(selected) == "r_squared"] <- "theory_r_squared"
   ledger <- merge(selected, association$contributions, by = c("outcome", "predictor"), all.x = TRUE, sort = FALSE)
   temporal <- association$specification_gap[association$specification_gap$shadow_scope == "temporal", c("outcome", "specification_gap"), drop = FALSE]

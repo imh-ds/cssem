@@ -93,6 +93,55 @@ test_that("default selector retains a clear monotone-increasing edge", {
   expect_gte(quality$selection_frequency[[1L]], .70)
 })
 
+test_that("curvature is decided by the reported test, not by the cross-validated loss", {
+  # Regression: acceptance used to require a tuned repeated-CV margin, which held
+  # the false-curve rate near zero only by discarding real curvature. A robust
+  # nested test now decides, and its p-value is reported alongside the shape.
+  set.seed(77)
+  n <- 300
+  trust <- rnorm(n)
+  kinked <- .55 * trust + .95 * pmax(trust, 0) + rnorm(n, sd = .35)
+  straight <- .65 * trust + rnorm(n, sd = .70)
+  specification <- cssem_structure(list(Quality = list(Trust = cssem_effect("auto"))),
+    order = c("Trust", "Quality"))
+  fit_of <- function(quality) structure(list(
+    locked_scores = data.frame(Trust = trust, Quality = quality),
+    folds = sample(rep(1:3, length.out = n))), class = "fit_states")
+  selected_row <- function(association) {
+    metrics <- association$candidate_metrics
+    metrics[metrics$selected & metrics$predictor == "Trust", , drop = FALSE]
+  }
+
+  curved <- selected_row(associate(fit_of(kinked), specification, seed = 77))
+  expect_true(curved$shape[[1L]] != "linear")
+  expect_lt(curved$nonlinearity_p[[1L]], .05)
+
+  linear <- selected_row(associate(fit_of(straight), specification, seed = 77))
+  expect_equal(linear$shape[[1L]], "linear")
+  expect_gt(linear$nonlinearity_p[[1L]], .05)
+
+  # The same curved edge is reported as linear once the test is made strict
+  # enough, so the shape follows the stated error rate.
+  strict <- selected_row(associate(fit_of(kinked), specification, seed = 77,
+    shape_alpha = max(curved$nonlinearity_p[[1L]] / 10, 1e-300)))
+  expect_equal(strict$shape[[1L]], "linear")
+  expect_error(associate(fit_of(kinked), specification, shape_alpha = 0), "shape_alpha")
+})
+
+test_that("the curvature test holds its level under unequal error variance", {
+  # The regressors are posterior means whose precision varies by respondent, so
+  # the test uses HC3 standard errors; a classical F-test rejects far too often
+  # when the residual variance grows with the predictor.
+  set.seed(78)
+  rejected <- vapply(seq_len(200), function(i) {
+    x <- rnorm(250)
+    y <- .5 * x + rnorm(250, sd = .4 + abs(x))
+    cssem:::.nonlinearity_p(data.frame(Trust = x, Quality = y), "Quality", "Trust",
+      c(Trust = "linear"), c(3L, 4L)) < .05
+  }, logical(1))
+  expect_lt(mean(rejected), .10)
+})
+
 test_that("winner selection prefers stable monotone candidates within uncertainty band", {
   candidate_keys <- c("Trust::monotone_increasing", "Trust::smooth_df3")
   candidate_meta <- list(
