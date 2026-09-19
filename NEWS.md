@@ -59,6 +59,23 @@
   applies (`score_center`, `score_scale`); fits created before this change
   keep the raw scale with a warning to refit.
 
+## Measurement convergence
+
+* `fit_states()` now defaults to `iterations = 15` (an EM cap of 30) instead
+  of 6 (a cap of 12). The old default stopped before convergence on ordinary
+  data: all four constructs of a 600-respondent, four-item example, and 59 of
+  175 fits in the continuous-integration simulation. EM still stops as soon
+  as it converges, so the extra budget costs little (55 s to 59 s on that
+  example, now converged in every fold).
+
+* `fit_states()` now warns, with a condition of class
+  `cssem_nonconvergence`, when any construct's full-data or fold encoder
+  reaches the EM cap; previously non-convergence was visible only in
+  `fit$measurement_engine`. `measurement_engine` also reports
+  `folds_converged` out of `folds`. The simulation harnesses, which record
+  convergence per job, muffle the warning. The `"exploratory"` preset's
+  deliberately light budget now warns too.
+
 ## Changes to shape selection
 
 * Monotone shape candidates now face the same acceptance rule as spline

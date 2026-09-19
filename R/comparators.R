@@ -143,7 +143,7 @@ validate_structure_comparator <- function(manifest, reps = 3L,
   index <- 0L
 
   cssem_elapsed <- system.time(
-    fit <- fit_states(model, data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    fit <- .fit_states_quiet(model, data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
   )["elapsed"]
   proxy <- .proxy_scores(data)
   cssem_version <- as.character(utils::packageVersion("cssem"))

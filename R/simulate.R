@@ -90,7 +90,7 @@ benchmark_measurement <- function(reps = 20L, n = 400L, seed = 1L, tolerance = .
     row <- row + 1L; d <- design[scenario, ]
     dat <- simulate_states(n = d$n, loading = d$loading, missing = d$missing, local_dependence = d$local_dependence, cross_loading = d$cross_loading, seed = seed + row); truth <- attr(dat, "truth")
     model <- .build_measurement(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"), B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = folds)
-    fit <- fit_states(model, dat, seed = seed + row, iterations = iterations, diagnostics = FALSE)
+    fit <- .fit_states_quiet(model, dat, seed = seed + row, iterations = iterations, diagnostics = FALSE)
     cs <- mean(abs(diag(stats::cor(fit$locked_scores, truth))))
     blocks <- list(1:4, 5:8)
     pls <- mean(vapply(blocks, function(ix) abs(stats::cor(rowMeans(dat[ix], na.rm=TRUE), truth[, if (min(ix)==1) 1 else 2], use="complete.obs")), numeric(1)))

@@ -52,11 +52,11 @@
 
 .validation_fit <- function(model, data, seed, folds, iterations, max_iterations, diagnostics) {
   model$folds <- folds
-  fit <- fit_states(model, data, seed = seed, iterations = iterations, diagnostics = diagnostics)
+  fit <- .fit_states_quiet(model, data, seed = seed, iterations = iterations, diagnostics = diagnostics)
   converged <- all(vapply(fit$measurement_engine, function(x) isTRUE(x$converged), logical(1)))
   attempts <- 1L
   if (!converged && max_iterations > iterations) {
-    fit <- fit_states(model, data, seed = seed, iterations = max_iterations, diagnostics = diagnostics)
+    fit <- .fit_states_quiet(model, data, seed = seed, iterations = max_iterations, diagnostics = diagnostics)
     converged <- all(vapply(fit$measurement_engine, function(x) isTRUE(x$converged), logical(1)))
     attempts <- 2L
   }

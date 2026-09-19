@@ -17,7 +17,11 @@
 #' @param draws Number of exploratory latent-state uncertainty draws. Set to
 #'   zero to omit them. These draws are not release-validated inferential
 #'   outputs.
-#' @param iterations Maximum optimization iterations for each measurement fit.
+#' @param iterations Iteration budget for each measurement fit: the EM loop
+#'   stops at convergence or after `max(8, 2 * iterations)` iterations. A
+#'   warning (class `cssem_nonconvergence`) lists any construct whose full-data
+#'   or fold encoder stopped at the cap; per-construct status is in
+#'   `fit$measurement_engine`.
 #' @param diagnostics Whether to calculate exploratory residual diagnostics and
 #'   item warnings. Disable for high-throughput simulation benchmarks.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight fitting
@@ -33,7 +37,7 @@
 #' fit <- fit_states(model, data, seed = 1, diagnostics = FALSE)
 #' @family measurement fitting functions
 #' @export
-fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
+fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       diagnostics = TRUE, preset = c("default", "exploratory")) {
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
@@ -55,13 +59,18 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
   posterior_nodes <- NULL
   full <- vector("list", length(model$constructs)); names(full) <- construct_names
   metric_list <- list(); stability <- numeric(length(full)); names(stability) <- names(full)
+  # Converged fold encoders per construct; NA for manifest constructs, which fit
+  # nothing iteratively.
+  fold_converged <- stats::setNames(rep(NA_integer_, length(construct_names)), construct_names)
   for (nm in names(model$constructs)) {
     spec <- model$constructs[[nm]]; fold_scores <- matrix(NA_real_, n, model$folds)
+    if (!isTRUE(spec$manifest)) fold_converged[[nm]] <- 0L
     category_levels <- Map(function(x, scale, key) .prepare_item(x, scale, key)$levels,
       data[spec$indicators], spec$scales, spec$keys)
     for (k in seq_len(model$folds)) {
       train <- data[fold != k, spec$indicators, drop = FALSE]; test <- data[fold == k, spec$indicators, drop = FALSE]
       enc <- .fit_encoder(train, spec, iterations, category_levels)
+      if (isTRUE(enc$converged)) fold_converged[[nm]] <- fold_converged[[nm]] + 1L
       posterior <- .encoder_posterior(enc, test)
       if (!is.null(posterior)) {
         if (is.null(posterior_nodes)) {
@@ -83,6 +92,18 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     full[[nm]] <- .fit_encoder(data[, spec$indicators, drop = FALSE], spec, iterations)
     full_score <- .predict_encoder(full[[nm]], data[, spec$indicators, drop = FALSE])
     stability[nm] <- abs(stats::cor(locked[, nm], full_score, use = "complete.obs"))
+  }
+  # Reaching the EM cap is otherwise visible only in fit$measurement_engine, so
+  # say so. The classed condition lets simulation harnesses, which record
+  # convergence themselves, muffle it.
+  unconverged <- construct_names[vapply(construct_names, function(nm)
+    isFALSE(full[[nm]]$converged) || (!is.na(fold_converged[[nm]]) && fold_converged[[nm]] < model$folds), logical(1))]
+  if (length(unconverged)) {
+    warning(structure(class = c("cssem_nonconvergence", "warning", "condition"), list(
+      message = sprintf(paste0("The measurement model reached its %d-iteration EM cap before converging for: %s. ",
+        "Scores may still be moving; refit with a larger `iterations` (see fit$measurement_engine)."),
+        max(8L, as.integer(iterations) * 2L), paste(unconverged, collapse = ", ")),
+      call = NULL)))
   }
   # Marginal EAP reliability on the raw latent scale: signal variance over signal
   # plus mean posterior (measurement) variance. This is the disattenuation factor
@@ -125,8 +146,16 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 6L,
     # The standardization applied to the out-of-fold scores, retained so that
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
-    measurement_engine = lapply(full, function(x) list(estimator = x$estimator, converged = x$converged, iterations = x$iterations))), class = "fit_states")
+    measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
+      converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
+      folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")
 }
+
+# fit_states() for the simulation harnesses, which record convergence per job
+# themselves: the user-facing non-convergence warning would otherwise repeat for
+# every replication.
+.fit_states_quiet <- function(...) withCallingHandlers(fit_states(...),
+  cssem_nonconvergence = function(w) invokeRestart("muffleWarning"))
 
 # Build the latent-state bag from real posterior draws. Each draw samples one
 # plausible value per respondent from the construct's out-of-fold posterior,

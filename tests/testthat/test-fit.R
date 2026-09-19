@@ -42,14 +42,19 @@ test_that("cross-fitting retains a rare ordinal category schema", {
   d$a1 <- 2L
   d$a1[1] <- 1L
   m <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), folds = 3)
-  expect_silent(f <- fit_states(m, d, seed = 8, iterations = 2, diagnostics = FALSE))
+  # A 2-iteration budget cannot converge; only that expected warning is muffled.
+  expect_silent(f <- withCallingHandlers(fit_states(m, d, seed = 8, iterations = 2, diagnostics = FALSE),
+    cssem_nonconvergence = function(w) invokeRestart("muffleWarning")))
   expect_true(all(is.finite(f$locked_scores$A)))
 })
 
 test_that("exploratory presets lighten model and fit defaults", {
   d <- simulate_states(n = 60, seed = 9)
   m <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), preset = "exploratory")
-  f <- fit_states(m, d, seed = 5, diagnostics = FALSE, preset = "exploratory")
+  # The exploratory budget (4 -> an 8-iteration EM cap) is deliberately light and
+  # says so rather than failing to converge silently.
+  expect_warning(f <- fit_states(m, d, seed = 5, diagnostics = FALSE, preset = "exploratory"),
+    class = "cssem_nonconvergence")
   expect_equal(m$folds, 2L)
   expect_equal(f$measurement_engine$A$iterations, 8L)
   expect_true(all(is.finite(f$locked_scores$A)))
@@ -119,6 +124,24 @@ test_that("score_states() returns scores on the locked_scores scale", {
   # A fit object without stored standardization falls back to the raw scale, loudly.
   legacy <- f; legacy$score_center <- NULL
   expect_warning(score_states(legacy, d[, indicators]), "predates stored score standardization")
+})
+
+test_that("non-convergence is reported, and the default budget converges on clean data", {
+  # Regression: the old default (iterations = 6, a 12-iteration EM cap) stopped
+  # before convergence on ordinary data with no warning; the only signal was
+  # fit$measurement_engine.
+  d <- simulate_states(n = 300, seed = 41)
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)), folds = 3)
+  expect_warning(low <- fit_states(m, d, seed = 1, iterations = 1, diagnostics = FALSE),
+    "reached its 8-iteration EM cap", class = "cssem_nonconvergence")
+  expect_false(low$measurement_engine$A$converged)
+  expect_lt(low$measurement_engine$A$folds_converged, 3L)
+  expect_no_warning(default <- fit_states(m, d, seed = 1, diagnostics = FALSE), class = "cssem_nonconvergence")
+  expect_true(all(vapply(default$measurement_engine, `[[`, logical(1), "converged")))
+  expect_true(all(vapply(default$measurement_engine, function(e) e$folds_converged == e$folds, logical(1))))
+  # Harness fits record convergence per job and stay quiet.
+  expect_no_warning(cssem:::.fit_states_quiet(m, d, seed = 1, iterations = 1, diagnostics = FALSE),
+    class = "cssem_nonconvergence")
 })
 
 test_that("ordinal() rejects non-integer category codes instead of truncating", {

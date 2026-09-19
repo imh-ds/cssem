@@ -98,7 +98,7 @@
 
   cssem_elapsed <- system.time({
     model <- generated$model; model$folds <- job$folds
-    fit <- fit_states(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    fit <- .fit_states_quiet(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
     association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
     mediation <- indirect_effect(association, x, y, eiv_bootstrap = job$eiv_bootstrap, seed = job$seed)

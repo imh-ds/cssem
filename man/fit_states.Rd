@@ -9,7 +9,7 @@ fit_states(
   data,
   seed = 1L,
   draws = 0L,
-  iterations = 6L,
+  iterations = 15L,
   diagnostics = TRUE,
   preset = c("default", "exploratory")
 )
@@ -26,7 +26,11 @@ uncertainty draws.}
 zero to omit them. These draws are not release-validated inferential
 outputs.}
 
-\item{iterations}{Maximum optimization iterations for each measurement fit.}
+\item{iterations}{Iteration budget for each measurement fit: the EM loop
+stops at convergence or after \code{max(8, 2 * iterations)} iterations. A
+warning (class \code{cssem_nonconvergence}) lists any construct whose full-data
+or fold encoder stopped at the cap; per-construct status is in
+\code{fit$measurement_engine}.}
 
 \item{diagnostics}{Whether to calculate exploratory residual diagnostics and
 item warnings. Disable for high-throughput simulation benchmarks.}
