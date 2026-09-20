@@ -39,6 +39,12 @@ test_that("a causal label requires a declared temporal order", {
     "adjusted_association")
 })
 
+test_that("causal mediation rejects temporal orders that contradict the structure", {
+  fixture <- .causal_mediation_fixture(n = 2000)
+  expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("M", "X", "Y", "C")), "contradicts")
+})
+
 test_that("the admissibility panel is populated", {
   fixture <- .causal_mediation_fixture(n = 2000)
   cm <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",

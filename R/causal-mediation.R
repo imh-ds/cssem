@@ -63,6 +63,42 @@
     robustness_value = robustness_value, min_path_reliability = min_reliability)
 }
 
+# Validate the order used to earn a causal mediation label against both the
+# declared graph and the structure's canonical order. The propagation engine
+# uses the latter, so accepting a contradictory caller-supplied order would let
+# metadata grant a causal label to an estimand evaluated under a different order.
+.validate_causal_mediation_order <- function(structure, all_names, temporal_order,
+                                             paths, x, y, adjust) {
+  if (is.null(temporal_order)) return(FALSE)
+  if (!is.character(temporal_order) || anyNA(temporal_order) ||
+      any(!nzchar(temporal_order)) || anyDuplicated(temporal_order))
+    stop("temporal_order must be a unique character vector of construct names.", call. = FALSE)
+  if (any(!temporal_order %in% all_names))
+    stop("temporal_order must contain only locked construct names.", call. = FALSE)
+
+  path_nodes <- unique(unlist(paths, use.names = FALSE))
+  required <- unique(c(path_nodes, adjust))
+  if (!all(required %in% temporal_order))
+    stop("temporal_order must contain the treatment, outcome, every directed-path mediator, and adjust constructs.", call. = FALSE)
+
+  canonical <- .resolve_temporal_order(structure, all_names)
+  shared <- canonical[canonical %in% temporal_order]
+  supplied_shared <- temporal_order[temporal_order %in% canonical]
+  if (!identical(shared, supplied_shared))
+    stop("temporal_order contradicts the declared structure order.", call. = FALSE)
+
+  for (path in paths) {
+    path_positions <- match(path, temporal_order)
+    if (any(diff(path_positions) <= 0L))
+      stop("temporal_order contradicts a declared directed path.", call. = FALSE)
+  }
+  if (any(match(adjust, temporal_order) >= match(x, temporal_order)))
+    stop("Adjustment constructs must precede the treatment in temporal_order.", call. = FALSE)
+  if (match(x, temporal_order) >= match(y, temporal_order))
+    stop("x must precede y in temporal_order.", call. = FALSE)
+  invisible(TRUE)
+}
+
 #' Estimate an interventional (causal) mediation effect on locked construct states
 #'
 #' Elevates the disattenuated mediation decomposition of [indirect_effect()] to a
@@ -149,11 +185,7 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
       paste(missing_adjust, collapse = ", "), node), call. = FALSE)
   }
 
-  if (!is.null(temporal_order)) {
-    constructs <- unique(c(x, y, mediators, adjust))
-    if (!all(constructs %in% temporal_order)) stop("temporal_order must contain the treatment, outcome, mediator, and adjust constructs.", call. = FALSE)
-    if (match(x, temporal_order) >= match(y, temporal_order)) stop("x must precede y in temporal_order.", call. = FALSE)
-  }
+  .validate_causal_mediation_order(structure, all_names, temporal_order, paths, x, y, adjust)
 
   reliability <- NULL
   if (isTRUE(disattenuate)) {
