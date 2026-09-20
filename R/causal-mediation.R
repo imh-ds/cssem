@@ -177,8 +177,11 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
     paste(offenders, collapse = ", "), x), call. = FALSE)
 
   # Discipline: every confounder must be a declared predictor of the outcome and
-  # of each mediator, so every stage model conditions on it.
-  needs <- c(list(y), as.list(mediators))
+  # of every mediator whose path contributes to the causal core. The core keeps
+  # all declared x -> y paths even when `mediators` narrows the panel/reporting
+  # selection, so checking only that selection would allow an unchecked path to
+  # contribute to the returned total and indirect effects.
+  needs <- c(list(y), as.list(path_mediators))
   for (node in needs) {
     missing_adjust <- setdiff(adjust, .declared_predictors(structure, node))
     if (length(missing_adjust)) stop(sprintf("Adjustment construct(s) %s must be declared as predictor(s) of %s to adjust the mediation effect for them.",
@@ -198,7 +201,9 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
   core <- .cssem_mediation_core(models, scores, structure, x, y,
     reliability = reliability, delta = delta, eiv_bootstrap = eiv_bootstrap, seed = seed)
 
-  panel <- .mediation_admissibility(scores, structure, x, y, adjust, mediators, reliability)
+  # The admissibility diagnostics must describe the same all-path estimand as
+  # the causal core, rather than only the optionally selected display subset.
+  panel <- .mediation_admissibility(scores, structure, x, y, adjust, path_mediators, reliability)
   has_order <- !is.null(temporal_order)
   label <- if (has_order && panel$identification_strength >= .10) "causal_under_assumptions" else "adjusted_association"
 

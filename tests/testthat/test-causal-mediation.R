@@ -79,6 +79,32 @@ test_that("causal-mediation discipline guards reject bad specifications", {
     "intermediate constructs")
 })
 
+test_that("causal mediation validates every declared path mediator", {
+  # Regression: selecting M1 for the panel skipped the adjustment check for
+  # M2, even though the causal core still estimated the X -> M2 -> Y path.
+  set.seed(31)
+  n <- 1200
+  C <- stats::rnorm(n)
+  X <- stats::rnorm(n)
+  M1 <- .5 * X + .4 * C + stats::rnorm(n, sd = .8)
+  M2 <- .4 * X + stats::rnorm(n, sd = .8)
+  Y <- .2 * X + .35 * M1 + .25 * M2 + .3 * C + stats::rnorm(n, sd = .8)
+  scores <- data.frame(X = X, C = C, M1 = M1, M2 = M2, Y = Y)
+  structure <- cssem_structure(
+    list(M1 = c("X", "C"), M2 = "X", Y = c("X", "M1", "M2", "C")),
+    order = c("C", "X", "M1", "M2", "Y"))
+  full_models <- list(
+    M1 = cssem:::.fit_shape_model(scores, "M1", c(X = "linear", C = "linear")),
+    M2 = cssem:::.fit_shape_model(scores, "M2", c(X = "linear")),
+    Y = cssem:::.fit_shape_model(scores, "Y", c(X = "linear", M1 = "linear", M2 = "linear", C = "linear")))
+  association <- structure(list(scores = scores, reliability = NULL,
+    full_models = full_models, structure = structure), class = "cssem_association")
+
+  expect_error(causal_indirect_effect(association, "X", "Y", adjust = "C",
+    mediators = "M1", temporal_order = c("C", "X", "M1", "M2", "Y")),
+    "declared as predictor")
+})
+
 test_that("an endogenous treatment propagates through causal mediation", {
   # Regression: X is itself endogenous (X = f(C)), so it carries a stage model.
   # The propagation engine must preserve X's injected shift or the interventional
