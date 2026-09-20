@@ -28,7 +28,7 @@ corrupt a study's numbers and therefore the paper's tables.
 
 ## Severe
 
-### [ ] S1. Character-coded ordinal items are ordered alphabetically
+### [x] S1. Character-coded ordinal items are ordered alphabetically — fixed in `018a468`
 
 **Where:** `.prepare_item()`, [R/encoder.R:22](../R/encoder.R#L22).
 
@@ -55,11 +55,13 @@ the identical data integer-coded (scratchpad `audit1.R`, probe 1).
 2. Store the *labels* in `levels`, not re-derived integer codes, so the stored
    schema is self-describing.
 
-**Tests:** a character Likert frame errors with the new message; the same data
-as an ordered factor with a scrambled alphabetical order recovers the latent at
-the integer-coded correlation (within Monte Carlo noise).
+**Tests:** added to `tests/testthat/test-fit.R` ("text category labels are
+rejected, and an ordered factor keeps its declared order"): a text Likert frame
+errors; numeric strings still fit; an ordered factor whose alphabetical order
+differs from its scale order gives scores identical to the integer-coded fit.
+Fails on the pre-fix code.
 
-### [ ] S2. `score_states()` re-derives category codes from the new data
+### [x] S2. `score_states()` re-derives category codes from the new data — fixed in `d1483db`
 
 **Where:** `.prepare_for_encoder()`, [R/encoder.R:29](../R/encoder.R#L29).
 
@@ -74,14 +76,16 @@ differing from the same respondents' scores in the full frame by up to
 **0.51 SD**; the integer-coded control differed by exactly 0 (scratchpad
 `audit1.R`, probes 2 and 3).
 
-**Fix:** map by the stored labels from S1 — `raw <- as.character(x)` for
-factors, the value itself for numeric codes — and keep the existing
-"unseen ordinal category" error for values absent from the stored levels.
-S1 and S2 share one fix and should land in one commit.
+**Fix (applied):** the stored schema is now the category values themselves — a
+factor's labels in its declared order, or the numeric codes — and both
+`.prepare_item()` and `.prepare_for_encoder()` match against those values. The
+existing "unseen ordinal category" error is unchanged.
 
-**Tests:** scoring any subset of the training frame reproduces those rows'
-`locked_scores`-scale scores exactly, for numeric, factor, and ordered-factor
-indicators; an unseen category still errors.
+**Tests:** added to `tests/testthat/test-fit.R` ("scoring maps categories by
+label, not by position in the scoring frame"): records whose factors are
+rebuilt from the rows in hand score identically to those rows in the training
+frame, the stored schema is the labels, and an unseen category still errors.
+Three of its expectations fail on the pre-fix code.
 
 ---
 
