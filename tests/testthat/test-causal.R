@@ -51,6 +51,30 @@ test_that("the DML estimand removes nonlinear confounding a linear adjustment le
   expect_output(print(dml), "nonlinear confounding")
 })
 
+test_that("flexible causal identification uses nonlinear residual treatment variation", {
+  # Regression: flexible estimands used the linear X ~ C R2 for their causal
+  # label, even when a spline nuisance model could predict X almost perfectly.
+  set.seed(56)
+  n <- 1200
+  C <- stats::runif(n, -2, 2)
+  X <- as.numeric(splines::ns(C, df = 5L)[, 1L])
+  Y <- C + stats::rnorm(n, sd = .15)
+  scores <- data.frame(X = as.numeric(scale(X)), C = as.numeric(scale(C)),
+    Y = as.numeric(scale(Y)))
+  association <- structure(list(scores = scores,
+    folds = sample(rep_len(1:5, n)), reliability = NULL, full_models = list(),
+    structure = cssem_structure(list(Y = c("X", "C")), order = c("C", "X", "Y"))),
+    class = "cssem_association")
+
+  for (estimand in c("adjusted_dml", "adjusted_ame")) {
+    effect <- causal_effect(association, "X", "Y", adjust = "C",
+      estimand = estimand, temporal_order = c("C", "X", "Y"))
+    expect_lt(effect$identification_strength, .10, info = estimand)
+    expect_identical(effect$label, "adjusted_association")
+    expect_false(isTRUE(effect$stable))
+  }
+})
+
 test_that("the DML estimand requires an adjustment set", {
   association <- .causal_nonlinear_fixture(n = 500)
   expect_error(causal_effect(association, "X", "Y", estimand = "adjusted_dml"), "requires an adjustment set")

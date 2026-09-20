@@ -22,6 +22,23 @@
        stable = isTRUE(coefficients$stable))
 }
 
+# Identification for a flexible estimand is the treatment variation left after
+# the same nonlinear nuisance fit used by the estimator. The ratio is bounded
+# to [0, 1] so cross-fitting noise cannot report more residual variation than
+# the observed treatment variance.
+.flexible_identification <- function(scores, treatment, x_residual) {
+  keep <- is.finite(x_residual) & is.finite(scores[[treatment]])
+  if (sum(keep) < 2L) return(list(strength = 0, treatment_r2 = 1,
+    residual_variance = NA_real_, treatment_variance = NA_real_))
+  residual_variance <- mean(x_residual[keep]^2)
+  treatment_variance <- stats::var(scores[[treatment]][keep])
+  strength <- if (!is.finite(residual_variance) || !is.finite(treatment_variance) ||
+      treatment_variance <= .Machine$double.eps) 0 else
+    max(0, min(1, residual_variance / treatment_variance))
+  list(strength = strength, treatment_r2 = 1 - strength,
+    residual_variance = residual_variance, treatment_variance = treatment_variance)
+}
+
 # Cross-fitted partially-linear DML: flexible spline nuisances remove nonlinear
 # confounding (which a linear adjustment cannot), and the orthogonal score yields
 # an analytic interval. Estimated on the denoised construct states; not
@@ -41,10 +58,22 @@
   }
   keep <- is.finite(x_residual) & is.finite(y_residual)
   x_residual <- x_residual[keep]; y_residual <- y_residual[keep]; m <- length(x_residual)
-  theta <- sum(x_residual * y_residual) / sum(x_residual^2)
+  identification <- .flexible_identification(scores, treatment,
+    { residual <- rep(NA_real_, n); residual[keep] <- x_residual; residual })
+  denominator <- sum(x_residual^2)
+  invalid <- m < 2L || !is.finite(denominator) || denominator <=
+    .Machine$double.eps * max(1, sum(y_residual^2))
+  if (invalid) return(list(estimate = NA_real_, se = NA_real_, ci_low = NA_real_,
+    ci_high = NA_real_, df = m - spline_df * length(adjust) - 2L,
+    identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
+    stable = FALSE))
+  theta <- sum(x_residual * y_residual) / denominator
   score <- x_residual * (y_residual - theta * x_residual)
   se <- sqrt(mean(score^2) / mean(x_residual^2)^2 / m)
-  list(estimate = theta, se = se, ci_low = theta - 1.96 * se, ci_high = theta + 1.96 * se, df = m - spline_df * length(adjust) - 2L)
+  stable <- is.finite(theta) && is.finite(se) && identification$strength >= .10
+  list(estimate = theta, se = se, ci_low = theta - 1.96 * se, ci_high = theta + 1.96 * se,
+    df = m - spline_df * length(adjust) - 2L, identification_strength = identification$strength,
+    treatment_r2 = identification$treatment_r2, stable = stable)
 }
 
 # Cross-fitted doubly-robust average marginal effect (average derivative):
@@ -62,22 +91,35 @@
   formula_y <- stats::as.formula(sprintf("%s ~ splines::ns(%s, df = %d) + %s", outcome, treatment, spline_df, confounders))
   formula_x <- stats::as.formula(paste(treatment, "~", confounders))
   score <- rep(NA_real_, n)
+  x_residual <- rep(NA_real_, n)
   for (fold in sort(unique(folds))) {
     train <- folds != fold; test <- folds == fold
     model_y <- stats::lm(formula_y, scores[train, , drop = FALSE])
     model_x <- stats::lm(formula_x, scores[train, , drop = FALSE])
     residual_variance <- mean(stats::residuals(model_x)^2)
+    predicted_x <- stats::predict(model_x, scores[test, , drop = FALSE])
+    x_residual[test] <- scores[[treatment]][test] - predicted_x
+    if (!is.finite(residual_variance) || residual_variance <=
+        .Machine$double.eps * max(1, stats::var(scores[[treatment]][train], na.rm = TRUE))) next
     high <- low <- scores[test, , drop = FALSE]
     high[[treatment]] <- high[[treatment]] + step; low[[treatment]] <- low[[treatment]] - step
     derivative <- (stats::predict(model_y, high) - stats::predict(model_y, low)) / (2 * step)
     fitted_y <- stats::predict(model_y, scores[test, , drop = FALSE])
-    riesz <- (scores[[treatment]][test] - stats::predict(model_x, scores[test, , drop = FALSE])) / residual_variance
+    riesz <- (scores[[treatment]][test] - predicted_x) / residual_variance
     score[test] <- derivative + riesz * (scores[[outcome]][test] - fitted_y)
   }
+  identification <- .flexible_identification(scores, treatment, x_residual)
   score <- score[is.finite(score)]; m <- length(score)
+  if (m < 2L) return(list(estimate = NA_real_, se = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
+    df = m - spline_df * (length(adjust) + 1L) - 1L,
+    identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
+    stable = FALSE))
   estimate <- mean(score); se <- stats::sd(score) / sqrt(m)
+  stable <- is.finite(estimate) && is.finite(se) && identification$strength >= .10
   list(estimate = estimate, se = se, ci_low = estimate - 1.96 * se, ci_high = estimate + 1.96 * se,
-       df = m - spline_df * (length(adjust) + 1L) - 1L)
+       df = m - spline_df * (length(adjust) + 1L) - 1L,
+       identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
+       stable = stable)
 }
 
 #' Estimate a declared causal effect on locked construct states
@@ -177,7 +219,9 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     unadjusted <- unname(stats::coef(stats::lm(stats::reformulate(treatment, outcome), scores))[treatment])
     adjusted_naive <- unname(stats::coef(stats::lm(stats::reformulate(c(treatment, adjust), outcome), scores))[treatment])
     adjusted_effect <- fit_flexible$estimate; interval <- c(fit_flexible$ci_low, fit_flexible$ci_high)
-    disattenuated <- FALSE; stable <- TRUE
+    identification_strength <- fit_flexible$identification_strength
+    treatment_r2 <- fit_flexible$treatment_r2
+    disattenuated <- FALSE; stable <- isTRUE(fit_flexible$stable)
     robustness_value <- .robustness_value(fit_flexible$estimate / fit_flexible$se, fit_flexible$df)
     reliability_sensitivity <- NULL
   } else {
