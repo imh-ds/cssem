@@ -266,7 +266,8 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   claim_type <- if (length(adjusted_mediators)) "direct (adjusted)" else "total (adjusted)"
 
   has_adjust <- length(adjust) > 0L; has_order <- !is.null(temporal_order)
-  label <- if (has_adjust && has_order && identification_strength >= .10) "causal_under_assumptions"
+  estimand_stable <- !flexible || isTRUE(stable)
+  label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
   structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
