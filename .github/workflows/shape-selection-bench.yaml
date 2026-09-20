@@ -1,0 +1,83 @@
+name: Shape-selection confirmation benchmark
+
+# Manually-triggered confirmation run for associate()'s shape-selection rule:
+# detection, false-curve rate, and shape labelling across sample size, scale
+# length, reliability, careless responding and indicator skew.
+#
+# Each shard uploads its replications as a CSV containing not only the selected
+# shape but the raw evidence behind it (per-fold candidate losses, the
+# curvature-test p-value, and the same test on the true latent states), so a
+# revised rule can be scored from the artifact without refitting anything.
+# Seed-deterministic: sharding changes wall-clock only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      blocks:
+        description: "Optional comma-separated subset of blocks (default: all)"
+        required: false
+        default: ""
+      seed:
+        description: "Base seed"
+        required: false
+        default: "771001"
+
+env:
+  NSHARDS: "20"
+
+jobs:
+  bench:
+    name: shape shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+      - name: Install cssem
+        run: R CMD INSTALL --no-multiarch .
+      - name: Run shard
+        env:
+          SHAPE_SHARD: ${{ matrix.shard }}
+          SHAPE_NSHARDS: ${{ env.NSHARDS }}
+          SHAPE_SEED: ${{ github.event.inputs.seed }}
+          SHAPE_BLOCKS: ${{ github.event.inputs.blocks }}
+          SHAPE_OUTDIR: shape-out
+        run: Rscript inst/scripts/run-shape-bench-shard.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shape-shard-${{ matrix.shard }}
+          path: shape-out/
+          if-no-files-found: error
+
+  combine:
+    name: combine shards
+    needs: [bench]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - name: Download shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: shape-artifacts
+      - name: Summarise
+        env:
+          SHAPE_INDIR: shape-artifacts
+          SHAPE_OUTDIR: shape-combined
+        run: |
+          mkdir -p shape-combined
+          Rscript inst/scripts/summarise-shape-bench.R | tee shape-combined/summary.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shape-confirmation-results
+          path: shape-combined/
