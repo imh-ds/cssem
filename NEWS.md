@@ -14,6 +14,71 @@
   factor's own level order is now honoured rather than re-sorted, so an ordered
   factor and the equivalent integer codes give identical scores.
 
+## Breaking changes (reporting)
+
+* `route()` no longer reports a declared causal edge as `status = "causal"`
+  when the estimate is not identified. The status was assigned before the
+  effect was estimated, so an edge whose `causal_effect()` label came back
+  `adjusted_association` -- identification strength below .10, meaning almost
+  no treatment variation survives adjustment -- still read as a causal pathway
+  in the routing table and in `evidence_report()`, beside an interpretation
+  saying "weak identification". Such an edge now carries the new status
+  `"causal_weak"`, which keeps its declaration, estimand, adjustment set,
+  estimate, and robustness value while reporting that it is not an established
+  causal pathway. Code matching on `status == "causal"` will now exclude these
+  edges, which is the intent.
+
+* `evidence_report()` types a `causal_effect` claim from its adjustment set
+  rather than always calling it `"direct"`. A claim whose adjustment set
+  excludes the declared mediators of its treatment-outcome pair leaves every
+  mediating path open, so it is now typed `"total (adjusted)"`;
+  `"direct (adjusted)"` is used when a declared mediator is adjusted. Note that
+  with a declared temporal order the post-treatment guard refuses mediator
+  adjustment outright, so a causal-labelled `"adjusted_linear"` claim is always
+  a total-effect contrast. `causal_effect()` objects carry `claim_type` and
+  `adjusted_mediators`.
+
+## Bug fixes (reporting and propagation)
+
+* `indirect_effect()` and `causal_indirect_effect()` report a proportion
+  mediated computed from the effects they actually report. It was always the
+  naive indirect over the naive total, printed directly beneath disattenuated
+  effects under a heading reading "Effects are disattenuated": in the package's
+  own worked example it printed 0.466 while the effects above it, 0.235 and
+  0.424, give 0.554. The proportion is now withheld when the total and the
+  indirect are reported on different bases, which happens when only one of them
+  is correction-eligible; the objects carry `proportion_mediated_basis` and
+  retain `proportion_mediated_naive`, and the printed value names its basis
+  when that is not naive.
+
+* `conditional_slopes()` and `conditional_indirect_effect()` evaluate moderator
+  levels on the moderator's own scale. Levels are documented as
+  standard-deviation units but were used as raw values, which is correct only
+  because modeled constructs are standardized. A `manifest()` covariate kept in
+  natural units was not: with age in years (SD about 12), the
+  "-1 SD / mean / +1 SD" rows were evaluated at ages -1, 0, and 1 -- three
+  years of a forty-year range -- and labelled as spanning two standard
+  deviations. Levels are now converted to mean plus level times SD, the
+  reported `moderator_value` is on that scale, and the index of moderated
+  mediation divides by the span in the same units so it is per unit of the
+  moderator either way. Standardized constructs are unaffected.
+
+* `print()` on a `conditional_indirect_effect` no longer fails when the index
+  of moderated mediation could not be computed. The narrative read
+  `if (estimate > 0)`, which errors on `NA`, and described an index of exactly
+  zero as "weakens". The three cases -- unavailable, not distinguishable from
+  zero, and signed -- are now reported separately.
+
+* `evidence_report()` lists a causal claim once when the same effect arrives
+  both through `routing` and through `causal=`; previously it appeared twice
+  and read as two independent pieces of evidence. The explicitly passed object
+  is kept, since it may carry a bootstrap interval the routed one lacks.
+
+* `print()` on a `causal_indirect_effect` names the actual reason a claim is
+  not causal. The line was hard-coded to "no declared temporal order", but the
+  same label is assigned when the order was declared and identification
+  strength fell below .10; the strength is now reported in that case.
+
 ## Bug fixes (measurement)
 
 * The stored ordinal category schema is now the category values themselves -- a
