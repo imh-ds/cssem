@@ -1,14 +1,33 @@
 .safe_scale <- function(x) { s <- stats::sd(x, na.rm = TRUE); if (!is.finite(s) || s == 0) 1 else s }
 
+# Text category labels carry no order. Coercing them with factor() would sort
+# them alphabetically -- "always" < "never" < "often" < "rarely" < "sometimes"
+# for an ordinary frequency scale -- which scrambles the response scale and
+# destroys the construct without any error. Numeric strings ("1", "2") are
+# unambiguous and are converted; anything else must arrive as an ordered factor
+# (whose level order the user declared) or as integer codes.
+.as_ordinal_codes <- function(x) {
+  if (!is.character(x)) return(x)
+  numeric_x <- suppressWarnings(as.numeric(x))
+  unparsed <- is.na(numeric_x) & !is.na(x)
+  if (any(unparsed))
+    stop("Ordinal indicators supplied as text have no inferable category order (found \"",
+      x[which(unparsed)[1L]], "\"); alphabetical order would scramble the scale. ",
+      "Supply the item as an ordered factor whose levels are in scale order, or as integer category codes.",
+      call. = FALSE)
+  numeric_x
+}
+
 .prepare_item <- function(x, scale, key, levels = NULL) {
   if (scale %in% c("continuous", "manifest")) {
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(list(y = y, levels = NULL))
   }
+  x <- .as_ordinal_codes(x)
   # Ordinal category codes must be whole numbers. Silently truncating a
   # non-integer (e.g. an averaged sub-scale accidentally declared ordinal)
   # would quietly discard information instead of surfacing the mistake.
-  if (!is.factor(x) && !is.character(x)) {
+  if (!is.factor(x)) {
     numeric_x <- suppressWarnings(as.numeric(x))
     non_integer <- !is.na(numeric_x) & abs(numeric_x - round(numeric_x)) > 1e-8
     if (any(non_integer))
@@ -17,7 +36,9 @@
         "). Declare this item continuous(), or round/bin it to categories before declaring it ordinal().",
         call. = FALSE)
   }
-  raw <- if (is.factor(x) || is.character(x)) as.integer(factor(x, ordered = TRUE)) else as.integer(x)
+  # A factor's own level order is the declared scale order, so its codes are
+  # level positions rather than a re-sort.
+  raw <- as.integer(x)
   lev <- if (is.null(levels)) sort(unique(raw[!is.na(raw)])) else levels
   if (length(lev) < 2L) stop("Ordinal indicators need at least two observed categories.", call. = FALSE)
   y <- match(raw, lev); if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(lev) + 1L - y)
@@ -29,7 +50,7 @@
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(y)
   }
-  raw <- if (is.factor(x) || is.character(x)) as.integer(factor(x, ordered = TRUE)) else as.integer(x)
+  raw <- as.integer(.as_ordinal_codes(x))
   y <- match(raw, levels)
   if (any(!is.na(raw) & is.na(y))) stop("Scoring data contain an unseen ordinal category.", call. = FALSE)
   if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(levels) + 1L - y)

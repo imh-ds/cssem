@@ -150,3 +150,37 @@ test_that("ordinal() rejects non-integer category codes instead of truncating", 
   m <- specify_measurement(A = ordinal("a1", "a2", "a3", "a4"))
   expect_error(fit_states(m, d, seed = 1, iterations = 2, diagnostics = FALSE), "whole-number")
 })
+
+test_that("text category labels are rejected, and an ordered factor keeps its declared order", {
+  # Regression: character indicators were coded with factor(x, ordered = TRUE),
+  # whose level order is alphabetical. A frequency scale then became
+  # "always" < "never" < "often" < "rarely" < "sometimes", which scrambles the
+  # response scale silently: recovery of the generating latent fell to -0.27
+  # from 0.91 for the same data as integer codes.
+  set.seed(1)
+  n <- 300
+  z <- stats::rnorm(n)
+  labels <- c("never", "rarely", "sometimes", "often", "always")
+  codes <- function(truth) as.data.frame(stats::setNames(lapply(1:4, function(j)
+    cut(.8 * truth + stats::rnorm(n, 0, .6), c(-Inf, -1.2, -.4, .4, 1.2, Inf), labels = FALSE)),
+    paste0(if (identical(truth, z)) "a" else "b", 1:4)))
+  numeric_frame <- cbind(codes(z), codes(stats::rnorm(n)))
+  text_frame <- as.data.frame(lapply(numeric_frame, function(column) labels[column]),
+    stringsAsFactors = FALSE)
+  # Alphabetical level order differs from scale order, so the two disagree
+  # unless the declared order is honoured.
+  factor_frame <- as.data.frame(lapply(numeric_frame, function(column)
+    factor(labels[column], levels = labels, ordered = TRUE)))
+
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)), folds = 3)
+  expect_error(fit_states(m, text_frame, seed = 1, iterations = 4, diagnostics = FALSE),
+    "no inferable category order")
+  # Numeric strings are unambiguous and still accepted.
+  string_frame <- as.data.frame(lapply(numeric_frame, as.character), stringsAsFactors = FALSE)
+  expect_no_error(fit_states(m, string_frame, seed = 1, iterations = 4, diagnostics = FALSE))
+
+  numeric_fit <- fit_states(m, numeric_frame, seed = 1, iterations = 10, diagnostics = FALSE)
+  factor_fit <- fit_states(m, factor_frame, seed = 1, iterations = 10, diagnostics = FALSE)
+  expect_equal(factor_fit$locked_scores$A, numeric_fit$locked_scores$A, tolerance = 1e-8)
+  expect_gt(abs(stats::cor(factor_fit$locked_scores$A, z)), .85)
+})
