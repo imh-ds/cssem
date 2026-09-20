@@ -61,7 +61,11 @@ causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjus
 #' @param temporal_order Optional temporal order; required for causal edges.
 #' @param eiv_bootstrap Bootstrap resamples for causal-edge intervals.
 #' @param seed Bootstrap seed.
-#' @return An object of class `cssem_routing`.
+#' @return An object of class `cssem_routing`. A declared causal edge is routed
+#'   with status `"causal"` only when [causal_effect()] labels it
+#'   `causal_under_assumptions`; when identification fails it is routed
+#'   `"causal_weak"`, which keeps the declaration, estimand, and adjustment set
+#'   while reporting that the edge is not an established causal pathway.
 #' @examples
 #' # route(association,
 #' #   causal = list(causal_edge("Satisfaction", "Loyalty", adjust = "Trust")),
@@ -94,20 +98,25 @@ route <- function(association, causal = list(), predictive = list(), representat
   for (edge in causal) {
     key <- paste(edge$from, edge$to, sep = "→")
     if (!key %in% names(status)) stop(sprintf("Causal edge %s is not a declared structural edge.", key), call. = FALSE)
-    status[[key]] <- "causal"
     effect <- causal_effect(association, edge$from, edge$to, adjust = edge$adjust,
       estimand = edge$estimand, temporal_order = temporal_order, eiv_bootstrap = eiv_bootstrap, seed = seed)
+    # A declaration is a request for a causal reading, not a grant of one. The
+    # estimator decides: when identification fails (little treatment variation
+    # survives adjustment) the edge keeps its declaration and its estimand but
+    # is not reported as an established causal pathway.
+    status[[key]] <- if (identical(effect$label, "causal_under_assumptions")) "causal" else "causal_weak"
     causal_effects[[key]] <- effect; causal_lookup[[key]] <- edge
   }
 
   interpretation <- c(associational = "Adjusted association",
     predictive = "Predictive only (not interpreted)", representational = "Representational (not a structural effect)")
+  routed_causal <- c("causal", "causal_weak")
   causal_interpretation <- c(causal_under_assumptions = "Causal under assumptions",
     adjusted_association = "Adjusted association (weak identification)",
     unadjusted_association = "Unadjusted association")
   rows <- lapply(seq_len(nrow(edges)), function(i) {
     key <- paste(edges$from[[i]], edges$to[[i]], sep = "→"); s <- status[[key]]
-    if (s == "causal") {
+    if (s %in% routed_causal) {
       effect <- causal_effects[[key]]
       data.frame(path = key, status = s, estimand = causal_lookup[[key]]$estimand,
         adjustment_set = paste(causal_lookup[[key]]$adjust, collapse = ", "),
@@ -136,7 +145,7 @@ print.cssem_routing <- function(x, ...) {
   for (i in seq_len(nrow(x$table))) {
     row <- x$table[i, ]
     effect <- if (is.na(row$ci_low)) sprintf("% .3f", row$effect) else sprintf("% .3f [% .3f, % .3f]", row$effect, row$ci_low, row$ci_high)
-    detail <- if (identical(row$status, "causal") && is.finite(row$robustness_value))
+    detail <- if (row$status %in% c("causal", "causal_weak") && is.finite(row$robustness_value))
       sprintf("  adjust=%s  RV=%.2f", row$adjustment_set, row$robustness_value) else ""
     cat(sprintf("  %-28s %-16s %s   %s%s\n", row$path, row$status, effect, row$interpretation, detail))
   }

@@ -30,7 +30,11 @@ route(
 \item{seed}{Bootstrap seed.}
 }
 \value{
-An object of class \code{cssem_routing}.
+An object of class \code{cssem_routing}. A declared causal edge is routed
+with status \code{"causal"} only when \code{\link[=causal_effect]{causal_effect()}} labels it
+\code{causal_under_assumptions}; when identification fails it is routed
+\code{"causal_weak"}, which keeps the declaration, estimand, and adjustment set
+while reporting that the edge is not an established causal pathway.
 }
 \description{
 Assigns every declared structural edge a status and reports its allowed

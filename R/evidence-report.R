@@ -19,6 +19,9 @@
   if (negligible) return("Weak / unstable")
   strong <- stability >= 0.85 && (!is.finite(gap) || gap <= .EVIDENCE_GAP_OK)
   strength <- if (strong) "Robust" else "Moderate"
+  # A causal edge whose identification failed is reported as the descriptive
+  # effect it is, with the failure named, rather than as a causal pathway.
+  if (identical(status, "causal_weak")) return(paste(strength, "descriptive effect (declared causal, weakly identified)"))
   kind <- switch(status, causal = "causal pathway", predictive = "predictive effect", "descriptive effect")
   paste(strength, kind)
 }

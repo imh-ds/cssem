@@ -166,3 +166,53 @@ test_that("post-treatment adjustment is refused under a declared temporal order"
   ok <- causal_effect(assoc, "M", "Y", adjust = "X", temporal_order = c("X", "M", "Y"))
   expect_identical(ok$label, "causal_under_assumptions")
 })
+
+test_that("a weakly identified declared causal edge is not routed as causal", {
+  # Regression: route() set status "causal" before estimating, so an edge whose
+  # causal_effect() label came back adjusted_association (identification
+  # strength below .10) still read as a causal pathway in the routing table and
+  # in evidence_report().
+  set.seed(77)
+  n <- 300
+  control <- stats::rnorm(n)
+  # The adjuster explains almost all of the treatment, so almost no treatment
+  # variation survives adjustment.
+  treatment <- .99 * control + stats::rnorm(n, sd = .14)
+  outcome <- .4 * treatment + .3 * control + stats::rnorm(n, sd = .6)
+  fit <- structure(list(locked_scores = data.frame(C = as.numeric(scale(control)),
+    X = as.numeric(scale(treatment)), Y = as.numeric(scale(outcome))),
+    folds = sample(rep(1:3, length.out = n)),
+    reliability = c(C = .85, X = .85, Y = .85)), class = "fit_states")
+  association <- associate(fit, specify_structure(Y ~ linear(X) + linear(C),
+    order = c("C", "X", "Y")), seed = 77)
+
+  effect <- causal_effect(association, treatment = "X", outcome = "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y"))
+  expect_lt(effect$identification_strength, .10)
+  expect_identical(effect$label, "adjusted_association")
+
+  routing <- route(association, causal = list(causal_edge("X", "Y", adjust = "C")),
+    temporal_order = c("C", "X", "Y"))
+  row <- routing$table[routing$table$path == "X→Y", , drop = FALSE]
+  expect_identical(row$status[[1L]], "causal_weak")
+  # The declaration is kept: estimand, adjustment set, and estimate still report.
+  expect_identical(row$estimand[[1L]], "adjusted_linear")
+  expect_identical(row$adjustment_set[[1L]], "C")
+  expect_true(is.finite(row$effect[[1L]]))
+
+  report <- evidence_report(association, routing = routing)
+  edge <- report$effects[report$effects$path == "X→Y", , drop = FALSE]
+  expect_identical(edge$causal_status[[1L]], "causal_weak")
+  expect_false(grepl("causal pathway", edge$verdict[[1L]]))
+})
+
+test_that("the edge verdict names weak identification instead of claiming a pathway", {
+  strong <- list(stability = 1, estimate = .45, contribution = .08, gap = .05)
+  routed <- cssem:::.edge_verdict(strong$stability, strong$estimate, strong$contribution,
+    strong$gap, "causal")
+  weak <- cssem:::.edge_verdict(strong$stability, strong$estimate, strong$contribution,
+    strong$gap, "causal_weak")
+  expect_match(routed, "causal pathway")
+  expect_false(grepl("causal pathway", weak))
+  expect_match(weak, "weakly identified")
+})
