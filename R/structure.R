@@ -649,6 +649,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
                              preset = c("default", "exploratory")) {
+  .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
   preset <- match.arg(preset)

@@ -222,3 +222,38 @@ test_that("scoring maps categories by label, not by position in the scoring fram
   unseen$a1[1] <- "constantly"
   expect_error(score_states(f, unseen), "unseen ordinal category")
 })
+
+test_that("seeded entry points restore the caller's random stream", {
+  # Regression: fit_states(), associate(), the bootstraps and the harnesses all
+  # called set.seed() and never restored it, so a user's own random draws
+  # changed because they fitted a model. Determinism from the `seed` argument is
+  # deliberate; consuming the caller's stream is not.
+  d <- simulate_states(n = 200, seed = 3)
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)), folds = 3)
+  fit <- fit_states(m, d, seed = 1, iterations = 8, diagnostics = FALSE)
+  structure_spec <- specify_structure(B ~ A, order = c("A", "B"))
+
+  unchanged <- function(expr) {
+    set.seed(99); before <- .Random.seed
+    force(expr)
+    identical(before, .Random.seed)
+  }
+  expect_true(unchanged(fit_states(m, d, seed = 1, iterations = 4, diagnostics = FALSE)))
+  expect_true(unchanged(associate(fit, structure_spec, seed = 2)))
+  expect_true(unchanged(simulate_states(n = 50, seed = 7)))
+
+  # The caller's sequence is the one it would have had, and the fit is still
+  # reproducible from its own seed.
+  set.seed(1); first_draws <- stats::runif(3)
+  first_fit <- fit_states(m, d, seed = 5, iterations = 6, diagnostics = FALSE)
+  set.seed(1); second_draws <- stats::runif(3)
+  second_fit <- fit_states(m, d, seed = 5, iterations = 6, diagnostics = FALSE)
+  expect_identical(first_draws, second_draws)
+  expect_equal(first_fit$locked_scores, second_fit$locked_scores)
+
+  # A session that has not drawn a random number yet keeps none.
+  if (exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+    rm(".Random.seed", envir = globalenv())
+  invisible(simulate_states(n = 20, seed = 2))
+  expect_false(exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+})

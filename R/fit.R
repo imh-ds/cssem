@@ -39,6 +39,7 @@
 #' @export
 fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       diagnostics = TRUE, preset = c("default", "exploratory")) {
+  .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
   preset <- match.arg(preset)

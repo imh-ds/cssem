@@ -34,6 +34,7 @@
 validate_comparator <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
                                             workers = 1L) {
+  .preserve_seed()
   required <- c("scenario", "n", "loading", "missing", "local_dependence", "cross_loading", "overlap", "sparse")
   if (!is.data.frame(manifest) || !all(required %in% names(manifest)))
     stop("manifest is missing required measurement scenario columns.", call. = FALSE)
@@ -100,6 +101,7 @@ validate_structure_comparator <- function(manifest, reps = 3L,
                                                        structural_repeats = 5L,
                                                        eiv_bootstrap = 200L,
                                                        workers = 1L) {
+  .preserve_seed()
   if (!is.data.frame(manifest) || !all(c("scenario", "n") %in% names(manifest))) {
     stop("manifest must contain scenario and n.", call. = FALSE)
   }

@@ -133,6 +133,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
                                 estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
                                 temporal_order = NULL, disattenuate = TRUE, eiv_bootstrap = 0L,
                                 reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L) {
+  .preserve_seed()
   estimand <- match.arg(estimand)
   flexible <- estimand %in% c("adjusted_dml", "adjusted_ame")
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)

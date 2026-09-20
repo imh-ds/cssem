@@ -124,6 +124,7 @@ conditional_indirect_effect_manifest <- function(tier = c("screening", "full")) 
 validate_conditional_indirect_effect <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
                                                      iterations = 8L, structural_repeats = 3L,
                                                      eiv_bootstrap = 200L, workers = 1L) {
+  .preserve_seed()
   if (!is.data.frame(manifest) || !all(c("scenario", "n", "loading") %in% names(manifest)))
     stop("manifest must contain scenario, n, and loading.", call. = FALSE)
   jobs <- vector("list", nrow(manifest) * reps); index <- 0L

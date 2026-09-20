@@ -107,6 +107,7 @@
 causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
                                    temporal_order = NULL, estimand = c("interventional"),
                                    disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  .preserve_seed()
   estimand <- match.arg(estimand)
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores

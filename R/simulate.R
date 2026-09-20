@@ -19,6 +19,7 @@
 #' @export
 simulate_states <- function(n = 400L, items = 4L, loading = .8, missing = .05,
                                 local_dependence = 0, cross_loading = 0, seed = 1L) {
+  .preserve_seed()
   set.seed(seed); z1 <- stats::rnorm(n); z2 <- stats::rnorm(n)
   make_block <- function(z, other, prefix) {
     shared_residual <- stats::rnorm(n)
@@ -82,6 +83,7 @@ validation_design <- function(tier = c("screening", "full")) {
 #' @export
 benchmark_measurement <- function(reps = 20L, n = 400L, seed = 1L, tolerance = .02,
                                       design = NULL, folds = 3L, iterations = 4L) {
+  .preserve_seed()
   if (is.null(design)) design <- data.frame(n = n, loading = .8, missing = .05, local_dependence = 0, cross_loading = 0)
   required <- c("n", "loading", "missing", "local_dependence", "cross_loading")
   if (!is.data.frame(design) || !all(required %in% names(design))) stop("design must contain: n, loading, missing, local_dependence, cross_loading.", call. = FALSE)

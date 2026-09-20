@@ -174,6 +174,7 @@ validate_measurement <- function(manifest, reps = 3L, seed = 1L,
                                              folds = 3L, iterations = 8L,
                                              max_iterations = 16L, diagnostics = FALSE,
                                              workers = 1L) {
+  .preserve_seed()
   required <- c("scenario", "n", "loading", "missing", "local_dependence", "cross_loading", "overlap", "sparse")
   if (!is.data.frame(manifest) || !all(required %in% names(manifest))) stop("manifest is missing required measurement scenario columns.", call. = FALSE)
   jobs <- vector("list", nrow(manifest) * reps); index <- 0L
@@ -338,6 +339,7 @@ validate_structure <- function(manifest, reps = 3L, seed = 1L,
                                             folds = 3L, iterations = 8L,
                                             max_iterations = 16L,
                                             structural_repeats = 5L, workers = 1L) {
+  .preserve_seed()
   if (!is.data.frame(manifest) || !all(c("scenario", "n") %in% names(manifest))) stop("manifest must contain scenario and n.", call. = FALSE)
   jobs <- vector("list", nrow(manifest) * reps); index <- 0L
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {

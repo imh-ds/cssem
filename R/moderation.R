@@ -133,6 +133,7 @@
 #' @export
 conditional_slopes <- function(association, outcome, predictor, moderator, levels = c(-1, 0, 1),
                                 disattenuate = TRUE, eiv_bootstrap = 0L, johnson_neyman = TRUE, seed = 1L) {
+  .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
   if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)
@@ -246,6 +247,7 @@ print.conditional_slopes <- function(x, ...) {
 #' @export
 conditional_indirect_effect <- function(association, x, y, moderator, levels = c(-1, 0, 1),
                                       disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
   if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)

@@ -360,6 +360,7 @@
 #' @export
 indirect_effect <- function(association, x, y, mediators = NULL, disattenuate = TRUE,
                             eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
   if (is.null(scores)) stop("association does not carry locked scores; re-run associate().", call. = FALSE)

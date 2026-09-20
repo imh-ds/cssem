@@ -73,6 +73,7 @@ causal_edge <- function(from, to, adjust, estimand = c("adjusted_linear", "adjus
 #' @export
 route <- function(association, causal = list(), predictive = list(), representational = list(),
                         temporal_order = NULL, eiv_bootstrap = 0L, seed = 1L) {
+  .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   causal <- if (inherits(causal, "causal_edge")) list(causal) else causal
   if (length(causal) && !all(vapply(causal, inherits, logical(1), "causal_edge")))
