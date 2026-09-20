@@ -106,6 +106,28 @@
   same test detects these shapes 100% of the time, so the remaining gap is
   measurement error, not the selection rule.
 
+* A curved shape must now remove at least `shape_min_gain` (default `.005`) of
+  the linear model's out-of-fold error before it is reported in place of the
+  straight line. The curvature test answers whether curvature is real, not
+  whether it is worth reporting, and those differ at large samples: strongly
+  skewed indicators leave the scores mildly curved even when the relation
+  between the constructs is linear, and a confirmation benchmark flagged that
+  curvature in 20% of replications at N = 1000 despite it removing about 0.5%
+  of the prediction error. The floor cut that to 3% while leaving detection of
+  real shapes essentially unchanged (for example, diminishing returns at low
+  reliability, 70% to 60%). Curvature under strongly skewed indicators should
+  still be interpreted cautiously; it can be a property of the scores rather
+  than of the constructs.
+
+* A monotone shape is now reported whenever it predicts indistinguishably from
+  the best candidate, instead of only when the best improvement fell under an
+  absolute .05 cross-validated threshold. That cap had no justification and
+  sent the strongest monotone effects to the spline label precisely because
+  they were strong: in benchmark, thresholds were labelled monotone in 65% of
+  replications and saturating curves in 32%, despite both being monotone by
+  construction. Detection of curvature is unaffected; only the reported label
+  changes.
+
 * Monotone shape candidates now face the same acceptance rule as spline
   candidates in `associate()`. Previously a monotone candidate counted as
   supported in a cross-validation repeat whenever its mean improvement was

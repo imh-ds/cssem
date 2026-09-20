@@ -12,6 +12,7 @@ associate(
   smooth_uncertainty = 1,
   shape_stability_min = 0.7,
   shape_alpha = 0.05,
+  shape_min_gain = 0.005,
   structural_repeats = 5L,
   seed = 1L,
   shadow_scope = c("both", "temporal", "unrestricted"),
@@ -44,6 +45,12 @@ whether any edge of an outcome is nonlinear. The test is a
 heteroskedasticity-robust Wald test of the spline terms against the linear
 fit, Bonferroni-combined over \code{spline_df} and Holm-adjusted across the
 outcome's shape-searched predictors.}
+
+\item{shape_min_gain}{Smallest share of the linear model's out-of-fold error
+a curved shape must remove before it is reported in place of the straight
+line. Guards against curvature that is real but negligible, such as the
+mild score-level curvature strongly skewed indicators induce even when the
+relation between the constructs is linear.}
 
 \item{structural_repeats}{Number of deterministic structural CV assignments.}
 

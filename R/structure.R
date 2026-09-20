@@ -436,7 +436,6 @@ specify_structure <- function(..., order = NULL) {
   valid <- which(is.finite(improvement) & is.finite(improvement_se))
   if (!length(valid)) return(NA_character_)
   best <- valid[which.max(improvement[valid])]
-  best_improvement <- improvement[[candidate_keys[[best]]]]
   indistinguishable <- valid[improvement[valid] >= improvement[[best]] - smooth_uncertainty *
     sqrt(improvement_se[[best]]^2 + improvement_se[valid]^2)]
   stable_monotone <- candidate_keys[indistinguishable][
@@ -445,7 +444,12 @@ specify_structure <- function(..., order = NULL) {
       .is_monotone_shape(meta$shape) && improvement[[key]] > 0 && frequency[[key]] >= shape_stability_min
     }, logical(1))
   ]
-  if (length(stable_monotone) && best_improvement <= .05) {
+  # A monotone shape carries a directional claim a spline does not, so it wins
+  # whenever it predicts indistinguishably well. This used to apply only when
+  # the best improvement was under an absolute .05, which had no justification
+  # and sent strong monotone effects (thresholds, saturating curves) to the
+  # spline label purely because they were strong.
+  if (length(stable_monotone)) {
     monotone_improvement <- improvement[stable_monotone]
     monotone_complexity <- vapply(stable_monotone, function(key) .shape_complexity(candidate_meta[[key]]$shape), integer(1))
     stable_monotone <- stable_monotone[monotone_complexity == min(monotone_complexity)]
@@ -607,6 +611,11 @@ specify_structure <- function(..., order = NULL) {
 #'   heteroskedasticity-robust Wald test of the spline terms against the linear
 #'   fit, Bonferroni-combined over `spline_df` and Holm-adjusted across the
 #'   outcome's shape-searched predictors.
+#' @param shape_min_gain Smallest share of the linear model's out-of-fold error
+#'   a curved shape must remove before it is reported in place of the straight
+#'   line. Guards against curvature that is real but negligible, such as the
+#'   mild score-level curvature strongly skewed indicators induce even when the
+#'   relation between the constructs is linear.
 #' @param structural_repeats Number of deterministic structural CV assignments.
 #' @param seed Seed used only for repeated structural folds.
 #' @param shadow_scope Shadow benchmark scope.
@@ -628,7 +637,7 @@ specify_structure <- function(..., order = NULL) {
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
-                             shape_stability_min = .70, shape_alpha = .05,
+                             shape_stability_min = .70, shape_alpha = .05, shape_min_gain = .005,
                              structural_repeats = 5L, seed = 1L,
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
@@ -651,6 +660,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     stop("shape_stability_min must be between zero and one.", call. = FALSE)
   if (!is.numeric(shape_alpha) || length(shape_alpha) != 1L || !is.finite(shape_alpha) || shape_alpha <= 0 || shape_alpha >= 1)
     stop("shape_alpha must be between zero and one.", call. = FALSE)
+  if (!is.numeric(shape_min_gain) || length(shape_min_gain) != 1L || !is.finite(shape_min_gain) || shape_min_gain < 0)
+    stop("shape_min_gain must be a non-negative numeric scalar.", call. = FALSE)
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
@@ -738,9 +749,14 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       winner <- .pick_shape_winner(eligible, candidate_meta, improvement[eligible], improvement_se[eligible],
         frequency[eligible], smooth_uncertainty, shape_stability_min)
     }
-    # A flagged edge still has to predict better out of fold than the straight
-    # line it would replace; otherwise the reported shape is the linear one.
-    select_nonlinear <- length(winner) == 1L && !is.na(winner) && improvement[[winner]] > 0
+    # A flagged edge still has to predict materially better out of fold than the
+    # straight line it would replace. The test answers whether curvature is
+    # real, not whether it is worth reporting: strongly skewed indicators, for
+    # instance, make the scores themselves mildly curved even when the latent
+    # relation is straight, and at large n that curvature is detectable but
+    # negligible. The floor is a share of the linear model's out-of-fold error.
+    relative_gain <- if (length(winner) == 1L && !is.na(winner)) improvement[[winner]] / mean(baseline$fold_mse) else NA_real_
+    select_nonlinear <- is.finite(relative_gain) && relative_gain > shape_min_gain
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)

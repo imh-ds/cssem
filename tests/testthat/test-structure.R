@@ -128,6 +128,34 @@ test_that("curvature is decided by the reported test, not by the cross-validated
   expect_error(associate(fit_of(kinked), specification, shape_alpha = 0), "shape_alpha")
 })
 
+test_that("detected but negligible curvature is reported as linear", {
+  # At large n the test detects curvature that removes almost none of the
+  # prediction error (skewed indicators produce exactly this: mildly curved
+  # scores from a straight latent relation). shape_min_gain keeps those edges
+  # linear without weakening the test itself.
+  set.seed(79)
+  n <- 3000
+  trust <- rnorm(n)
+  quality <- trust + .035 * trust^2 + rnorm(n, sd = 1)
+  fit <- structure(list(locked_scores = data.frame(Trust = trust, Quality = quality),
+    folds = sample(rep(1:3, length.out = n))), class = "fit_states")
+  specification <- cssem_structure(list(Quality = list(Trust = cssem_effect("auto"))),
+    order = c("Trust", "Quality"))
+  selected <- function(association) {
+    metrics <- association$candidate_metrics
+    metrics[metrics$selected & metrics$predictor == "Trust", , drop = FALSE]
+  }
+  detected <- selected(associate(fit, specification, seed = 79, shape_min_gain = 0))
+  expect_true(detected$shape[[1L]] != "linear")
+  expect_lt(detected$nonlinearity_p[[1L]], .05)
+
+  reported <- selected(associate(fit, specification, seed = 79))
+  expect_equal(reported$shape[[1L]], "linear")
+  # The edge is still flagged as curved; only the reported shape changes.
+  expect_lt(reported$nonlinearity_p[[1L]], .05)
+  expect_error(associate(fit, specification, shape_min_gain = -1), "shape_min_gain")
+})
+
 test_that("the curvature test holds its level under unequal error variance", {
   # The regressors are posterior means whose precision varies by respondent, so
   # the test uses HC3 standard errors; a classical F-test rejects far too often
