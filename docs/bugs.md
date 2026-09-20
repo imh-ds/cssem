@@ -1,6 +1,6 @@
 # Package audit: patched history and open findings
 
-## Current audit — 2026-09-20, commit `39b777f`
+## Current audit — 2026-09-20, commit `6e15296`
 
 This document records the audit and patch history. A1–A4 below were fixed in
 this work, with focused regression tests and separate commits; A5–A10 remain
@@ -38,7 +38,7 @@ under N6 was not available for verification.
 | A1 | Fixed (`9190195`) | Severe | Nonlinear mediation contrasts use incompatible baselines |
 | A2 | Fixed (`eba96d5`) | Severe | Causal mediation accepts contradictory temporal declarations |
 | A3 | Fixed (`dc21536`) | Severe | Mediator subsets bypass adjustment checks for included paths |
-| A4 | Fixed (`39b777f`) | Severe | Flexible causal identification is assessed with a linear model |
+| A4 | Fixed (`39b777f`, `6e15296`) | Severe | Flexible causal identification is assessed with a linear model |
 | A5 | Open | Moderate | Evidence verdict reverses the specification-gap sign |
 | A6 | Open | Severe | New ordinal scores silently truncate fractional categories |
 | A7 | Open | Severe | Continuous/manifest factors become integer level positions |
@@ -603,7 +603,7 @@ declared predictor of `M2`; adding `C` to `M2` permits the call. The focused
 test also confirms the valid result retains both declared paths while the
 panel describes the all-path estimand.
 
-### [x] A4. Flexible causal identification uses a linear treatment diagnostic — fixed in `39b777f`
+### [x] A4. Flexible causal identification uses a linear treatment diagnostic — fixed in `39b777f`, label gate tightened in `6e15296`
 
 **Where:** [R/causal.R:219](../R/causal.R#L219), `causal_effect()` and the
 `.dml_partial_linear()` / `.dml_average_derivative()` helpers.
