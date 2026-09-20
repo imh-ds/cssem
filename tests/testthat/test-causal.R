@@ -249,3 +249,30 @@ test_that("a causal claim is typed from its adjustment set, not named direct by 
   report <- evidence_report(association, causal = list(pre_treatment))
   expect_identical(report$causal_claims$type[[1L]], "total (adjusted)")
 })
+
+test_that("a claim arriving through both routing and causal is listed once", {
+  # Regression: claims from routing$causal_effects and from causal= were
+  # concatenated, so an effect passed through both appeared twice and read as
+  # two independent pieces of evidence.
+  set.seed(22)
+  n <- 300
+  x <- stats::rnorm(n); c0 <- stats::rnorm(n)
+  y <- .4 * x + .2 * c0 + stats::rnorm(n, sd = .7)
+  fit <- structure(list(locked_scores = data.frame(C = as.numeric(scale(c0)),
+    X = as.numeric(scale(x)), Y = as.numeric(scale(y))),
+    folds = sample(rep(1:3, length.out = n)),
+    reliability = c(C = .85, X = .85, Y = .85)), class = "fit_states")
+  association <- associate(fit, specify_structure(Y ~ linear(X) + linear(C),
+    order = c("C", "X", "Y")), seed = 22)
+  routing <- route(association, causal = list(causal_edge("X", "Y", adjust = "C")),
+    temporal_order = c("C", "X", "Y"))
+  explicit <- causal_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y"), eiv_bootstrap = 50L)
+
+  both <- evidence_report(association, routing = routing, causal = list(explicit))
+  expect_equal(nrow(both$causal_claims), 1L)
+  # The explicitly passed object wins, so its interval survives.
+  expect_true(is.finite(both$causal_claims$ci_low[[1L]]))
+  routed_only <- evidence_report(association, routing = routing)
+  expect_true(is.na(routed_only$causal_claims$ci_low[[1L]]))
+})

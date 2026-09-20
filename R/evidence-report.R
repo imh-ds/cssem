@@ -89,12 +89,19 @@
   } else stop("causal claims must be causal_effect or causal_indirect_effect objects.", call. = FALSE)
 }
 
+# One row per distinct claim. The same effect often arrives twice -- routed in
+# through `routing` and passed explicitly through `causal` -- and listing it
+# twice reads as two pieces of evidence. The explicitly passed object wins,
+# since it is the one the caller configured (it may carry an interval the
+# routed one lacks).
 .evidence_causal_claims <- function(routing, causal) {
   claims <- list()
   if (!is.null(routing)) for (effect in routing$causal_effects) claims[[length(claims) + 1L]] <- effect
   for (effect in causal) claims[[length(claims) + 1L]] <- effect
   if (!length(claims)) return(NULL)
-  do.call(rbind, lapply(claims, .causal_claim_row))
+  rows <- do.call(rbind, lapply(claims, .causal_claim_row))
+  key <- paste(rows$claim, rows$type, rows$estimand, sep = "|")
+  rows[!duplicated(key, fromLast = TRUE), , drop = FALSE]
 }
 
 #' Assemble the unified CS-SEM evidence report
