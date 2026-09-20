@@ -37,19 +37,27 @@ if (identical(part, "measurement")) {
   cat("measurement done: rows", nrow(res), "\n")
 } else {
   # S2/S3 structural on the full grid capped at N <= 500, strided across shards
-  # for load balance. Each shard gets a unique seed offset so draws never
-  # collide across shards while staying fully reproducible.
+  # for load balance.
+  #
+  # Each scenario's seed is derived from its position in the UNSHARDED manifest,
+  # and the scenario is run on its own, so the draws a scenario receives do not
+  # depend on how many shards the run used or on which shard picked it up.
+  # Offsetting by the shard index instead (the previous scheme) meant the same
+  # scenario drew different data at a different NSHARDS, so a run reproduced
+  # only at a fixed shard count.
   manifest <- structural_manifest("full")
   manifest <- manifest[manifest$n <= 500L, , drop = FALSE]
-  keep <- (((seq_len(nrow(manifest)) - 1L) %% nshards) + 1L) == shard
-  shard_manifest <- manifest[keep, , drop = FALSE]
-  cat("structural shard", shard, "of", nshards, ":", nrow(shard_manifest), "scenarios\n")
-  if (nrow(shard_manifest) == 0L) {
+  index <- seq_len(nrow(manifest))
+  rows <- index[(((index - 1L) %% nshards) + 1L) == shard]
+  cat("structural shard", shard, "of", nshards, ":", length(rows), "scenarios\n")
+  if (!length(rows)) {
     cat("empty shard; nothing to do\n")
   } else {
-    res <- validate_structure_comparator(
-      shard_manifest, reps = reps, seed = seed + (shard - 1L) * 10000L,
-      folds = 3L, iterations = 8L, workers = workers)
+    parts <- lapply(rows, function(i) validate_structure_comparator(
+      manifest[i, , drop = FALSE], reps = reps, seed = seed + (i - 1L) * 1000L,
+      folds = 3L, iterations = 8L, workers = workers))
+    res <- do.call(rbind, parts)
+    res$scenario_index <- rep(rows, vapply(parts, nrow, integer(1)))
     utils::write.csv(res, file.path(outdir, sprintf("structural_shard_%02d.csv", shard)),
       row.names = FALSE)
     cat("structural shard done: rows", nrow(res), "\n")
