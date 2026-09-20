@@ -316,3 +316,31 @@ test_that("smooth basis degrades gracefully when quantile knots collapse", {
   expect_identical(ncol(as.matrix(constant$values)), 1L)
   expect_identical(ncol(as.matrix(cssem:::.predict_basis(rep(1, 50), constant$info))), 1L)
 })
+
+test_that("an interaction edge is labelled a product everywhere, and curves are built quietly", {
+  # Regression: effect_ledger() reported shape "linear" for an interaction while
+  # effect_card() reported "product", so one edge read as two different things.
+  # Separately, .effect_rows() built its curve grid over every name in the model
+  # including the interaction, which is not a column of the scores, producing
+  # "argument is not numeric or logical: returning NA" whenever a model held
+  # both an interaction and a selected nonlinear edge.
+  set.seed(41)
+  n <- 500
+  w <- stats::rnorm(n); x <- stats::rnorm(n)
+  y <- .5 * x + .9 * pmax(x, 0) + .2 * w + .25 * x * w + stats::rnorm(n, sd = .5)
+  fit <- structure(list(locked_scores = data.frame(W = as.numeric(scale(w)),
+    X = as.numeric(scale(x)), Y = as.numeric(scale(y))),
+    folds = sample(rep(1:3, length.out = n)),
+    reliability = c(W = .85, X = .85, Y = .85)), class = "fit_states")
+
+  expect_no_warning(
+    association <- associate(fit, specify_structure(Y ~ X + W + X:W,
+      order = c("W", "X", "Y")), seed = 41))
+  ledger <- effect_ledger(association); card <- effect_card(association, "Y")
+  # The setup is the one that used to warn: a curved edge beside an interaction.
+  expect_true(ledger$shape[ledger$predictor == "X"] != "linear")
+  expect_identical(ledger$shape[ledger$predictor == "X:W"], "product")
+  expect_identical(unique(card$effects$shape[card$effects$predictor == "X:W"]), "product")
+  # The fitted curve for the nonlinear edge is still produced in full.
+  expect_equal(sum(!is.na(card$effects$fitted)), 50L)
+})

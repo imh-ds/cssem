@@ -581,8 +581,14 @@ specify_structure <- function(..., order = NULL) {
     if (shape %in% c("linear", "product")) return(data.frame(outcome = outcome, predictor = predictor, shape = shape,
       estimate = model$coefficient[model$maps[[predictor]]][1L], x = NA_real_, fitted = NA_real_, strongest_region = NA_character_))
     grid <- seq(stats::quantile(scores[[predictor]], .05), stats::quantile(scores[[predictor]], .95), length.out = 50L)
-    new_data <- as.data.frame(lapply(names(model$shapes), function(name) rep(mean(scores[[name]]), length(grid))))
-    names(new_data) <- names(model$shapes); new_data[[predictor]] <- grid
+    # The grid holds every other predictor at its mean, but an interaction
+    # predictor is not a column of `scores`: .predict_shape_model() rebuilds the
+    # product from its constituents, so the frame is built over those instead.
+    # Looking the interaction name up directly produced a mean of NULL and a
+    # "not numeric or logical: returning NA" warning on every curve.
+    constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+    new_data <- as.data.frame(lapply(constructs, function(name) rep(mean(scores[[name]]), length(grid))))
+    names(new_data) <- constructs; new_data[[predictor]] <- grid
     curve <- .predict_shape_model(model, new_data); slope <- abs(diff(curve) / diff(grid)); active <- which(slope >= .75 * max(slope))
     region <- if (length(active)) sprintf("%.2f to %.2f", grid[min(active)], grid[max(active) + 1L]) else NA_character_
     data.frame(outcome = outcome, predictor = predictor, shape = shape, estimate = NA_real_, x = grid, fitted = curve, strongest_region = region)
@@ -763,8 +769,12 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
       weights = respondent_weights, posterior_var = posterior_var)
     edge_p <- function(predictor) if (predictor %in% names(adjusted)) unname(adjusted[[predictor]]) else NA_real_
+    # The baseline shape of an interaction predictor is "product", not "linear":
+    # effect_card() has always said so, and the ledger reading "linear" made the
+    # same edge look like two different things in two reports.
     candidate_rows <- lapply(predictors, function(predictor) data.frame(outcome = outcome, predictor = predictor,
-      candidate = "linear", shape = "linear", rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
+      candidate = baseline_shapes[[predictor]], shape = baseline_shapes[[predictor]],
+      rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
       mean_mse_improvement = 0, mse_improvement_se = NA_real_, selection_frequency = if (select_nonlinear && candidate_meta[[winner]]$predictor == predictor) 0 else 1,
       nonlinearity_p = edge_p(predictor),
       selected = !select_nonlinear || candidate_meta[[winner]]$predictor != predictor, stringsAsFactors = FALSE))
