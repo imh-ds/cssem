@@ -1,5 +1,33 @@
 # cssem (development version)
 
+## Breaking changes
+
+* Ordinal indicators supplied as **text** are now rejected. They were coded
+  with `factor(x, ordered = TRUE)`, whose level order is alphabetical, so an
+  ordinary frequency scale became `"always" < "never" < "often" < "rarely" <
+  "sometimes"`: the response scale was scrambled and nothing warned. On a
+  four-item construct at N = 300 with loadings of .80, the locked score's
+  correlation with the generating latent was **-0.265**, against **0.905** for
+  the identical data as integer codes. Supply such an item as an ordered factor
+  whose levels are in scale order, or as integer category codes; columns of
+  numeric strings (`"1"`, `"2"`) are unambiguous and are still accepted. A
+  factor's own level order is now honoured rather than re-sorted, so an ordered
+  factor and the equivalent integer codes give identical scores.
+
+## Bug fixes (measurement)
+
+* The stored ordinal category schema is now the category values themselves -- a
+  factor's labels in their declared order, or the numeric codes -- rather than
+  the positions of the categories observed in the frame at hand, and
+  `score_states()` maps new records against those values. Previously the
+  positions were re-derived from whatever frame was passed, so for factor
+  indicators new records built independently of the estimation sample (a
+  different set of observed categories, hence a different level set) were mapped
+  to the wrong categories: scoring records that happened to omit one category
+  shifted their scores by up to **0.51 SD**, silently. Numeric codes were
+  unaffected. An unseen category still raises an error rather than being
+  remapped.
+
 ## New features
 
 * Added `manifest()`, a single-item, non-construct covariate declaration for
