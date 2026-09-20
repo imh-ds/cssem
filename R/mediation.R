@@ -189,10 +189,26 @@
       disattenuated_effect = numeric(0), disattenuated = logical(0),
       disattenuation_stable = logical(0), min_reliability = numeric(0))
 
+  # The proportion mediated must divide effects that are on the same footing as
+  # the ones reported: dividing a naive indirect by a naive total under a
+  # heading that reads "disattenuated" describes neither. It is withheld when
+  # the total and the indirect are reported on different bases, which happens
+  # when only one of the two is correction-eligible.
+  reported <- .mediation_reported(summary, !is.null(disattenuated))
+  total_row <- reported[reported$component == "total", , drop = FALSE]
+  indirect_row <- reported[reported$component == "indirect_total", , drop = FALSE]
+  shared_basis <- identical(total_row$basis[[1L]], indirect_row$basis[[1L]])
+  proportion <- if (shared_basis && is.finite(total_row$reported_effect[[1L]]) &&
+    abs(total_row$reported_effect[[1L]]) > 1e-8)
+    indirect_row$reported_effect[[1L]] / total_row$reported_effect[[1L]] else NA_real_
+
   list(
     summary = summary,
     path_specific = path_specific,
-    proportion_mediated = if (is.finite(naive$total) && abs(naive$total) > 1e-8) naive$indirect_total / naive$total else NA_real_,
+    proportion_mediated = proportion,
+    proportion_mediated_basis = if (shared_basis) total_row$basis[[1L]] else NA_character_,
+    proportion_mediated_naive = if (is.finite(naive$total) && abs(naive$total) > 1e-8)
+      naive$indirect_total / naive$total else NA_real_,
     path_sum_residual = naive$indirect_total - sum(naive$path_eff[mediating])
   )
 }
@@ -284,6 +300,14 @@
       reliability, delta, as.integer(eiv_bootstrap), seed)
   }
   out
+}
+
+# The basis of the reported proportion mediated, appended to the printed value
+# whenever it is not the default naive reading, so a disattenuated ratio is
+# never mistaken for a naive one.
+.proportion_note <- function(x) {
+  basis <- x$proportion_mediated_basis
+  if (is.null(basis) || is.na(basis) || identical(basis, "naive")) "" else sprintf("  (%s)", basis)
 }
 
 # Choose the reported effect and interval for each row: the disattenuated value
@@ -417,7 +441,8 @@ print.indirect_effect <- function(x, ...) {
     cat(sprintf("  %-16s %s\n", labels[[summary$component[i]]],
       format_effect(summary$reported_effect[i], summary$reported_ci_low[i], summary$reported_ci_high[i])))
   }
-  if (is.finite(x$proportion_mediated)) cat(sprintf("  %-16s %.3f\n", "prop. mediated", x$proportion_mediated))
+  if (is.finite(x$proportion_mediated))
+    cat(sprintf("  %-16s %.3f%s\n", "prop. mediated", x$proportion_mediated, .proportion_note(x)))
   limited <- FALSE
   if (paths) {
     cat("\n  path-specific indirect effects:\n")

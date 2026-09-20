@@ -191,3 +191,37 @@ test_that("mediation guards reject bad inputs", {
   expect_true(all(c("ci_low", "ci_high", "basis", "status") %in% names(ledger)))
   expect_output(print(med), "associational mediation")
 })
+
+test_that("the reported proportion mediated divides the effects that were reported", {
+  # Regression: proportion_mediated was always the naive indirect over the naive
+  # total, printed directly beneath disattenuated effects under a heading that
+  # says "disattenuated". The printed ratio did not describe the printed
+  # effects.
+  set.seed(12)
+  n <- 400
+  x <- stats::rnorm(n)
+  m <- .5 * x + stats::rnorm(n, sd = .8)
+  y <- .45 * m + .25 * x + stats::rnorm(n, sd = .8)
+  items <- function(truth, prefix) as.data.frame(stats::setNames(lapply(1:4, function(j)
+    cut(.8 * truth + stats::rnorm(n, 0, .6), c(-Inf, -1.2, -.4, .4, 1.2, Inf), labels = FALSE)),
+    paste0(prefix, 1:4)))
+  d <- cbind(items(x, "x"), items(m, "m"), items(y, "y"))
+  fit <- fit_states(specify_measurement(X = ordinal(paste0("x", 1:4)), M = ordinal(paste0("m", 1:4)),
+    Y = ordinal(paste0("y", 1:4)), folds = 3), d, seed = 1, iterations = 12, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(M ~ linear(X), Y ~ linear(X) + linear(M),
+    order = c("X", "M", "Y")), seed = 1)
+
+  effect <- indirect_effect(association, x = "X", y = "Y", mediators = "M")
+  reported <- cssem:::.mediation_reported(effect$summary, isTRUE(effect$disattenuated))
+  total <- reported$reported_effect[reported$component == "total"]
+  indirect <- reported$reported_effect[reported$component == "indirect_total"]
+  expect_equal(effect$proportion_mediated, indirect / total, tolerance = 1e-10)
+  expect_identical(effect$proportion_mediated_basis, "disattenuated")
+  # The naive ratio is retained, and it is not the one reported.
+  expect_false(isTRUE(all.equal(effect$proportion_mediated, effect$proportion_mediated_naive)))
+  expect_output(print(effect), "prop[.] mediated.*[(]disattenuated[)]")
+
+  naive_effect <- indirect_effect(association, x = "X", y = "Y", mediators = "M", disattenuate = FALSE)
+  expect_equal(naive_effect$proportion_mediated, naive_effect$proportion_mediated_naive, tolerance = 1e-10)
+  expect_identical(naive_effect$proportion_mediated_basis, "naive")
+})

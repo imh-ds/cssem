@@ -199,7 +199,8 @@ print.causal_indirect_effect <- function(x, ...) {
     cat(sprintf("  %-18s %s\n", labels_eff[[summary$component[i]]],
       format_effect(summary$reported_effect[i], summary$reported_ci_low[i], summary$reported_ci_high[i])))
   }
-  if (is.finite(x$proportion_mediated)) cat(sprintf("  %-18s %.3f\n", "prop. mediated", x$proportion_mediated))
+  if (is.finite(x$proportion_mediated))
+    cat(sprintf("  %-18s %.3f%s\n", "prop. mediated", x$proportion_mediated, .proportion_note(x)))
 
   cat("\n  Causal admissibility panel:\n")
   cat(sprintf("    identification strength  %.2f  (residual treatment variation after adjustment)\n", x$identification_strength))
