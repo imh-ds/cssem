@@ -12,11 +12,15 @@ should be tested. Severity is about consequence for a user's results:
 
 Status legend: `[ ]` open, `[x]` fixed (commit noted).
 
-**Progress.** The two severe, seven moderate, and six minor entries are all
-fixed, each with a regression test confirmed to fail on the pre-fix code where
-a test applies. The suite has grown from 331 to 388 expectations. Remaining:
-the five harness entries (H1-H5), of which H3 and H4 are documentation duties
-for the regenerated simulation studies rather than code changes.
+**Progress.** Eighteen of the twenty entries are fixed -- every code defect
+found -- each with a regression test confirmed to fail on the pre-fix code
+where a test applies. The suite has grown from 331 to 393 expectations.
+
+The two that remain, **H3** and **H4**, are not code defects: they are
+disclosures the regenerated simulation studies owe their readers (the
+comparators' three different missing-data treatments, and the headline estimate
+mixing corrected and naive slopes). Both belong in the paper's §7.1 when
+Studies 1-3, 5, and 6 are re-run under the submission version.
 
 **Follow-up owed to the paper.** Section 6 of the JSS manuscript must be
 regenerated once more: `prop. mediated` now reports 0.554 on a disattenuated
@@ -325,7 +329,7 @@ penalty on the log scale is the sensible one.
 
 ## Harness (simulation and comparator code)
 
-### [ ] H1. `.validation_items()` discards sparse thresholds when skew is set
+### [x] H1. `.validation_items()` discards sparse thresholds when skew is set — fixed in `be45381`
 
 **Where:** [R/validation.R:6](../R/validation.R#L6).
 
@@ -343,10 +347,11 @@ non-zero `skew`, so no published result is affected.
 **Fix:** apply the skew shift to whichever threshold vector was selected
 (`thresholds <- thresholds + skew`) instead of rebuilding the base vector.
 
-**Test:** with `sparse = TRUE, skew = 1.2`, the category-1 share stays far
-below the non-sparse+skew share.
+**Test:** added to `tests/testthat/test-validation.R` ("a sparse item schedule
+survives a skew shift"): the sparse+skew category-1 share stays well below the
+plain-skew share, and sparse alone stays under 5%. Fails on the pre-fix code.
 
-### [ ] H2. `.fill_score_frame()` silently misaligns scores when an engine drops cases
+### [x] H2. `.fill_score_frame()` silently misaligns scores when an engine drops cases — fixed in `a51158d`
 
 **Where:** [R/comparators.R:280](../R/comparators.R#L280).
 
@@ -366,7 +371,10 @@ silently.
 **Fix:** when `case_idx` is `NULL`, require `nrow(scores) == n` and stop
 otherwise, rather than filling from the top.
 
-**Test:** the mismatched-length call errors.
+**Test:** added to `tests/testthat/test-validation.R` ("comparator scores are
+refused rather than misaligned when rows are dropped"): a mismatch errors, an
+explicit `case_idx` still places rows 4-6, and a complete frame is unchanged.
+Fails on the pre-fix code.
 
 ### [ ] H3. Comparators see three different missing-data treatments
 
@@ -399,7 +407,7 @@ report"), but the regenerated Studies 2 and 3 must report the share of
 replications contributing a corrected versus a naive estimate, and the paper
 should state that the pooled deviation is over a mixture.
 
-### [ ] H5. CI shard seeds depend on the shard count
+### [x] H5. CI shard seeds depend on the shard count — fixed in `d466dc5`
 
 **Where:** [inst/scripts/run-sim-shard.R:45](../inst/scripts/run-sim-shard.R#L45).
 
@@ -410,8 +418,13 @@ paired with which scenario. Results reproduce only at a fixed shard count.
 **Fix:** derive each job's seed from its index in the *unsharded* job list
 before striding, as `inst/scripts/run-shape-bench-shard.R` already does.
 
-**Test:** the same scenario-replication draws an identical seed at two
-different shard counts.
+**Verified:** the seed assignment is identical at 1, 15, and 20 shards,
+covers every scenario exactly once, and yields 51 distinct seeds. Each output
+row now carries its `scenario_index`.
+
+**Consequence:** seeds differ from earlier runs, so Studies 2 and 3 cannot be
+compared row-for-row against the existing CI artifacts. They are due for
+regeneration under the submission version regardless.
 
 ---
 
