@@ -171,3 +171,23 @@ test_that("standardized moderators are unaffected by the scale conversion", {
   slopes <- conditional_slopes(association, outcome = "Y", predictor = "X", moderator = "W")
   expect_equal(slopes$slopes$moderator_value, c(-1, 0, 1), tolerance = 1e-8)
 })
+
+test_that("printing a moderated mediation handles a zero or missing index", {
+  # Regression: the narrative read `if (x$index$estimate > 0)`, which errored
+  # with "missing value where TRUE/FALSE needed" on an NA index and described a
+  # zero index as "weakens".
+  skeleton <- function(estimate) structure(list(
+    x = "X", y = "Y", moderator = "W", levels = c(-1, 0, 1),
+    conditional = data.frame(level = c("-1 SD", "mean", "+1 SD"), moderator_value = c(-1, 0, 1),
+      naive_indirect = c(.2, .2, .2), disattenuated_indirect = c(.25, .25, .25),
+      indirect = c(.25, .25, .25), stringsAsFactors = FALSE),
+    index = list(estimate = estimate, basis = "disattenuated", ci = c(NA_real_, NA_real_)),
+    n = 300L, disattenuated = TRUE, bootstrap = 0L, min_reliability = .8,
+    status = "associational"), class = "conditional_indirect_effect")
+
+  expect_output(print(skeleton(0)), "does not vary detectably")
+  expect_output(print(skeleton(NA_real_)), "could not be computed")
+  expect_output(print(skeleton(NA_real_)), "index of moderated mediation: not available")
+  expect_output(print(skeleton(.12)), "strengthens")
+  expect_output(print(skeleton(-.12)), "weakens")
+})

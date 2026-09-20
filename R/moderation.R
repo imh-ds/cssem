@@ -333,12 +333,19 @@ print.conditional_indirect_effect <- function(x, ...) {
     cat(sprintf("    %s = %-8s %s\n", x$moderator, x$conditional$level[i],
       format_effect(x$conditional$indirect[i], if (has_ci) x$conditional$ci_low[i] else NA_real_, if (has_ci) x$conditional$ci_high[i] else NA_real_)))
   }
-  cat(sprintf("\n  index of moderated mediation: %s\n", format_effect(x$index$estimate, x$index$ci[[1L]], x$index$ci[[2L]])))
-  # Plain-language reading of the index.
-  direction <- if (x$index$estimate > 0) "strengthens" else "weakens"
+  cat(sprintf("\n  index of moderated mediation: %s\n",
+    if (is.finite(x$index$estimate)) format_effect(x$index$estimate, x$index$ci[[1L]], x$index$ci[[2L]]) else "not available"))
+  # Plain-language reading of the index. An index that could not be computed,
+  # or one that is exactly zero, has no direction to report: the old code read
+  # `if (estimate > 0)`, which errored on NA and called a zero index "weakens".
+  estimate <- x$index$estimate
   detectable <- has_ci && is.finite(x$index$ci[[1L]]) && (x$index$ci[[1L]] > 0 || x$index$ci[[2L]] < 0)
-  message_line <- if (has_ci && !detectable) sprintf("The indirect effect of %s on %s through the mediator(s) does not vary detectably with %s.", x$x, x$y, x$moderator)
-    else sprintf("The indirect effect of %s on %s through the mediator(s) %s as %s increases.", x$x, x$y, direction, x$moderator)
+  message_line <- if (!is.finite(estimate))
+      sprintf("The index of moderated mediation could not be computed, so it is not known whether the indirect effect of %s on %s varies with %s.", x$x, x$y, x$moderator)
+    else if (estimate == 0 || (has_ci && !detectable))
+      sprintf("The indirect effect of %s on %s through the mediator(s) does not vary detectably with %s.", x$x, x$y, x$moderator)
+    else sprintf("The indirect effect of %s on %s through the mediator(s) %s as %s increases.",
+      x$x, x$y, if (estimate > 0) "strengthens" else "weakens", x$moderator)
   cat("\n  ", message_line, "\n", sep = "")
   if (is.finite(x$min_reliability) && x$min_reliability < 0.5)
     cat(sprintf("\nLowest construct reliability on this path is %.2f; disattenuation is partial and intervals can under-cover.\n", x$min_reliability))
