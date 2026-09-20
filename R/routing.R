@@ -1,3 +1,12 @@
+# Path keys join a pair of constructs with a right arrow, and that character
+# reaches the user in routing tables, evidence reports, and the names of the
+# routed-status vector. Written literally it makes the source non-ASCII, which
+# is not portable; written as an escape it is the same character everywhere.
+.PATH_ARROW <- "\u2192"
+
+# The key identifying a directed edge in reports and routing tables.
+.path_key <- function(from, to) paste(from, to, sep = .PATH_ARROW)
+
 # Edge routing: assign every declared structural edge a status
 # (associational by default, or predictive / representational / causal) and emit
 # a Path Routing Table. A causal status requires an adjustment set and a declared
@@ -81,12 +90,12 @@ route <- function(association, causal = list(), predictive = list(), representat
   if (length(causal) && is.null(temporal_order)) stop("Causal edges require a declared temporal_order.", call. = FALSE)
 
   edges <- .declared_edges(association$structure)
-  status <- stats::setNames(rep("associational", nrow(edges)), paste(edges$from, edges$to, sep = "→"))
+  status <- stats::setNames(rep("associational", nrow(edges)), .path_key(edges$from, edges$to))
   # A pair that is not a declared structural edge would silently append an entry
   # that never reaches the output table, so reject it as the causal branch does.
   set_status <- function(pairs, kind) {
     for (edge in .pair_edges(pairs, kind)) {
-      key <- paste(edge$from, edge$to, sep = "→")
+      key <- .path_key(edge$from, edge$to)
       if (!key %in% names(status)) stop(sprintf("%s edge %s is not a declared structural edge.", kind, key), call. = FALSE)
       status[[key]] <<- kind
     }
@@ -97,7 +106,7 @@ route <- function(association, causal = list(), predictive = list(), representat
   causal_effects <- list()
   causal_lookup <- list()
   for (edge in causal) {
-    key <- paste(edge$from, edge$to, sep = "→")
+    key <- .path_key(edge$from, edge$to)
     if (!key %in% names(status)) stop(sprintf("Causal edge %s is not a declared structural edge.", key), call. = FALSE)
     effect <- causal_effect(association, edge$from, edge$to, adjust = edge$adjust,
       estimand = edge$estimand, temporal_order = temporal_order, eiv_bootstrap = eiv_bootstrap, seed = seed)
@@ -116,7 +125,7 @@ route <- function(association, causal = list(), predictive = list(), representat
     adjusted_association = "Adjusted association (weak identification)",
     unadjusted_association = "Unadjusted association")
   rows <- lapply(seq_len(nrow(edges)), function(i) {
-    key <- paste(edges$from[[i]], edges$to[[i]], sep = "→"); s <- status[[key]]
+    key <- .path_key(edges$from[[i]], edges$to[[i]]); s <- status[[key]]
     if (s %in% routed_causal) {
       effect <- causal_effects[[key]]
       data.frame(path = key, status = s, estimand = causal_lookup[[key]]$estimand,
@@ -142,7 +151,7 @@ route <- function(association, causal = list(), predictive = list(), representat
 #' @export
 print.cssem_routing <- function(x, ...) {
   cat("CS-SEM Path Routing Table\n")
-  cat(sprintf("Temporal order: %s\n\n", if (is.null(x$temporal_order)) "(not declared)" else paste(x$temporal_order, collapse = " → ")))
+  cat(sprintf("Temporal order: %s\n\n", if (is.null(x$temporal_order)) "(not declared)" else paste(x$temporal_order, collapse = paste0(" ", .PATH_ARROW, " "))))
   for (i in seq_len(nrow(x$table))) {
     row <- x$table[i, ]
     effect <- if (is.na(row$ci_low)) sprintf("% .3f", row$effect) else sprintf("% .3f [% .3f, % .3f]", row$effect, row$ci_low, row$ci_high)

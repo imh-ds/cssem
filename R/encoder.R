@@ -192,7 +192,7 @@
     r <- yy - drop(X %*% beta); s <- stats::mad(r, constant = 1, na.rm = TRUE) + 1e-6
     w <- pmin(1, 1.345 * s / pmax(abs(r), 1e-8))
   }
-  list(type = "continuous", intercept = beta[1], slope = beta[2], sigma = sqrt(weighted.mean((yy - drop(X %*% beta))^2, w)) + 1e-6)
+  list(type = "continuous", intercept = beta[1], slope = beta[2], sigma = sqrt(stats::weighted.mean((yy - drop(X %*% beta))^2, w)) + 1e-6)
 }
 
 .fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL) {

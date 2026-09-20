@@ -44,7 +44,7 @@
 .evidence_effects <- function(association, routing) {
   ledger <- effect_ledger(association)
   estimate <- ifelse(is.finite(ledger$corrected_estimate), ledger$corrected_estimate, ledger$naive_estimate)
-  key <- paste(ledger$predictor, ledger$outcome, sep = "→")
+  key <- .path_key(ledger$predictor, ledger$outcome)
   status <- rep("associational", nrow(ledger)); robustness <- rep(NA_real_, nrow(ledger)); estimand <- rep(NA_character_, nrow(ledger))
   if (!is.null(routing)) {
     match_row <- match(key, routing$table$path)
@@ -74,13 +74,13 @@
   if (inherits(effect, "causal_indirect_effect")) {
     indirect <- .mediation_reported(effect$summary, isTRUE(effect$disattenuated))
     row <- indirect[indirect$component == "indirect_total", ]
-    data.frame(claim = sprintf("%s → %s", effect$x, effect$y), type = "indirect (interventional)",
+    data.frame(claim = sprintf("%s %s %s", effect$x, .PATH_ARROW, effect$y), type = "indirect (interventional)",
       estimand = effect$estimand, effect = row$reported_effect, ci_low = row$reported_ci_low, ci_high = row$reported_ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
       label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
       stringsAsFactors = FALSE)
   } else if (inherits(effect, "causal_effect")) {
-    data.frame(claim = sprintf("%s → %s", effect$treatment, effect$outcome),
+    data.frame(claim = sprintf("%s %s %s", effect$treatment, .PATH_ARROW, effect$outcome),
       type = if (is.null(effect$claim_type)) "direct" else effect$claim_type,
       estimand = effect$estimand, effect = effect$adjusted_effect, ci_low = effect$ci_low, ci_high = effect$ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,

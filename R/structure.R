@@ -738,9 +738,9 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       candidate_meta[[key]] <- list(predictor = predictor, shape = shape, shapes = shapes)
     }
     candidate_keys <- names(nonlinear)
-    frequency <- if (length(nonlinear)) setNames(.selection_frequency(baseline, nonlinear, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
-    improvement <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) mean(baseline$fold_mse - x$fold_mse), numeric(1)), candidate_keys) else numeric()
-    improvement_se <- if (length(nonlinear)) setNames(vapply(nonlinear, function(x) stats::sd(baseline$fold_mse - x$fold_mse) / sqrt(length(x$fold_mse)), numeric(1)), candidate_keys) else numeric()
+    frequency <- if (length(nonlinear)) stats::setNames(.selection_frequency(baseline, nonlinear, smooth_uncertainty, length(unique(fold_sets[[1L]]))), candidate_keys) else numeric()
+    improvement <- if (length(nonlinear)) stats::setNames(vapply(nonlinear, function(x) mean(baseline$fold_mse - x$fold_mse), numeric(1)), candidate_keys) else numeric()
+    improvement_se <- if (length(nonlinear)) stats::setNames(vapply(nonlinear, function(x) stats::sd(baseline$fold_mse - x$fold_mse) / sqrt(length(x$fold_mse)), numeric(1)), candidate_keys) else numeric()
     # Curvature is decided by a test with a stated error rate, not by the
     # cross-validated loss itself: a paired loss improvement has no calibrated
     # null distribution, so any threshold on it is tuned rather than justified,
