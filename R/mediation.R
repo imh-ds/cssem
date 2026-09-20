@@ -82,10 +82,11 @@
 }
 
 # Average effect transmitted along a chosen active edge set, expressed per unit
-# of delta. Differencing against the all-observed prediction cancels the model
-# intercept; averaging over respondents recovers the coefficient-product
-# decomposition for linear edges and the average mediated effect otherwise.
-.mediation_effect <- function(models, scores, order, x, y, delta, active, baseline_y) {
+# of delta. Both intervention arms use the same active edge set: otherwise the
+# shifted arm replaces observed mediators with fitted values while the baseline
+# arm leaves them observed, creating a spurious contrast for nonlinear models.
+.mediation_effect <- function(models, scores, order, x, y, delta, active) {
+  baseline_y <- .propagate_y(models, scores, order, x, y, 0, active)
   shifted_y <- .propagate_y(models, scores, order, x, y, delta, active)
   mean(shifted_y - baseline_y, na.rm = TRUE) / delta
 }
@@ -94,9 +95,8 @@
 # The per-path vector is aligned with `paths`; direct paths (length two) are
 # returned as NA there and summarized separately.
 .decompose_effects <- function(models, scores, order, x, y, paths, delta) {
-  baseline_y <- .propagate_y(models, scores, order, x, y, 0, character(0))
   all_edges <- .model_edges(models)
-  effect <- function(active) .mediation_effect(models, scores, order, x, y, delta, active, baseline_y)
+  effect <- function(active) .mediation_effect(models, scores, order, x, y, delta, active)
   total <- effect(all_edges)
   direct <- if (.edge(x, y) %in% all_edges) effect(.edge(x, y)) else 0
   path_eff <- vapply(paths, function(path) if (length(path) > 2L) effect(.path_edges(path)) else NA_real_, numeric(1))

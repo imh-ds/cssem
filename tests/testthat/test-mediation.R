@@ -51,6 +51,30 @@ test_that("parallel and serial paths are enumerated and sum to the indirect tota
   expect_equal(serial$path_sum_residual, 0, tolerance = 1e-6)
 })
 
+test_that("nonlinear mediation contrasts use the same propagation baseline", {
+  set.seed(17)
+  n <- 400
+  scores <- data.frame(X = stats::rnorm(n))
+  scores$M <- scores$X + stats::rnorm(n)
+  scores$Y <- scores$M^2
+  models <- list(
+    M = cssem:::.linear_model_from_slopes("X", c(X = 1)),
+    Y = cssem:::.fit_shape_model(scores, "Y", c(M = "smooth_df3"))
+  )
+  paths <- list(c("X", "M", "Y"))
+  order <- c("X", "M", "Y")
+  active <- cssem:::.model_edges(models)
+  delta <- 1e-3
+  expected <- mean(
+    cssem:::.propagate_y(models, scores, order, "X", "Y", delta, active) -
+      cssem:::.propagate_y(models, scores, order, "X", "Y", 0, active),
+    na.rm = TRUE
+  ) / delta
+  actual <- cssem:::.decompose_effects(models, scores, order, "X", "Y", paths, delta)$total
+  expect_equal(actual, expected, tolerance = 1e-8)
+  expect_true(is.finite(actual))
+})
+
 test_that("an endogenous treatment propagates its own shift", {
   # Regression: when x is itself an endogenous construct (has a stage model), the
   # propagation loop must not overwrite its injected shift, or every effect
