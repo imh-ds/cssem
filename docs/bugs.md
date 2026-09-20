@@ -12,12 +12,17 @@ should be tested. Severity is about consequence for a user's results:
 
 Status legend: `[ ]` open, `[x]` fixed (commit noted).
 
-**Audit coverage.** Measurement core (`encoder.R`, `fit.R`), structural layer
-(`structure.R`), propagation (`mediation.R`, `moderation.R`), causal layer
-(`causal.R`, `causal-mediation.R`, `routing.R`), reporting
-(`evidence-report.R`, `model.R`). Simulation harness (`validation.R`,
-`comparators.R`, `simulate.R`, `*-validation.R`, `*-comparator.R`) and
-`deprecated.R`: **in progress**.
+**Audit coverage.** Complete, all 18 files in `R/`: measurement core
+(`encoder.R`, `fit.R`), structural layer (`structure.R`), propagation
+(`mediation.R`, `moderation.R`), causal layer (`causal.R`,
+`causal-mediation.R`, `routing.R`), reporting (`evidence-report.R`,
+`model.R`), simulation harness (`validation.R`, `comparators.R`,
+`simulate.R`, `mediation-validation.R`, `mediation-comparator.R`,
+`moderation-validation.R`, `moderation-comparator.R`) and `deprecated.R`.
+
+Harness entries are prefixed `H`. They cannot produce a wrong answer for a
+user, since the harness is only used to run simulations, but two of them could
+corrupt a study's numbers and therefore the paper's tables.
 
 ---
 
@@ -274,6 +279,98 @@ penalty on the log scale is the sensible one.
 
 ---
 
+## Harness (simulation and comparator code)
+
+### [ ] H1. `.validation_items()` discards sparse thresholds when skew is set
+
+**Where:** [R/validation.R:6](../R/validation.R#L6).
+
+**What happens:** the sparse cutpoints are assigned first, then the skew branch
+overwrites `thresholds` with the *non-sparse* base plus the skew shift, so a
+scenario asking for both gets a skewed non-sparse item.
+
+**Evidence:** share in category 1 over 4,000 draws: sparse only **0.017**,
+sparse + skew **0.573**, non-sparse + skew **0.575** — the sparse+skew item is
+indistinguishable from the non-sparse one (scratchpad `audit5.R`).
+
+**Impact:** latent. No shipped manifest combines `sparse = TRUE` with a
+non-zero `skew`, so no published result is affected.
+
+**Fix:** apply the skew shift to whichever threshold vector was selected
+(`thresholds <- thresholds + skew`) instead of rebuilding the base vector.
+
+**Test:** with `sparse = TRUE, skew = 1.2`, the category-1 share stays far
+below the non-sparse+skew share.
+
+### [ ] H2. `.fill_score_frame()` silently misaligns scores when an engine drops cases
+
+**Where:** [R/comparators.R:280](../R/comparators.R#L280).
+
+**What happens:** with `case_idx = NULL` and an engine returning fewer rows
+than the data, the scores are written to the *first* `nrow(scores)` rows, so
+every score is attributed to the wrong respondent and compared against the
+wrong latent truth.
+
+**Evidence:** three scores for a six-row dataset land in rows 1,2,3 without
+`case_idx` and in rows 4,5,6 with it (scratchpad `audit4.R`, probe H2).
+
+**Impact:** latent. Both current callers are safe — the lavaan branch passes
+`lavInspect(fit, "case.idx")`, and the seminr branch mean-imputes first, so it
+always returns `n` rows. A future engine that drops rows would corrupt results
+silently.
+
+**Fix:** when `case_idx` is `NULL`, require `nrow(scores) == n` and stop
+otherwise, rather than filling from the top.
+
+**Test:** the mismatched-length call errors.
+
+### [ ] H3. Comparators see three different missing-data treatments
+
+**Where:** [R/comparators.R:441](../R/comparators.R#L441) (PLS: mean
+imputation), [R/comparators.R:497](../R/comparators.R#L497) (lavaan WLSMV: its
+own deletion), [R/comparators.R:568](../R/comparators.R#L568) (SAM: continuous
+items with FIML).
+
+**What happens:** each engine is run the way its own users would run it, which
+is defensible, but it means an engine comparison at non-zero missingness
+confounds the estimator with its missing-data handling. Only the SAM choice is
+documented in the paper.
+
+**Fix:** none in code. Document all three in the paper's comparator
+configuration paragraph (§7.1), as the SAM row already is.
+
+### [ ] H4. `.headline_estimate()` mixes estimands across replications
+
+**Where:** [R/comparators.R:640](../R/comparators.R#L640).
+
+**What happens:** the headline **cssem** estimate is the corrected slope when
+the errors-in-variables correction applies and the *naive* slope otherwise
+(that is, whenever a smooth shape was selected). A deviation statistic pooled
+over replications therefore averages corrected and uncorrected estimates, in
+proportions that depend on how often a curve was selected — which the new
+selection rule changes.
+
+**Fix:** none in code (the fallback is the honest "what this pipeline would
+report"), but the regenerated Studies 2 and 3 must report the share of
+replications contributing a corrected versus a naive estimate, and the paper
+should state that the pooled deviation is over a mixture.
+
+### [ ] H5. CI shard seeds depend on the shard count
+
+**Where:** [inst/scripts/run-sim-shard.R:45](../inst/scripts/run-sim-shard.R#L45).
+
+**What happens:** scenarios are strided across shards and each shard offsets
+its seed by `(shard - 1) * 10000`, so changing `NSHARDS` changes which seed is
+paired with which scenario. Results reproduce only at a fixed shard count.
+
+**Fix:** derive each job's seed from its index in the *unsharded* job list
+before striding, as `inst/scripts/run-shape-bench-shard.R` already does.
+
+**Test:** the same scenario-replication draws an identical seed at two
+different shard counts.
+
+---
+
 ## Verified correct (no action)
 
 Checked by probe, not by reading:
@@ -287,3 +384,10 @@ Checked by probe, not by reading:
 - A constant indicator errors cleanly rather than producing a degenerate fit.
 - Deprecated `cssem_model()` front door still fits.
 - `validate_structure()` is reproducible at a fixed seed.
+- `validate_structure_comparator()` is reproducible at a fixed seed (all
+  columns identical apart from runtimes), and all eight engines report
+  `success` on the screening scenario.
+- All 38 deprecated wrappers forward to functions that still exist.
+- Mediation and moderated-mediation harness targets are computed with the same
+  propagation engine on the error-free states, so the estimate and its target
+  are defined consistently (they are sample oracles, as the paper states).
