@@ -137,3 +137,19 @@ test_that("proxy first-PC scores are sign-aligned with the item composite", {
   expect_gt(cor(cssem:::.aligned_first_pc(block), rowMeans(block)), 0)
   expect_gt(cor(cssem:::.aligned_first_pc(-block), rowMeans(-block)), 0)
 })
+
+test_that("a sparse item schedule survives a skew shift", {
+  # Regression: the skew branch rebuilt the non-sparse cutpoints, so a scenario
+  # asking for both got a skewed item with ordinary thresholds. No shipped
+  # manifest combines them, but the generator silently ignored the request.
+  set.seed(1)
+  z <- stats::rnorm(4000)
+  share <- function(...) mean(cssem:::.validation_items(z, "a", .8, 0, items = 1L, ...)$a1 == 1)
+  sparse_only <- share(sparse = TRUE)
+  sparse_skewed <- share(sparse = TRUE, skew = 1.2)
+  plain_skewed <- share(sparse = FALSE, skew = 1.2)
+  # Sparse thresholds put almost nothing in the lowest category; the skew shift
+  # moves mass into it, but the sparse schedule must still be visible.
+  expect_lt(sparse_only, .05)
+  expect_lt(sparse_skewed, plain_skewed - .10)
+})

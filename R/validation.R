@@ -6,7 +6,10 @@
   thresholds <- if (sparse) c(-Inf, -2.2, -0.2, .5, Inf) else c(-Inf, -1, -.2, .5, Inf)
   # Positive skew shifts the cutpoints upward so response mass piles into the
   # lowest categories: the floor effect common in frequency or symptom items.
-  if (skew != 0) thresholds <- c(-Inf, -1, -.2, .5, Inf) + skew
+  # The shift applies to whichever cutpoints were selected above; rebuilding the
+  # base vector here silently discarded a requested sparse schedule, making a
+  # sparse-and-skewed item indistinguishable from a merely skewed one.
+  if (skew != 0) thresholds <- thresholds + skew
   base_sd <- sqrt(max(.05, 1 - loading^2))
   # A per-respondent multiplier on the idiosyncratic item noise. Careless
   # responders carry a large multiplier, so their items are weakly informative
