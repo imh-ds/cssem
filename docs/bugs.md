@@ -1,4 +1,52 @@
-# Package audit: confirmed bugs and fix steps
+# Package audit: patched history and open findings
+
+## Current audit — 2026-09-20, commit `f5a6e1b`
+
+This document records the audit and patch history. A1 and A2 below were fixed
+in this work, with focused regression tests and separate commits; A3–A10 remain
+open. The earlier S/M/N/H entries are retained as a historical patch register:
+checked entries describe bugs that were edited and patched, not defects newly
+found in the current source. H3 and H4 remain open methodological disclosures.
+Each A entry includes its issue, evidence, resolution or proposed fix, and
+regression checks.
+
+The review traced measurement preparation/scoring, structural selection and
+correction, mediation/moderation, causal gating, evidence reporting, and the
+simulation/comparator workflows against their documentation and existing tests.
+Targeted probes sourced the current `R/` files directly and ran on R 4.6.0.
+They confirmed A1–A9; A10 is a source-confirmed validation-design limitation.
+Focused regression tests for A1 and A2 were added, but the full test harness
+could not run in this environment.
+This is not a claim that every function or possible input has been exhaustively
+validated. Optional lavaan/seminr integrations and full simulation studies were
+not rerun.
+
+Other edits appeared concurrently in `.Rbuildignore`, `R/encoder.R`,
+`R/evidence-report.R`, `R/routing.R`, and `R/structure.R`. They were left
+untouched. Their diff concerns namespace qualification, path-key portability,
+and build exclusions, not the defects below. Commit `f5a6e1b` identifies the
+baseline; probes used the working source available during this review.
+
+**Validation limit:** `Rscript tools/test.R` stopped before running tests because
+`pkgload` and `testthat` are unavailable in this R installation. Historical
+expectation counts and statements that regression tests passed below are from
+the earlier audit, not new test results. The untracked manuscript mentioned
+under N6 was not available for verification.
+
+| Entry | Status | Severity | Issue |
+| --- | --- | --- | --- |
+| A1 | Fixed (`9190195`) | Severe | Nonlinear mediation contrasts use incompatible baselines |
+| A2 | Fixed (`eba96d5`) | Severe | Causal mediation accepts contradictory temporal declarations |
+| A3 | Open | Severe | Mediator subsets bypass adjustment checks for included paths |
+| A4 | Open | Severe | Flexible causal identification is assessed with a linear model |
+| A5 | Open | Moderate | Evidence verdict reverses the specification-gap sign |
+| A6 | Open | Severe | New ordinal scores silently truncate fractional categories |
+| A7 | Open | Severe | Continuous/manifest factors become integer level positions |
+| A8 | Open | Moderate | Interaction correction disappears from structural reports |
+| A9 | Open | Moderate | Weak causal effects print the wrong non-causal reason |
+| A10 | Open | Methodological | Mediation validation reuses the estimator as its oracle |
+
+## Historical audit and patch register
 
 Audit of every exported and internal function in `R/`, conducted 2026-09-20 at
 commit `290740b`. Each entry states what is wrong, the evidence that confirmed
@@ -12,8 +60,8 @@ should be tested. Severity is about consequence for a user's results:
 
 Status legend: `[ ]` open, `[x]` fixed (commit noted).
 
-**Progress.** Eighteen of the twenty entries are fixed -- every code defect
-found -- each with a regression test confirmed to fail on the pre-fix code
+**Historical progress.** Eighteen of the twenty original entries were recorded
+as patched -- every code defect found in that audit -- each with a regression test confirmed to fail on the pre-fix code
 where a test applies. The suite has grown from 331 to 393 expectations.
 
 The two that remain, **H3** and **H4**, are not code defects: they are
@@ -29,7 +77,7 @@ rather than `"direct"` (M6), and §6.7's prose caveat about the `direct` label
 can be dropped. The ridge-penalty description in §3.2 has already been
 corrected (N6).
 
-**Audit coverage.** Complete, all 18 files in `R/`: measurement core
+**Historical audit coverage (as originally recorded).** All 18 files then in `R/`: measurement core
 (`encoder.R`, `fit.R`), structural layer (`structure.R`), propagation
 (`mediation.R`, `moderation.R`), causal layer (`causal.R`,
 `causal-mediation.R`, `routing.R`), reporting (`evidence-report.R`,
@@ -428,7 +476,7 @@ regeneration under the submission version regardless.
 
 ---
 
-## Verified correct (no action)
+## Historical verification (not rerun in this audit)
 
 Checked by probe, not by reading:
 
@@ -448,3 +496,294 @@ Checked by probe, not by reading:
 - Mediation and moderated-mediation harness targets are computed with the same
   propagation engine on the error-free states, so the estimate and its target
   are defined consistently (they are sample oracles, as the paper states).
+
+---
+
+## New findings and patch status
+
+The following probes run after `for (f in list.files("R", full.names = TRUE))
+source(f)` from the repository root. Helper-level probes deliberately bypass
+package installation; they test the actual source functions, not an installed
+copy. Severity follows the earlier consequence-based definitions; causal
+misclassification is severe because it changes the interpretation of results.
+
+### [x] A1. Nonlinear mediation contrasts use incompatible baselines — fixed in `9190195`
+
+**Where:** [R/mediation.R:63](../R/mediation.R#L63), `.propagate_y()`,
+`.mediation_effect()`, and `.decompose_effects()` (line 97).
+
+**Issue:** the reference prediction uses an empty active-edge set, so downstream
+models see observed mediators. The shifted prediction activates edges and
+replaces mediators with fitted values. The resulting contrast includes the
+change from observed to predicted mediators even as `delta` approaches zero.
+Nonlinear downstream models need not average this change to zero. Division by
+`delta` can therefore produce an arbitrarily large spurious effect. This feeds
+ordinary, conditional, and causal mediation and their bootstrap results.
+
+**Reproduction (executed):**
+
+```r
+s <- expand.grid(X = c(-1, 1), u = c(-1, 1))
+s$M <- s$X + s$u
+s$Y <- s$M^2
+mods <- list(M = .linear_model_from_slopes("X", c(X = 1)),
+             Y = .fit_shape_model(s, "Y", c(M = "smooth_df3")))
+for (d in c(1, .1, .01)) {
+  print(.decompose_effects(mods, s, c("X", "M", "Y"),
+    "X", "Y", list(c("X", "M", "Y")), d)$total)
+}
+```
+
+Observed totals: approximately `0`, `-7.425`, and `-74.9925`. Comparing the same
+fitted propagation at `delta` and zero with the **same active edges** instead
+gives `0.75`, `0.075`, and `0.0075`. Those paired values diagnose the baseline
+error; they do not establish a correct causal g-computation estimator.
+
+**Resolution:** `.mediation_effect()` now computes the zero-shift reference
+with the same `active` edge set as the shifted arm. This removes the observed-
+versus-fitted mediator substitution from the finite-difference contrast and is
+used by ordinary, conditional, causal, and bootstrap mediation paths. The fix
+does not claim that conditional-mean propagation integrates nonlinear mediator
+residuals; that methodological limitation remains documented in A10.
+
+**Regression checks:** zero-shift consistency before division; convergence to a
+finite derivative as `delta` shrinks; analytic linear products; independently
+computed nonlinear intervention contrasts with noisy mediators. Include both
+moderation and causal wrappers, and regenerate affected validation outputs.
+
+### [x] A2. Causal mediation accepts contradictory temporal declarations — fixed in `eba96d5`
+
+**Where:** [R/causal-mediation.R:70](../R/causal-mediation.R#L70),
+`causal_indirect_effect()`.
+
+**Issue:** the supplied order is checked only for membership and `x` preceding
+`y`. It does not require confounders before treatment or mediators between
+treatment and outcome. Propagation separately uses the structure's order.
+Consequently two contradictory orders can coexist, yet merely supplying the
+second one satisfies the causal-label gate.
+
+**Evidence (executed):** fit linear models for `M ~ X + C` and `Y ~ M + X + C`
+with structure order `C, X, M, Y`. Calling causal mediation with `adjust = "C"`
+and `temporal_order = c("M", "X", "Y", "C")` returned
+`label = "causal_under_assumptions"`.
+
+**Resolution:** `causal_indirect_effect()` now validates a unique, known-name
+order containing every node on every included directed path and every adjuster;
+checks strict path precedence and pre-treatment adjustment; and compares the
+caller order with the canonical order used by propagation. Contradictions now
+error before a causal label can be assigned. The valid canonical-order case
+continues to return `causal_under_assumptions`.
+
+**Regression checks:** reject a mediator preceding treatment, a mediator after
+outcome, an adjuster following treatment, and conflicts with the structure;
+retain valid parallel and serial orders.
+
+### [ ] A3. A mediator subset bypasses adjustment checks for included paths
+
+**Where:** [R/causal-mediation.R:131](../R/causal-mediation.R#L131), mediator
+selection, stage-model checks, and the call to `.cssem_mediation_core()`.
+
+**Issue:** `mediators` limits the stage models checked for adjustment, but the
+core still estimates all paths. Unlike `indirect_effect()`, this wrapper does
+not even filter its returned path table. Thus an unchecked stage can contribute
+to an effect labeled causal.
+
+**Evidence (executed):** declare `M1 ~ X + C`, `M2 ~ X`, and
+`Y ~ M1 + M2 + C`; call with `adjust = "C"`, `mediators = "M1"`, and valid order
+`C, X, M1, M2, Y`. The result is `causal_under_assumptions` and contains both
+`M1` and `M2` path rows, even though `M2` was not adjusted for `C`.
+
+**Proposed fix:** if totals continue to include every declared path, check
+adjustment for every included mediator regardless of display filtering. If a
+subset-specific estimand is intended, explicitly restrict the modeled paths
+and label that estimand consistently. Do not let display options weaken gates.
+
+**Regression checks:** the above structure must fail when reporting a full
+causal indirect effect; adding `C` to `M2` must permit it. Test that returned
+paths, total effects, and admissibility all use the documented scope.
+
+### [ ] A4. Flexible causal identification uses a linear treatment diagnostic
+
+**Where:** [R/causal.R:166](../R/causal.R#L166), `causal_effect()` and the
+`.dml_partial_linear()` / `.dml_average_derivative()` helpers.
+
+**Issue:** every estimand uses `1 - R²` from `X ~ adjust` with linear terms to
+decide identification. The flexible estimands remove spline-predictable
+variation instead. A treatment fully determined by a nonlinear confounder can
+have large reported identification strength despite no conditional treatment
+variation. The flexible branch also sets `stable = TRUE` without checking this.
+
+**Reproduction (executed):**
+
+```r
+set.seed(56)
+n <- 500
+C <- runif(n, -2, 2)
+X <- as.numeric(splines::ns(C, df = 5)[, 1])
+Y <- C + rnorm(n)
+s <- data.frame(C, X, Y)
+a <- structure(list(scores = s,
+  structure = specify_structure(Y ~ linear(X) + linear(C),
+                                order = c("C", "X", "Y")),
+  folds = rep(1:5, length.out = n), reliability = c(C = 1, X = 1, Y = 1)),
+  class = "cssem_association")
+causal_effect(a, "X", "Y", adjust = "C", estimand = "adjusted_dml",
+              temporal_order = c("C", "X", "Y"))
+```
+
+This returned strength `0.9225948`, a causal label, and estimate approximately
+`9.735735`, although `X` is a deterministic function of `C`.
+
+**Proposed fix:** base flexible-estimator diagnostics on the relevant nuisance
+fits and residual variation; guard zero/near-zero denominators and invalid
+effective sample sizes. Return an unavailable/weak-identification result when
+appropriate. A residual diagnostic remains a diagnostic, not proof of overlap
+or causal identification.
+
+**Regression checks:** deterministic and near-deterministic nonlinear treatment
+models must not receive a strong causal label; compare against treatments with
+substantial independent residual variation for both flexible estimands.
+
+### [ ] A5. Evidence verdicts reverse the specification-gap sign
+
+**Where:** [R/evidence-report.R:20](../R/evidence-report.R#L20), `.edge_verdict()`.
+
+**Issue:** gaps are theory CV R² minus shadow CV R², so strongly negative values
+indicate predictive incompleteness. The robust-verdict condition instead uses
+`gap <= 0.08`, accepting arbitrarily negative gaps and penalizing positive ones.
+
+**Evidence (executed):** `.edge_verdict(1, .5, .1, -.5, "associational")`
+returns `"Robust descriptive effect"`; changing the gap to `+.5` returns
+`"Moderate descriptive effect"`.
+
+**Proposed fix:** express acceptable shortfall with the correct sign (for the
+existing tolerance, `gap >= -0.08`) and document how missing gaps are treated.
+
+**Regression checks:** cover both signs, the tolerance boundary, and unavailable
+gaps, including the end-to-end evidence report.
+
+### [ ] A6. Scoring silently truncates fractional ordinal values
+
+**Where:** [R/encoder.R:58](../R/encoder.R#L58), `.prepare_for_encoder()`.
+
+**Issue:** fitting rejects fractional category codes, but future scoring calls
+`as.integer()` before validation. For example, values `1.9` and `2.1` become
+valid categories `1` and `2`; the unseen-category check cannot detect the loss.
+This is distinct from the patched category-order defects S1/S2.
+
+**Evidence (executed):**
+`.prepare_for_encoder(c(1.9, 2.1), "ordinal", 1, 1:3)` returned `c(1L, 2L)`.
+
+**Proposed fix:** share finite whole-number validation between fitting and
+scoring, before integer coercion, while preserving factor-label mapping.
+
+**Regression checks:** numeric and numeric-string fractional inputs must error
+through `score_states()`; valid integer codes, labels, and missing values must
+retain their current behavior.
+
+### [ ] A7. Continuous and manifest factors silently become level positions
+
+**Where:** [R/encoder.R:22](../R/encoder.R#L22), `.prepare_item()`,
+`.prepare_for_encoder()`, and the manifest branches of `.fit_encoder()` and
+`.predict_encoder()`.
+
+**Issue:** unguarded `as.numeric(factor)` returns internal level positions rather
+than the observed labels' numeric values. Rebuilt scoring factors can therefore
+change the mapping as well. Suppressed conversion warnings also turn malformed
+character values into missing observations without explaining the data error.
+
+**Evidence (executed):**
+`.prepare_item(factor(c("10", "20", "100")), "continuous", 1)$y`
+returned `c(1, 3, 2)`, rather than the measured values or a validation error.
+The manifest paths use the same coercion.
+
+**Proposed fix:** define and enforce a numeric-input contract for continuous and
+manifest items. Reject factors/non-numeric labels, or explicitly parse numeric
+labels with loss checks; never use factor positions. Apply it to future scoring
+as well as fitting.
+
+**Regression checks:** numeric-label and nonnumeric-label factors, reordered
+factor levels, malformed strings, nonfinite inputs, and valid numeric controls.
+
+### [ ] A8. Interaction corrections disappear from structural reports
+
+**Where:** [R/structure.R:556](../R/structure.R#L556), `.corrected_effects()`;
+compare `.eiv_coefficients()` and `.corrected_models()` in `R/mediation.R`.
+
+**Issue:** interaction shapes are `"product"`, but the structural report's
+eligibility whitelist excludes that shape. The underlying correction solver
+does calculate an interaction coefficient, and the moderation layer uses it,
+so different reporting APIs disagree about correction availability.
+
+**Evidence (executed):** for `Y = X + .5*W + 2*X*W + noise`, with reliabilities
+`.8`, `.corrected_effects()` returned `eiv_applicable = FALSE` and
+`corrected_estimate = NA` for `X:W`, while `.eiv_coefficients()` on the identical
+data returned a finite corrected interaction (`3.082602` in the probe).
+
+**Proposed fix:** choose one supported interaction-correction policy and apply
+it consistently to structural, simple-slope, and mediation APIs. If supported,
+include products in eligibility and interval generation; otherwise prevent the
+moderation layer from presenting that correction as available. Update the
+simple-slopes documentation, which currently says the interaction is observed.
+This probe establishes an API inconsistency, not the statistical validity of
+the product-reliability approximation for every predictor distribution.
+
+**Regression checks:** compare correction basis, point estimates, and interval
+availability across the APIs, including swapped interaction names.
+
+### [ ] A9. Weak causal effects print the wrong reason for their label
+
+**Where:** [R/causal.R:244](../R/causal.R#L244), `print.causal_effect()`.
+
+**Issue:** the single-effect printer hard-codes `adjusted_association` to mean
+no declared temporal order. That label also occurs when an order was supplied
+but identification strength is below `.10`. Historical M7 patched the causal
+*mediation* printer; this separate printer still has the analogous defect.
+
+**Evidence (executed):** with `X = C + N(0, .01²)`, adjusting for `C` and
+declaring `C, X, Y` returns `adjusted_association` but prints
+`"Adjusted association (not causal: no declared temporal order)"`.
+
+**Proposed fix:** select the explanation from `temporal_order_declared` and
+`identification_strength`, as the mediation printer already does.
+
+**Regression checks:** declared-but-weak, undeclared, and adequately identified
+cases must print the actual reason consistently with routing and reporting.
+
+### [ ] A10. Mediation validation shares its oracle with the estimator
+
+**Where:** [R/mediation-validation.R:61](../R/mediation-validation.R#L61),
+`.mediation_truth()`; [R/moderation-validation.R:18](../R/moderation-validation.R#L18),
+`.moderated_mediation_truth()`.
+
+**Issue (source-confirmed):** the latent-data targets call the same mediation
+core or conditional propagation used by the estimator. This is a valid way to
+measure agreement with a sample-level algorithmic target, but it cannot
+independently validate that algorithm's estimand. A shared error such as A1
+can affect both target and estimate. The historical "verified correct" note
+establishes consistent definitions, not independent methodological correctness.
+
+**Proposed fix:** retain sample-oracle comparisons with explicit labeling, and
+add independent population targets: analytic coefficient products for linear
+models and separately implemented intervention integration for nonlinear
+models. Report estimation/measurement error separately from sample-oracle
+variation. Reassess nonlinear/causal claims after those checks.
+
+**Regression checks:** an intentionally incorrect zero-shift baseline must fail
+the independent oracle test even if estimator and sample-oracle implementations
+agree. Include serial paths, parallel paths, interactions, and noisy mediators.
+
+## Follow-up priorities
+
+Resolve A1–A4 before relying on affected causal or nonlinear mediation claims;
+resolve A6/A7 before scoring unchecked external data. A5/A8/A9 concern reporting
+and cross-API consistency. Add A10's independent checks before regenerating
+publication results, and carry forward H3/H4's disclosures. The repository's
+method notes also need synchronization with the current selector (Holm-adjusted
+curvature testing and the relative-gain floor), but were not edited here.
+
+Bootstrap results should continue to be described according to their actual
+scope: resampling locked scores with selected shapes held fixed does not rerun
+the complete measurement and selection pipeline. No new coverage guarantee,
+optional-engine compatibility claim, or release-readiness claim follows from
+this audit.
