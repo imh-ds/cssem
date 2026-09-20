@@ -103,6 +103,19 @@ test_that("causal mediation validates every declared path mediator", {
   expect_error(causal_indirect_effect(association, "X", "Y", adjust = "C",
     mediators = "M1", temporal_order = c("C", "X", "M1", "M2", "Y")),
     "declared as predictor")
+
+  structure_ok <- cssem_structure(
+    list(M1 = c("X", "C"), M2 = c("X", "C"), Y = c("X", "M1", "M2", "C")),
+    order = c("C", "X", "M1", "M2", "Y"))
+  full_models_ok <- full_models
+  full_models_ok$M2 <- cssem:::.fit_shape_model(scores, "M2", c(X = "linear", C = "linear"))
+  association_ok <- association
+  association_ok$structure <- structure_ok
+  association_ok$full_models <- full_models_ok
+  accepted <- causal_indirect_effect(association_ok, "X", "Y", adjust = "C",
+    mediators = "M1", temporal_order = c("C", "X", "M1", "M2", "Y"))
+  expect_identical(accepted$label, "causal_under_assumptions")
+  expect_length(accepted$path_specific, 2L)
 })
 
 test_that("an endogenous treatment propagates through causal mediation", {

@@ -1,9 +1,9 @@
 # Package audit: patched history and open findings
 
-## Current audit — 2026-09-20, commit `f5a6e1b`
+## Current audit — 2026-09-20, commit `39b777f`
 
-This document records the audit and patch history. A1 and A2 below were fixed
-in this work, with focused regression tests and separate commits; A3–A10 remain
+This document records the audit and patch history. A1–A4 below were fixed in
+this work, with focused regression tests and separate commits; A5–A10 remain
 open. The earlier S/M/N/H entries are retained as a historical patch register:
 checked entries describe bugs that were edited and patched, not defects newly
 found in the current source. H3 and H4 remain open methodological disclosures.
@@ -15,7 +15,7 @@ correction, mediation/moderation, causal gating, evidence reporting, and the
 simulation/comparator workflows against their documentation and existing tests.
 Targeted probes sourced the current `R/` files directly and ran on R 4.6.0.
 They confirmed A1–A9; A10 is a source-confirmed validation-design limitation.
-Focused regression tests for A1 and A2 were added, but the full test harness
+Focused regression tests for A1–A4 were added, but the full test harness
 could not run in this environment.
 This is not a claim that every function or possible input has been exhaustively
 validated. Optional lavaan/seminr integrations and full simulation studies were
@@ -37,8 +37,8 @@ under N6 was not available for verification.
 | --- | --- | --- | --- |
 | A1 | Fixed (`9190195`) | Severe | Nonlinear mediation contrasts use incompatible baselines |
 | A2 | Fixed (`eba96d5`) | Severe | Causal mediation accepts contradictory temporal declarations |
-| A3 | Open | Severe | Mediator subsets bypass adjustment checks for included paths |
-| A4 | Open | Severe | Flexible causal identification is assessed with a linear model |
+| A3 | Fixed (`dc21536`) | Severe | Mediator subsets bypass adjustment checks for included paths |
+| A4 | Fixed (`39b777f`) | Severe | Flexible causal identification is assessed with a linear model |
 | A5 | Open | Moderate | Evidence verdict reverses the specification-gap sign |
 | A6 | Open | Severe | New ordinal scores silently truncate fractional categories |
 | A7 | Open | Severe | Continuous/manifest factors become integer level positions |
@@ -578,9 +578,9 @@ continues to return `causal_under_assumptions`.
 outcome, an adjuster following treatment, and conflicts with the structure;
 retain valid parallel and serial orders.
 
-### [ ] A3. A mediator subset bypasses adjustment checks for included paths
+### [x] A3. A mediator subset bypasses adjustment checks for included paths — fixed in `dc21536`
 
-**Where:** [R/causal-mediation.R:131](../R/causal-mediation.R#L131), mediator
+**Where:** [R/causal-mediation.R:181](../R/causal-mediation.R#L181), mediator
 selection, stage-model checks, and the call to `.cssem_mediation_core()`.
 
 **Issue:** `mediators` limits the stage models checked for adjustment, but the
@@ -593,18 +593,19 @@ to an effect labeled causal.
 `C, X, M1, M2, Y`. The result is `causal_under_assumptions` and contains both
 `M1` and `M2` path rows, even though `M2` was not adjusted for `C`.
 
-**Proposed fix:** if totals continue to include every declared path, check
-adjustment for every included mediator regardless of display filtering. If a
-subset-specific estimand is intended, explicitly restrict the modeled paths
-and label that estimand consistently. Do not let display options weaken gates.
+**Resolution:** adjustment declarations are now checked for every mediator on
+every declared `x -> y` path, regardless of the optional `mediators` reporting
+selection. The admissibility panel uses the same all-path scope as the causal
+core, so a display subset cannot weaken the gate or understate diagnostics.
 
-**Regression checks:** the above structure must fail when reporting a full
-causal indirect effect; adding `C` to `M2` must permit it. Test that returned
-paths, total effects, and admissibility all use the documented scope.
+**Regression checks:** the above structure now errors because `C` is not a
+declared predictor of `M2`; adding `C` to `M2` permits the call. The focused
+test also confirms the valid result retains both declared paths while the
+panel describes the all-path estimand.
 
-### [ ] A4. Flexible causal identification uses a linear treatment diagnostic
+### [x] A4. Flexible causal identification uses a linear treatment diagnostic — fixed in `39b777f`
 
-**Where:** [R/causal.R:166](../R/causal.R#L166), `causal_effect()` and the
+**Where:** [R/causal.R:219](../R/causal.R#L219), `causal_effect()` and the
 `.dml_partial_linear()` / `.dml_average_derivative()` helpers.
 
 **Issue:** every estimand uses `1 - R²` from `X ~ adjust` with linear terms to
@@ -634,15 +635,17 @@ causal_effect(a, "X", "Y", adjust = "C", estimand = "adjusted_dml",
 This returned strength `0.9225948`, a causal label, and estimate approximately
 `9.735735`, although `X` is a deterministic function of `C`.
 
-**Proposed fix:** base flexible-estimator diagnostics on the relevant nuisance
-fits and residual variation; guard zero/near-zero denominators and invalid
-effective sample sizes. Return an unavailable/weak-identification result when
-appropriate. A residual diagnostic remains a diagnostic, not proof of overlap
-or causal identification.
+**Resolution:** flexible estimators now report identification strength from
+their cross-fitted nonlinear treatment residuals, rather than linear `X ~ C`
+R². Near-zero residual denominators and insufficient effective samples return
+an unavailable result; finite but weak residual variation is marked unstable
+and cannot earn a causal label. A residual diagnostic remains a diagnostic,
+not proof of overlap or causal identification.
 
 **Regression checks:** deterministic and near-deterministic nonlinear treatment
-models must not receive a strong causal label; compare against treatments with
-substantial independent residual variation for both flexible estimands.
+models now report weak identification for both flexible estimands, while the
+existing noisy nonlinear DML and AME fixtures retain strong labels and finite
+estimates.
 
 ### [ ] A5. Evidence verdicts reverse the specification-gap sign
 
@@ -775,8 +778,8 @@ agree. Include serial paths, parallel paths, interactions, and noisy mediators.
 
 ## Follow-up priorities
 
-Resolve A1–A4 before relying on affected causal or nonlinear mediation claims;
-resolve A6/A7 before scoring unchecked external data. A5/A8/A9 concern reporting
+A1–A4 are patched, but their focused tests should remain part of release
+verification. Resolve A6/A7 before scoring unchecked external data. A5/A8/A9 concern reporting
 and cross-API consistency. Add A10's independent checks before regenerating
 publication results, and carry forward H3/H4's disclosures. The repository's
 method notes also need synchronization with the current selector (Holm-adjusted
