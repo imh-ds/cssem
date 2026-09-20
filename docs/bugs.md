@@ -12,6 +12,11 @@ should be tested. Severity is about consequence for a user's results:
 
 Status legend: `[ ]` open, `[x]` fixed (commit noted).
 
+**Progress.** Both severe entries and all seven moderate entries are fixed,
+each in its own commit with a regression test that was confirmed to fail on the
+pre-fix code. The suite has grown from 331 to 377 expectations over these
+fixes. Remaining: the six minor entries and the five harness entries.
+
 **Audit coverage.** Complete, all 18 files in `R/`: measurement core
 (`encoder.R`, `fit.R`), structural layer (`structure.R`), propagation
 (`mediation.R`, `moderation.R`), causal layer (`causal.R`,
@@ -148,7 +153,7 @@ companion unit test on `.edge_verdict()` covers the wording directly, since a
 weakly identified edge usually also trips the strength rule first. Three
 expectations fail on the pre-fix code.
 
-### [ ] M3. `conditional_slopes()` mislabels moderator levels for an unstandardized moderator
+### [x] M3. `conditional_slopes()` mislabels moderator levels for an unstandardized moderator — fixed in `dc649f5`
 
 **Where:** `.level_labels()` and the `levels` default,
 [R/moderation.R:8](../R/moderation.R#L8) and `conditional_slopes()`.
@@ -168,11 +173,13 @@ standardized construct this is unchanged. Apply the same conversion in
 `conditional_indirect_effect()`, which sets `at_level[[moderator]] <- level`
 directly.
 
-**Tests:** with an unstandardized manifest moderator, the evaluated values are
-mean ± SD in natural units, and the labels report those values; with
-standardized constructs the results are identical to current behavior.
+**Tests:** added to `tests/testthat/test-moderation.R` ("moderator levels are
+evaluated on the moderator's own scale" and "standardized moderators are
+unaffected by the scale conversion"): with age in years the rows sit at mean
+± SD and the slope varies materially across them; with standardized constructs
+the values stay exactly -1, 0, 1. Three expectations fail on the pre-fix code.
 
-### [ ] M4. `print.conditional_indirect_effect()` crashes on a missing index and misreads a zero index
+### [x] M4. `print.conditional_indirect_effect()` crashes on a missing index and misreads a zero index — fixed in `393f35a`
 
 **Where:** [R/moderation.R:318](../R/moderation.R#L318).
 
@@ -185,10 +192,13 @@ uncorrectable), and reports "weakens" when the index is exactly 0.
 could not be computed), exactly zero or not distinguishable from zero (report
 no detectable variation), otherwise the direction.
 
-**Tests:** printing an object with a zero index and with an `NA` index both
-succeed and say the right thing.
+**Tests:** added to `tests/testthat/test-moderation.R` ("printing a moderated
+mediation handles a zero or missing index"): zero reports no detectable
+variation, `NA` reports that the index could not be computed and prints "not
+available", and signed indices still report a direction. Two expectations fail
+on the pre-fix code (one of them an error, not a wrong string).
 
-### [ ] M5. `evidence_report()` lists a claim twice
+### [x] M5. `evidence_report()` lists a claim twice — fixed in `0683b5e`
 
 **Where:** `.evidence_causal_claims()`,
 [R/evidence-report.R:90](../R/evidence-report.R#L90).
@@ -201,10 +211,12 @@ twice in the causal-claims section.
 preferring the explicitly passed `causal=` object, which may carry intervals
 the routed one lacks.
 
-**Tests:** passing the same edge through both arguments yields one row, and it
-is the one carrying the interval.
+**Tests:** added to `tests/testthat/test-causal.R` ("a claim arriving through
+both routing and causal is listed once"): one row survives, and it is the
+explicitly passed object, proved by the routed-only report having no interval
+while the combined one does.
 
-### [ ] M6. `adjusted_linear` claims are typed `"direct"`
+### [x] M6. `adjusted_linear` claims are typed `"direct"` — fixed in `bfba3f9`
 
 **Where:** `.causal_claim_row()`,
 [R/evidence-report.R:80](../R/evidence-report.R#L80).
@@ -220,10 +232,19 @@ declared mediator of the treatment–outcome pair is in `adjust`, type it
 Requires passing the association's declared structure, or recording the
 mediator status on the `causal_effect` object at construction.
 
-**Tests:** an effect adjusting only pre-treatment covariates is typed as a
-total-effect contrast; one adjusting a declared mediator is typed direct.
+**Tests:** added to `tests/testthat/test-causal.R` ("a causal claim is typed
+from its adjustment set, not named direct by default"), and the stale
+expectation in `test-evidence-report.R` was updated from `"direct"` to
+`"total (adjusted)"`.
 
-### [ ] M7. `print.causal_indirect_effect()` gives the wrong reason for a non-causal label
+**Note found while fixing:** with a declared temporal order the post-treatment
+guard already refuses mediator adjustment outright, so every causal-labelled
+`adjusted_linear` claim is necessarily a total-effect contrast. The
+`"direct (adjusted)"` branch is reachable only without a declared order, where
+the claim is not causal anyway. This is the point §6.7 of the paper argues in
+prose, and the paper can now cite the reported type instead.
+
+### [x] M7. `print.causal_indirect_effect()` gives the wrong reason for a non-causal label — fixed in `2411631`
 
 **Where:** [R/causal-mediation.R:188](../R/causal-mediation.R#L188).
 
@@ -234,7 +255,10 @@ the order *was* declared and identification strength fell below .10.
 **Fix:** choose the explanatory clause from the actual cause, which is already
 on the object (`temporal_order_declared`, `identification_strength`).
 
-**Tests:** both routes to the label print their own reason.
+**Tests:** added to `tests/testthat/test-causal.R` ("an interventional
+mediation names the actual reason it is not causal"): the undeclared-order case
+still names the order, the weakly identified case names the strength and does
+not mention the order, and a causal-labelled object is unchanged.
 
 ---
 
