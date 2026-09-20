@@ -31,8 +31,11 @@
     list(indicators = indicators, scales = scales, keys = keys, manifest = FALSE)
   })
   all_items <- unlist(lapply(parsed, `[[`, "indicators"), use.names = FALSE)
-  if (anyDuplicated(all_items)) stop("An indicator may belong to only one v0.1 construct.", call. = FALSE)
-  structure(list(constructs = parsed, folds = folds, version = "0.1"), class = "cssem_model")
+  if (anyDuplicated(all_items)) stop("An indicator may belong to only one construct.", call. = FALSE)
+  # Stamp the package version that built the model, not a frozen literal: the
+  # object reported "(v0.1)" for every release up to 0.5.0.
+  structure(list(constructs = parsed, folds = folds,
+    version = as.character(utils::packageVersion("cssem"))), class = "cssem_model")
 }
 
 #' Declare a CS-SEM measurement model

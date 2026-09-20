@@ -98,7 +98,12 @@ test_that("very low reliability flags a limited, stabilized correction", {
   expect_equal(low$path_specific$min_reliability[[1L]], 0.2)
 })
 
-test_that("regularized correction is never worse than naive at low reliability", {
+test_that("the limiter keeps the correction bounded at low reliability", {
+  # This checks one scenario (rho = .3, n = 4000): with the limiter engaged the
+  # disattenuated indirect effect lands no further from the latent target than
+  # the naive one. It is not a guarantee that the correction is never worse
+  # than naive -- that claim was withdrawn -- but a regression guard on the
+  # limiter doing its job here.
   set.seed(11)
   std <- function(v) as.numeric(scale(v))
   attenuate <- function(latent, rho) std(sqrt(rho) * std(latent) + sqrt(1 - rho) * stats::rnorm(length(latent)))

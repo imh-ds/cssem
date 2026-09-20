@@ -509,8 +509,12 @@ specify_structure <- function(..., order = NULL) {
   # becomes more biased than the naive one). Floor the effective reliability so
   # the correction factor stays bounded, then shrink the error-covariance
   # subtraction further if the corrected covariance is still ill-conditioned. The
-  # result interpolates between the full correction and the naive estimate, so it
-  # is never worse than naive; `stable` flags when this limiting engaged.
+  # result interpolates between the full correction and the naive estimate.
+  # This is numerical stabilization, not an accuracy guarantee: it bounds the
+  # correction factor so the estimate cannot explode, and says nothing about
+  # whether the corrected estimate is closer to any target than the naive one.
+  # `stable` flags when the limiting engaged, so a caller can see that the
+  # reported estimate is not the full correction.
   effective <- pmax(rel, reliability_floor)
   De <- diag((1 - effective) * diag(Szz), nrow = length(predictors))
   base <- tryCatch(min(eigen(Szz, symmetric = TRUE, only.values = TRUE)$values), error = function(e) NA_real_)
