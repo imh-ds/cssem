@@ -36,10 +36,15 @@
         "). Declare this item continuous(), or round/bin it to categories before declaring it ordinal().",
         call. = FALSE)
   }
-  # A factor's own level order is the declared scale order, so its codes are
-  # level positions rather than a re-sort.
-  raw <- as.integer(x)
-  lev <- if (is.null(levels)) sort(unique(raw[!is.na(raw)])) else levels
+  # The stored schema is the category *values* themselves -- a factor's labels in
+  # its declared order, or the numeric codes -- never positions derived from the
+  # frame in hand. Positions depend on which categories happen to appear, so a
+  # frame with a different set of observed categories would silently map the same
+  # response to a different category.
+  raw <- if (is.factor(x)) as.character(x) else as.integer(x)
+  lev <- if (!is.null(levels)) levels
+    else if (is.factor(x)) levels(x)[sort(unique(as.integer(x)[!is.na(x)]))]
+    else sort(unique(raw[!is.na(raw)]))
   if (length(lev) < 2L) stop("Ordinal indicators need at least two observed categories.", call. = FALSE)
   y <- match(raw, lev); if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(lev) + 1L - y)
   list(y = y, levels = lev)
@@ -50,7 +55,7 @@
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(y)
   }
-  raw <- as.integer(.as_ordinal_codes(x))
+  raw <- if (is.factor(x)) as.character(x) else as.integer(.as_ordinal_codes(x))
   y <- match(raw, levels)
   if (any(!is.na(raw) & is.na(y))) stop("Scoring data contain an unseen ordinal category.", call. = FALSE)
   if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(levels) + 1L - y)

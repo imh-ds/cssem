@@ -184,3 +184,41 @@ test_that("text category labels are rejected, and an ordered factor keeps its de
   expect_equal(factor_fit$locked_scores$A, numeric_fit$locked_scores$A, tolerance = 1e-8)
   expect_gt(abs(stats::cor(factor_fit$locked_scores$A, z)), .85)
 })
+
+test_that("scoring maps categories by label, not by position in the scoring frame", {
+  # Regression: the stored category schema was the positions of the observed
+  # categories, and scoring re-derived positions from whatever frame it was
+  # given. New records built independently (so their factor carries a different
+  # level set) were therefore mapped to the wrong categories, shifting scores by
+  # up to half a standard deviation with no warning.
+  set.seed(2)
+  n <- 300
+  z <- stats::rnorm(n)
+  labels <- c("never", "rarely", "sometimes", "often", "always")
+  block <- function(truth, prefix) as.data.frame(stats::setNames(lapply(1:4, function(j)
+    factor(labels[cut(.8 * truth + stats::rnorm(n, 0, .6),
+      c(-Inf, -1.2, -.4, .4, 1.2, Inf), labels = FALSE)], levels = labels, ordered = TRUE)),
+    paste0(prefix, 1:4)))
+  d <- cbind(block(z, "a"), block(stats::rnorm(n), "b"))
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)), folds = 3)
+  f <- fit_states(m, d, seed = 1, iterations = 10, diagnostics = FALSE)
+  indicators <- unlist(lapply(m$constructs, `[[`, "indicators"), use.names = FALSE)
+
+  full <- score_states(f, d[, indicators])
+  # New records arriving on their own: the factors are rebuilt from the rows in
+  # hand, so their level set is whatever those rows happen to contain.
+  rows <- which(d$a1 != "always" & d$b1 != "always")[1:25]
+  fresh <- as.data.frame(lapply(d[rows, indicators], function(column)
+    factor(as.character(column), levels = sort(unique(as.character(column))), ordered = TRUE)))
+  subset_scores <- score_states(f, fresh)
+  expect_equal(subset_scores$A, full$A[rows], tolerance = 1e-8)
+  expect_equal(subset_scores$B, full$B[rows], tolerance = 1e-8)
+
+  # The stored schema is the labels themselves.
+  expect_equal(f$full_encoders$A$levels[[1L]], labels)
+  # An unseen category is still refused rather than silently remapped.
+  unseen <- d[1:10, indicators]
+  levels(unseen$a1) <- c(levels(unseen$a1), "constantly")
+  unseen$a1[1] <- "constantly"
+  expect_error(score_states(f, unseen), "unseen ordinal category")
+})
