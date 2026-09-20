@@ -184,9 +184,14 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
 print.causal_indirect_effect <- function(x, ...) {
   cat(sprintf("CS-SEM interventional mediation: %s -> %s  (n = %d, mediator%s: %s)\n",
     x$x, x$y, x$n, if (length(x$mediators) == 1L) "" else "s", paste(x$mediators, collapse = ", ")))
-  labels <- c(causal_under_assumptions = "Causal under assumptions",
-    adjusted_association = "Adjusted association (not causal: no declared temporal order)")
-  cat("Interpretation: ", labels[[x$label]], "\n", sep = "")
+  # The non-causal label has two causes -- no declared temporal order, or an
+  # adjustment set leaving too little treatment variation -- and naming the
+  # wrong one sends a reader to fix the wrong thing.
+  interpretation <- if (identical(x$label, "causal_under_assumptions")) "Causal under assumptions"
+    else if (!isTRUE(x$temporal_order_declared)) "Adjusted association (not causal: no declared temporal order)"
+    else sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
+      x$identification_strength)
+  cat("Interpretation: ", interpretation, "\n", sep = "")
   cat("Adjustment set: ", paste(x$adjust, collapse = ", "), "\n", sep = "")
   basis <- if (isTRUE(x$disattenuated)) "disattenuated (errors-in-variables)" else "naive (not disattenuated)"
   intervals <- if (x$bootstrap > 0L) sprintf("; 95%% bootstrap intervals (%d resamples)", x$bootstrap) else ""

@@ -276,3 +276,24 @@ test_that("a claim arriving through both routing and causal is listed once", {
   routed_only <- evidence_report(association, routing = routing)
   expect_true(is.na(routed_only$causal_claims$ci_low[[1L]]))
 })
+
+test_that("an interventional mediation names the actual reason it is not causal", {
+  # Regression: the non-causal interpretation line was hard-coded to "no
+  # declared temporal order", but the same label is assigned when the order was
+  # declared and identification strength fell below .10.
+  skeleton <- function(label, declared, strength) structure(list(
+    x = "X", y = "Y", mediators = "M", adjust = "C", estimand = "interventional",
+    n = 300L, disattenuated = TRUE, bootstrap = 0L, temporal_order_declared = declared,
+    label = label, status = label, identification_strength = strength, outcome_r2 = .3,
+    mediator_r2_min = .2, robustness_value = .1, min_path_reliability = .8,
+    proportion_mediated = .5, proportion_mediated_basis = "disattenuated",
+    summary = data.frame(component = c("total", "direct", "indirect_total"),
+      naive_effect = c(.4, .2, .2), disattenuated_effect = c(.5, .25, .25),
+      stringsAsFactors = FALSE)), class = "causal_indirect_effect")
+
+  expect_output(print(skeleton("adjusted_association", FALSE, .8)), "no declared temporal order")
+  weak <- skeleton("adjusted_association", TRUE, .04)
+  expect_output(print(weak), "weak identification")
+  expect_false(any(grepl("no declared temporal order", capture.output(print(weak)))))
+  expect_output(print(skeleton("causal_under_assumptions", TRUE, .8)), "Causal under assumptions")
+})
