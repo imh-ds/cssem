@@ -216,3 +216,36 @@ test_that("the edge verdict names weak identification instead of claiming a path
   expect_false(grepl("causal pathway", weak))
   expect_match(weak, "weakly identified")
 })
+
+test_that("a causal claim is typed from its adjustment set, not named direct by default", {
+  # Regression: every causal_effect row was typed "direct". With a
+  # pre-treatment adjustment set that excludes the declared mediators, the
+  # estimand is a total-effect contrast, which the paper had to explain away.
+  set.seed(21)
+  n <- 400
+  covariate <- stats::rnorm(n)
+  treatment <- .3 * covariate + stats::rnorm(n, sd = .9)
+  mediator <- .5 * treatment + stats::rnorm(n, sd = .8)
+  outcome <- .4 * mediator + .25 * treatment + .2 * covariate + stats::rnorm(n, sd = .8)
+  fit <- structure(list(locked_scores = data.frame(C = as.numeric(scale(covariate)),
+    X = as.numeric(scale(treatment)), M = as.numeric(scale(mediator)),
+    Y = as.numeric(scale(outcome))), folds = sample(rep(1:3, length.out = n)),
+    reliability = c(C = .85, X = .85, M = .85, Y = .85)), class = "fit_states")
+  association <- associate(fit, specify_structure(M ~ linear(X),
+    Y ~ linear(X) + linear(M) + linear(C), order = c("C", "X", "M", "Y")), seed = 21)
+
+  pre_treatment <- causal_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "M", "Y"))
+  expect_identical(pre_treatment$claim_type, "total (adjusted)")
+  expect_length(pre_treatment$adjusted_mediators, 0L)
+
+  # Adjusting a declared mediator blocks the mediated paths, so the same
+  # estimand becomes a direct contrast. (A declared temporal order refuses this
+  # adjustment outright, so it is reachable only without one.)
+  with_mediator <- causal_effect(association, "X", "Y", adjust = c("C", "M"))
+  expect_identical(with_mediator$claim_type, "direct (adjusted)")
+  expect_identical(with_mediator$adjusted_mediators, "M")
+
+  report <- evidence_report(association, causal = list(pre_treatment))
+  expect_identical(report$causal_claims$type[[1L]], "total (adjusted)")
+})

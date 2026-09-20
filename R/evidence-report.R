@@ -80,7 +80,8 @@
       label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
       stringsAsFactors = FALSE)
   } else if (inherits(effect, "causal_effect")) {
-    data.frame(claim = sprintf("%s → %s", effect$treatment, effect$outcome), type = "direct",
+    data.frame(claim = sprintf("%s → %s", effect$treatment, effect$outcome),
+      type = if (is.null(effect$claim_type)) "direct" else effect$claim_type,
       estimand = effect$estimand, effect = effect$adjusted_effect, ci_low = effect$ci_low, ci_high = effect$ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
       label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),

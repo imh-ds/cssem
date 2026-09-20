@@ -211,11 +211,21 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
       }, numeric(1)), stringsAsFactors = FALSE)
   }
 
+  # What kind of contrast this is follows from the adjustment set, not from the
+  # estimand name. Adjusting only pre-treatment covariates leaves every
+  # mediating path open, so the estimate is a total-effect contrast; adjusting a
+  # declared mediator of this pair blocks those paths and makes it a direct one.
+  mediators <- setdiff(unique(unlist(.structure_paths(association$structure, treatment, outcome),
+    use.names = FALSE)), c(treatment, outcome))
+  adjusted_mediators <- intersect(adjust, mediators)
+  claim_type <- if (length(adjusted_mediators)) "direct (adjusted)" else "total (adjusted)"
+
   has_adjust <- length(adjust) > 0L; has_order <- !is.null(temporal_order)
   label <- if (has_adjust && has_order && identification_strength >= .10) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
   structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
+    claim_type = claim_type, adjusted_mediators = adjusted_mediators,
     unadjusted = unadjusted, adjusted_naive = adjusted_naive, adjusted_effect = adjusted_effect,
     ci_low = interval[[1L]], ci_high = interval[[2L]], disattenuated = disattenuated, stable = stable,
     bootstrap = eiv_bootstrap, n = nrow(scores), temporal_order_declared = has_order,

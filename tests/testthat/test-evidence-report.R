@@ -38,9 +38,11 @@ test_that("evidence report composes constructs, effects, and causal claims", {
   expect_true(is.finite(causal_edge$robustness_value))
   # Other edges default to associational.
   expect_true(all(report$effects$causal_status[report$effects$path != "Quality→Loyalty"] == "associational"))
-  # The routing's direct causal claim is carried into the causal-claims section.
+  # The routing's causal claim is carried into the causal-claims section, typed
+  # from its adjustment set: this one adjusts only pre-treatment covariates, so
+  # every mediating path stays open and the estimand is a total-effect contrast.
   expect_equal(nrow(report$causal_claims), 1L)
-  expect_identical(report$causal_claims$type, "direct")
+  expect_identical(report$causal_claims$type, "total (adjusted)")
 })
 
 test_that("a smooth edge (no scalar estimate) is scored on contribution", {
