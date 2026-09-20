@@ -600,8 +600,8 @@ core, so a display subset cannot weaken the gate or understate diagnostics.
 
 **Regression checks:** the above structure now errors because `C` is not a
 declared predictor of `M2`; adding `C` to `M2` permits the call. The focused
-test also confirms the valid result retains both declared paths while the
-panel describes the all-path estimand.
+test confirms the valid result retains both declared paths; the source-level
+probe confirms the panel describes the same all-path estimand.
 
 ### [x] A4. Flexible causal identification uses a linear treatment diagnostic — fixed in `39b777f`, label gate tightened in `6e15296`
 
