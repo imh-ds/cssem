@@ -26,7 +26,7 @@
   x <- names_in_order[[1L]]; y <- names_in_order[[length(names_in_order)]]
   paths <- .structure_paths(structure, x, y)
   conditional <- .moderated_conditional(models, latent, order, x, y, paths, moderator, levels, 1)
-  list(conditional = conditional, index = .moderated_index(conditional, levels))
+  list(conditional = conditional, index = .moderated_index(conditional, levels, .safe_scale(latent[[moderator]])))
 }
 
 .moderated_mediation_validation_data <- function(scenario, n, loading = .80, seed = 1L, items = 4L, missing = .02) {

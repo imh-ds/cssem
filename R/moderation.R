@@ -8,17 +8,31 @@
 .level_labels <- function(levels) vapply(levels, function(level)
   if (abs(level) < 1e-9) "mean" else sprintf("%+g SD", level), character(1))
 
+# Requested levels are in standard-deviation units, but the fitted coefficients
+# apply to the moderator's own scale. Modeled constructs are standardized, so
+# the two coincide; a manifest() covariate kept in natural units (age in years,
+# say) does not, and evaluating a "+1 SD" row at the raw value 1 would report
+# the slope at one year old. Convert once, here.
+.moderator_values <- function(scores, moderator, levels) {
+  column <- scores[[moderator]]
+  centre <- mean(column, na.rm = TRUE); spread <- .safe_scale(column)
+  centre + levels * spread
+}
+
 # Total indirect effect of x on y at each moderator level, obtained by fixing the
 # moderator column and decomposing with the supplied models.
 .moderated_conditional <- function(models, scores, order, x, y, paths, moderator, levels, delta) {
-  vapply(levels, function(level) {
-    at_level <- scores; at_level[[moderator]] <- level
+  values <- .moderator_values(scores, moderator, levels)
+  vapply(values, function(value) {
+    at_level <- scores; at_level[[moderator]] <- value
     .decompose_effects(models, at_level, order, x, y, paths, delta)$indirect_total
   }, numeric(1))
 }
 
-.moderated_index <- function(conditional, levels) {
-  span <- max(levels) - min(levels)
+# Per unit of the moderator on its own scale, so the index means the same thing
+# whether the moderator is a standardized construct or a natural-unit covariate.
+.moderated_index <- function(conditional, levels, spread = 1) {
+  span <- (max(levels) - min(levels)) * spread
   if (span <= 0) return(NA_real_)
   (conditional[[which.max(levels)]] - conditional[[which.min(levels)]]) / span
 }
@@ -36,12 +50,13 @@
   for (b in seq_len(replicates)) {
     resampled <- scores[sample.int(n, n, replace = TRUE), , drop = FALSE]
     refit <- .refit_models(resampled, shapes_by_outcome)
+    spread <- .safe_scale(resampled[[moderator]])
     nc <- .moderated_conditional(refit, resampled, order, x, y, paths, moderator, levels, delta)
-    naive_conditional[b, ] <- nc; naive_index[b] <- .moderated_index(nc, levels)
+    naive_conditional[b, ] <- nc; naive_index[b] <- .moderated_index(nc, levels, spread)
     if (disattenuate && !is.null(reliability)) {
       corrected <- .corrected_models(refit, resampled, reliability)$models
       dc <- .moderated_conditional(corrected, resampled, order, x, y, paths, moderator, levels, delta)
-      dis_conditional[b, ] <- dc; dis_index[b] <- .moderated_index(dc, levels)
+      dis_conditional[b, ] <- dc; dis_index[b] <- .moderated_index(dc, levels, spread)
     }
   }
   ci <- function(column) { column <- column[is.finite(column)]
@@ -104,7 +119,10 @@
 #' @param outcome Outcome construct carrying the moderated effect.
 #' @param predictor Focal predictor whose slope is conditioned.
 #' @param moderator Moderator construct.
-#' @param levels Moderator levels in standard-deviation units. Defaults to -1, 0, 1.
+#' @param levels Moderator levels in standard-deviation units, converted to the
+#'   moderator's own scale (mean plus level times SD) before the slope is
+#'   evaluated. Defaults to -1, 0, 1. The reported `moderator_value` column is
+#'   on that scale, which for a standardized construct equals `levels`.
 #' @param disattenuate Disattenuate the focal main effect. Defaults to `TRUE`.
 #' @param eiv_bootstrap Percentile-bootstrap resamples for intervals. Zero omits.
 #' @param johnson_neyman Whether to locate the Johnson-Neyman region.
@@ -145,17 +163,18 @@ conditional_slopes <- function(association, outcome, predictor, moderator, level
   }
   ci_at <- function(w) if (is.null(boot)) c(NA_real_, NA_real_) else stats::quantile(boot$main + boot$interaction * w, c(.025, .975), na.rm = TRUE, names = FALSE)
 
-  slopes <- data.frame(level = .level_labels(levels), moderator_value = levels,
-    slope = vapply(levels, slope_at, numeric(1)), stringsAsFactors = FALSE)
+  values <- .moderator_values(scores, moderator, levels)
+  slopes <- data.frame(level = .level_labels(levels), moderator_value = values,
+    slope = vapply(values, slope_at, numeric(1)), stringsAsFactors = FALSE)
   if (!is.null(boot)) {
-    bounds <- vapply(levels, ci_at, numeric(2L))
+    bounds <- vapply(values, ci_at, numeric(2L))
     slopes$ci_low <- bounds[1L, ]; slopes$ci_high <- bounds[2L, ]
   }
 
   jn <- NULL
   if (isTRUE(johnson_neyman) && !is.null(boot)) {
     grid <- seq(-3, 3, length.out = 121L)
-    bounds <- vapply(grid, ci_at, numeric(2L))
+    bounds <- vapply(.moderator_values(scores, moderator, grid), ci_at, numeric(2L))
     significant <- bounds[1L, ] > 0 | bounds[2L, ] < 0
     jn <- list(grid = grid, significant = significant, intervals = .significant_intervals(grid, significant))
   }
@@ -256,11 +275,12 @@ conditional_indirect_effect <- function(association, x, y, moderator, levels = c
     if (!length(values) || all(is.na(values))) NA_real_ else min(values, na.rm = TRUE)
   }
 
+  spread <- .safe_scale(scores[[moderator]])
   naive_conditional <- .moderated_conditional(models, scores, order, x, y, paths, moderator, levels, delta)
-  naive_index <- .moderated_index(naive_conditional, levels)
+  naive_index <- .moderated_index(naive_conditional, levels, spread)
   disattenuated <- !is.null(reliability)
   dis_conditional <- if (disattenuated) .moderated_conditional(.corrected_models(models, scores, reliability)$models, scores, order, x, y, paths, moderator, levels, delta) else rep(NA_real_, length(levels))
-  dis_index <- if (disattenuated) .moderated_index(dis_conditional, levels) else NA_real_
+  dis_index <- if (disattenuated) .moderated_index(dis_conditional, levels, spread) else NA_real_
 
   intervals <- if (eiv_bootstrap > 0L) .moderated_mediation_bootstrap(models, scores, order, x, y, paths,
     moderator, levels, reliability, disattenuated, delta, eiv_bootstrap, seed) else NULL
@@ -269,7 +289,7 @@ conditional_indirect_effect <- function(association, x, y, moderator, levels = c
   reported_ci <- function(naive_ci, dis_ci, use_dis) if (is.null(intervals)) c(NA_real_, NA_real_) else if (use_dis) dis_ci else naive_ci
 
   conditional <- data.frame(
-    level = .level_labels(levels), moderator_value = levels,
+    level = .level_labels(levels), moderator_value = .moderator_values(scores, moderator, levels),
     naive_indirect = naive_conditional, disattenuated_indirect = dis_conditional,
     indirect = mapply(reported, naive_conditional, dis_conditional),
     stringsAsFactors = FALSE

@@ -127,3 +127,47 @@ test_that("an endogenous treatment propagates through moderated mediation", {
   expect_gt(mean(abs(mm$conditional$indirect)), 0.05)
   expect_gt(mm$index$estimate, 0)
 })
+
+test_that("moderator levels are evaluated on the moderator's own scale", {
+  # Regression: levels are documented in SD units but were used as raw values.
+  # For a manifest() covariate kept in natural units (age in years) the "+1 SD"
+  # row was evaluated at the raw value 1, i.e. at one year old.
+  set.seed(32)
+  n <- 400
+  age <- round(stats::rnorm(n, 45, 12))
+  x <- stats::rnorm(n)
+  y <- .3 * x + .02 * age + .01 * x * age + stats::rnorm(n, sd = .8)
+  fit <- structure(list(
+    locked_scores = data.frame(X = as.numeric(scale(x)), Age = age, Y = as.numeric(scale(y))),
+    folds = sample(rep(1:3, length.out = n)),
+    reliability = c(X = .85, Age = 1, Y = .85)), class = "fit_states")
+  association <- associate(fit, specify_structure(Y ~ linear(X) + linear(Age) + X:Age,
+    order = c("Age", "X", "Y")), seed = 32)
+  slopes <- conditional_slopes(association, outcome = "Y", predictor = "X", moderator = "Age")
+
+  centre <- mean(fit$locked_scores$Age); spread <- stats::sd(fit$locked_scores$Age)
+  expect_equal(slopes$slopes$moderator_value, centre + c(-1, 0, 1) * spread, tolerance = 1e-8)
+  # The reported slope is the one implied by the fitted coefficients at that value.
+  expect_equal(slopes$slopes$slope,
+    unname(vapply(centre + c(-1, 0, 1) * spread, function(w) slopes$slopes$slope[[2L]] +
+      slopes$interaction * (w - centre), numeric(1))), tolerance = 1e-8)
+  # The slope really varies across the range: the old raw -1/0/1 rows spanned
+  # three years and were nearly identical.
+  expect_gt(diff(range(slopes$slopes$slope)), 4 * abs(slopes$interaction))
+})
+
+test_that("standardized moderators are unaffected by the scale conversion", {
+  set.seed(33)
+  n <- 300
+  w <- stats::rnorm(n); x <- stats::rnorm(n)
+  y <- .3 * x + .2 * w + .25 * x * w + stats::rnorm(n, sd = .7)
+  fit <- structure(list(
+    locked_scores = data.frame(W = as.numeric(scale(w)), X = as.numeric(scale(x)),
+      Y = as.numeric(scale(y))),
+    folds = sample(rep(1:3, length.out = n)),
+    reliability = c(W = .8, X = .8, Y = .8)), class = "fit_states")
+  association <- associate(fit, specify_structure(Y ~ linear(X) + linear(W) + X:W,
+    order = c("W", "X", "Y")), seed = 33)
+  slopes <- conditional_slopes(association, outcome = "Y", predictor = "X", moderator = "W")
+  expect_equal(slopes$slopes$moderator_value, c(-1, 0, 1), tolerance = 1e-8)
+})

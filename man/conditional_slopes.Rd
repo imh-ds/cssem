@@ -25,7 +25,10 @@ conditional_slopes(
 
 \item{moderator}{Moderator construct.}
 
-\item{levels}{Moderator levels in standard-deviation units. Defaults to -1, 0, 1.}
+\item{levels}{Moderator levels in standard-deviation units, converted to the
+moderator's own scale (mean plus level times SD) before the slope is
+evaluated. Defaults to -1, 0, 1. The reported \code{moderator_value} column is
+on that scale, which for a standardized construct equals \code{levels}.}
 
 \item{disattenuate}{Disattenuate the focal main effect. Defaults to \code{TRUE}.}
 
