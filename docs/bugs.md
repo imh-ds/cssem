@@ -91,7 +91,7 @@ Three of its expectations fail on the pre-fix code.
 
 ## Moderate
 
-### [ ] M1. `prop. mediated` is computed from naive effects under a disattenuated heading
+### [x] M1. `prop. mediated` is computed from naive effects under a disattenuated heading — fixed in `c205bf6`
 
 **Where:** `.assemble_mediation()`, [R/mediation.R:196](../R/mediation.R#L196);
 printed by `print.cssem_mediation()` and
@@ -112,11 +112,14 @@ disattenuated figure is used when the summary reports disattenuated effects and
 the naive one otherwise; guard on a near-zero total as now. Print the basis
 alongside the value.
 
-**Tests:** with disattenuation on, the printed proportion equals the printed
-indirect divided by the printed total; with `disattenuate = FALSE` it equals the
-naive ratio.
+**Tests:** added to `tests/testthat/test-mediation.R` ("the reported proportion
+mediated divides the effects that were reported"): the proportion equals the
+reported indirect over the reported total, its basis is `"disattenuated"`, it
+differs from the retained naive ratio, the printout names the basis, and
+`disattenuate = FALSE` returns the naive ratio. Five of its expectations fail
+on the pre-fix code.
 
-### [ ] M2. `route()` marks an edge causal even when identification failed
+### [x] M2. `route()` marks an edge causal even when identification failed — fixed in `1f82a71`
 
 **Where:** [R/routing.R:96](../R/routing.R#L96).
 
@@ -137,9 +140,13 @@ established causal pathway. Keep the estimand and adjustment set on the row,
 and make `evidence_report()` map the new status to a clearly non-causal
 verdict.
 
-**Tests:** an edge whose adjusters explain nearly all treatment variance is
-routed with the weak status and is not reported as causal by
-`evidence_report()`; a well-identified edge is unchanged.
+**Tests:** added to `tests/testthat/test-causal.R` ("a weakly identified
+declared causal edge is not routed as causal"): an adjuster explaining ~99% of
+the treatment yields identification strength below .10, status `"causal_weak"`,
+retained estimand/adjustment set/estimate, and no causal-pathway verdict; a
+companion unit test on `.edge_verdict()` covers the wording directly, since a
+weakly identified edge usually also trips the strength rule first. Three
+expectations fail on the pre-fix code.
 
 ### [ ] M3. `conditional_slopes()` mislabels moderator levels for an unstandardized moderator
 
