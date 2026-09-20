@@ -12,10 +12,18 @@ should be tested. Severity is about consequence for a user's results:
 
 Status legend: `[ ]` open, `[x]` fixed (commit noted).
 
-**Progress.** Both severe entries and all seven moderate entries are fixed,
-each in its own commit with a regression test that was confirmed to fail on the
-pre-fix code. The suite has grown from 331 to 377 expectations over these
-fixes. Remaining: the six minor entries and the five harness entries.
+**Progress.** The two severe, seven moderate, and six minor entries are all
+fixed, each with a regression test confirmed to fail on the pre-fix code where
+a test applies. The suite has grown from 331 to 388 expectations. Remaining:
+the five harness entries (H1-H5), of which H3 and H4 are documentation duties
+for the regenerated simulation studies rather than code changes.
+
+**Follow-up owed to the paper.** Section 6 of the JSS manuscript must be
+regenerated once more: `prop. mediated` now reports 0.554 on a disattenuated
+basis rather than 0.466 (M1), causal claims are typed `"total (adjusted)"`
+rather than `"direct"` (M6), and §6.7's prose caveat about the `direct` label
+can be dropped. The ridge-penalty description in §3.2 has already been
+corrected (N6).
 
 **Audit coverage.** Complete, all 18 files in `R/`: measurement core
 (`encoder.R`, `fit.R`), structural layer (`structure.R`), propagation
@@ -264,15 +272,16 @@ not mention the order, and a causal-labelled object is unchanged.
 
 ## Minor
 
-### [ ] N1. Interaction edges are labelled `"linear"` in the ledger
+### [x] N1. Interaction edges are labelled `"linear"` in the ledger — fixed in `854b7f5`
 
-`effect_ledger()` reports `shape = "linear"` for an `X:W` edge while
-`effect_card()` reports `"product"` for the same edge (confirmed in
-`audit2.R`, probe 6). Report `"product"` in both; the baseline shape vector in
-`associate()` already uses that label, so the ledger is reading the candidate
-row rather than the model's shape.
+`effect_ledger()` reported `shape = "linear"` for an `X:W` edge while
+`effect_card()` reported `"product"` for the same edge (confirmed in
+`audit2.R`, probe 6). The candidate row now takes the baseline shape, which is
+`"product"` for interaction predictors. Tested together with N2 in
+`test-structure.R` ("an interaction edge is labelled a product everywhere, and
+curves are built quietly"); two expectations fail on the pre-fix code.
 
-### [ ] N2. Spurious warning from `.effect_rows()`
+### [x] N2. Spurious warning from `.effect_rows()` — fixed in `854b7f5`
 
 [R/structure.R:519](../R/structure.R#L519): the fitted-curve grid builds a mean
 row for every name in `model$shapes`, including interaction names, which are
@@ -283,7 +292,7 @@ estimates are unaffected. Build the grid over constituent constructs only.
 Triggers only when a model has both an interaction and a selected nonlinear
 edge.
 
-### [ ] N3. RNG state is clobbered
+### [x] N3. RNG state is clobbered — fixed in `db04d08`
 
 `fit_states()`, `associate()`, `.eiv_bootstrap()`, `.structural_fold_sets()`,
 and the mediation/moderation bootstraps all call `set.seed()` and never
@@ -291,13 +300,13 @@ restore the caller's stream, so a user's random numbers change after calling
 them (confirmed in `audit2.R`, probe 5; determinism itself is fine). Save
 `.Random.seed` on entry and restore it on exit in the exported functions.
 
-### [ ] N4. Stale version string
+### [x] N4. Stale version string — fixed in `77fcab1`
 
 `cssem_model()` sets `version = "0.1"` and an error message refers to a
 "v0.1 construct" ([R/model.R:35](../R/model.R#L35)). Use the package version,
 and drop the version from the error text.
 
-### [ ] N5. Stale comment contradicting the documented behavior
+### [x] N5. Stale comment contradicting the documented behavior — fixed in `77fcab1`
 
 [R/structure.R:513](../R/structure.R#L513) still says the eigenvalue limiter
 makes the corrected estimate "never worse than naive". The claim was withdrawn
@@ -305,7 +314,7 @@ in the paper; the comment should describe the limiter as numerical
 stabilization only. A test name at
 `tests/testthat/test-mediation.R:101` carries the same stale phrasing.
 
-### [ ] N6. Paper misstates the ridge penalty
+### [x] N6. Paper misstates the ridge penalty — fixed in the manuscript (untracked)
 
 Paper §3.2 documents a ridge penalty of `0.02 * a_j^2` on the discrimination;
 `.ordinal_em_nll()` penalizes `0.02 * log(a_j)^2`
