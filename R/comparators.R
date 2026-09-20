@@ -280,7 +280,15 @@ validate_structure_comparator <- function(manifest, reps = 3L,
   matched <- intersect(all_names, names(scores))
   if (!length(matched)) return(out)
   if (is.null(case_idx)) {
-    rows <- seq_len(min(nrow(scores), n))
+    # Without a case index the only safe assumption is that the engine returned
+    # every row in order. Filling the first nrow(scores) rows instead would
+    # attribute each score to the wrong respondent, and compare it against the
+    # wrong latent truth, with nothing to show for it in the output.
+    if (nrow(scores) != n)
+      stop(sprintf(paste0("A scoring engine returned %d rows for %d cases without a case index, ",
+        "so its scores cannot be matched to respondents. Supply case_idx."),
+        nrow(scores), n), call. = FALSE)
+    rows <- seq_len(n)
   } else {
     rows <- as.integer(case_idx)
   }

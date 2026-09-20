@@ -153,3 +153,14 @@ test_that("a sparse item schedule survives a skew shift", {
   expect_lt(sparse_only, .05)
   expect_lt(sparse_skewed, plain_skewed - .10)
 })
+
+test_that("comparator scores are refused rather than misaligned when rows are dropped", {
+  # Regression: with no case index the scores were written to the first
+  # nrow(scores) rows, attributing each to the wrong respondent.
+  scores <- data.frame(A = c(10, 20, 30), B = c(1, 2, 3))
+  expect_error(cssem:::.fill_score_frame(scores, c("A", "B"), 6L), "cannot be matched to respondents")
+  # An explicit index still places them, and a complete frame is unaffected.
+  placed <- cssem:::.fill_score_frame(scores, c("A", "B"), 6L, case_idx = 4:6)
+  expect_equal(which(!is.na(placed$A)), 4:6)
+  expect_equal(cssem:::.fill_score_frame(scores, c("A", "B"), 3L)$A, scores$A)
+})
