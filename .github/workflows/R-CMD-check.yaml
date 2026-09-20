@@ -25,6 +25,10 @@ jobs:
         with:
           extra-packages: any::roxygen2, any::testthat
           needs: check
+          # Bumped to discard a cache that pkgdepends could no longer extract
+          # ("unknown archive type"), which took the macOS job down and left
+          # the Linux job without rcmdcheck.
+          cache-version: 2
       - name: Regenerate documentation
         run: Rscript -e "roxygen2::roxygenise()"
       # The smoke check calls library(cssem), so the package has to be
@@ -32,6 +36,9 @@ jobs:
       # check-r-package runs later. Without this the job died before ever
       # checking the package.
       - name: Install cssem
+        # PowerShell aliases `R` to Invoke-History, so the default Windows
+        # shell never invokes R at all. bash is present on all three runners.
+        shell: bash
         run: R CMD INSTALL --no-multiarch .
       - name: Run compact v0.3 validation smoke check
         run: Rscript inst/scripts/run-v03-ci.R
