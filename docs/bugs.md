@@ -1,10 +1,10 @@
 # Package audit: patched history and open findings
 
-## Current audit — 2026-09-20, commit `89e9215`
+## Current audit — 2026-09-20, commit `b35754b`
 
-This document records the audit and patch history. A1–A8 below were fixed in
-this work, with focused regression tests and separate commits; A9–A10 remain
-open. The earlier S/M/N/H entries are retained as a historical patch register:
+This document records the audit and patch history. A1–A10 below were fixed in
+this work, with focused regression tests and separate commits. The earlier
+S/M/N/H entries are retained as a historical patch register:
 checked entries describe bugs that were edited and patched, not defects newly
 found in the current source. H3 and H4 remain open methodological disclosures.
 Each A entry includes its issue, evidence, resolution or proposed fix, and
@@ -14,9 +14,8 @@ The review traced measurement preparation/scoring, structural selection and
 correction, mediation/moderation, causal gating, evidence reporting, and the
 simulation/comparator workflows against their documentation and existing tests.
 Targeted probes sourced the current `R/` files directly and ran on R 4.6.0.
-They confirmed A1–A9; A10 is a source-confirmed validation-design limitation.
-Focused regression tests for A1–A8 were added, but the full test harness
-could not run in this environment.
+They confirmed A1–A10. Focused regression tests for A1–A10 were added, but the
+full test harness could not run in this environment.
 This is not a claim that every function or possible input has been exhaustively
 validated. Optional lavaan/seminr integrations and full simulation studies were
 not rerun.
@@ -43,8 +42,8 @@ under N6 was not available for verification.
 | A6 | Fixed (`c981425`) | Severe | New ordinal scores silently truncate fractional categories |
 | A7 | Fixed (`89e9215`) | Severe | Continuous/manifest factors become integer level positions |
 | A8 | Fixed (`612fe88`) | Moderate | Interaction correction disappears from structural reports |
-| A9 | Open | Moderate | Weak causal effects print the wrong non-causal reason |
-| A10 | Open | Methodological | Mediation validation reuses the estimator as its oracle |
+| A9 | Fixed (`e4de3b4`) | Moderate | Weak causal effects print the wrong non-causal reason |
+| A10 | Fixed (`b35754b`) | Methodological | Mediation validation reuses the estimator as its oracle |
 
 ## Historical audit and patch register
 
@@ -744,7 +743,7 @@ finite and match `.eiv_coefficients()`, and the reported interaction reliability
 equals the constituent product. Existing moderation tests continue to cover
 simple slopes and swapped interaction names.
 
-### [ ] A9. Weak causal effects print the wrong reason for their label
+### [x] A9. Weak causal effects print the wrong reason for their label — fixed in `e4de3b4`
 
 **Where:** [R/causal.R:244](../R/causal.R#L244), `print.causal_effect()`.
 
@@ -757,16 +756,18 @@ but identification strength is below `.10`. Historical M7 patched the causal
 declaring `C, X, Y` returns `adjusted_association` but prints
 `"Adjusted association (not causal: no declared temporal order)"`.
 
-**Proposed fix:** select the explanation from `temporal_order_declared` and
-`identification_strength`, as the mediation printer already does.
+**Resolution:** `print.causal_effect()` now selects the explanation from the
+effect label, `temporal_order_declared`, and `identification_strength`. A
+declared but weak effect is reported as a weak identification, while an
+undeclared effect retains the no-temporal-order explanation.
 
 **Regression checks:** declared-but-weak, undeclared, and adequately identified
-cases must print the actual reason consistently with routing and reporting.
+cases print the actual reason consistently with routing and reporting.
 
-### [ ] A10. Mediation validation shares its oracle with the estimator
+### [x] A10. Mediation validation shares its oracle with the estimator — fixed in `b35754b`
 
-**Where:** [R/mediation-validation.R:61](../R/mediation-validation.R#L61),
-`.mediation_truth()`; [R/moderation-validation.R:18](../R/moderation-validation.R#L18),
+**Where:** [R/mediation-validation.R:138](../R/mediation-validation.R#L138),
+`.mediation_truth()`; [R/moderation-validation.R:16](../R/moderation-validation.R#L16),
 `.moderated_mediation_truth()`.
 
 **Issue (source-confirmed):** the latent-data targets call the same mediation
@@ -776,21 +777,26 @@ independently validate that algorithm's estimand. A shared error such as A1
 can affect both target and estimate. The historical "verified correct" note
 establishes consistent definitions, not independent methodological correctness.
 
-**Proposed fix:** retain sample-oracle comparisons with explicit labeling, and
-add independent population targets: analytic coefficient products for linear
-models and separately implemented intervention integration for nonlinear
-models. Report estimation/measurement error separately from sample-oracle
-variation. Reassess nonlinear/causal claims after those checks.
+**Resolution:** linear mediation validation now computes an independent
+latent-state target from separately fitted edge coefficients and directed-path
+products. Moderated mediation uses a separately fitted interaction model for
+the conditional indirect effect. Smooth mediation uses a separately
+implemented intervention integration path. The former propagation results are
+retained as explicitly named sample oracles, and each validation result now
+reports both bias against the independent target and error against that sample
+oracle.
 
-**Regression checks:** an intentionally incorrect zero-shift baseline must fail
-the independent oracle test even if estimator and sample-oracle implementations
-agree. Include serial paths, parallel paths, interactions, and noisy mediators.
+**Regression checks:** analytic path products are compared with independently
+fit linear models; the smooth branch returns an independently integrated target;
+moderated interaction products are checked at each moderator level; and the
+validation outputs expose the target method, sample oracle, and both error
+bases. Source probes cover noisy latent mediation, nonlinear integration, and
+moderated interaction data.
 
 ## Follow-up priorities
 
-A1–A8 are patched, but their focused tests should remain part of release
-verification. A9 concerns reporting consistency. Add A10's independent checks before regenerating
-publication results, and carry forward H3/H4's disclosures. The repository's
+A1–A10 are patched, but their focused tests should remain part of release
+verification. Carry forward H3/H4's disclosures. The repository's
 method notes also need synchronization with the current selector (Holm-adjusted
 curvature testing and the relative-gain floor), but were not edited here.
 
