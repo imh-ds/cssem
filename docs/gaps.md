@@ -56,14 +56,14 @@ correctness concerns.
 - **Partial:** internal machinery or part of the workflow exists.
 - **Missing:** no supported public workflow was found; users may still script one themselves.
 
-| ID | Priority | Status | Build target |
-| --- | --- | --- | --- |
-| G1 | P1 | Implemented | Standard summaries, parameter tables, and R extractors |
-| G2 | P1 | Implemented | Measurement parameter and validity assessment |
-| G3 | P1 | Implemented | Unified preflight and numerical diagnostics |
-| G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling |
-| G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting |
-| G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation |
+| ID | Priority | Status | Build target | Tracking commit(s) |
+| --- | --- | --- | --- | --- |
+| G1 | P1 | Implemented | Standard summaries, parameter tables, and R extractors | `a649e84` |
+| G2 | P1 | Implemented | Measurement parameter and validity assessment | `ba8de9c`, `91a95e9` |
+| G3 | P1 | Implemented | Unified preflight and numerical diagnostics | `a57b044`, `8bd3fd8`, `f8ef27e` |
+| G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling | `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370` |
+| G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting | `311ec2d`, `8cb4304`, `d9d370b`, `e5f4ff8` |
+| G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation | `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`, `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f` |
 | G7 | P1 | Partial | Structural prediction for new observations |
 | G8 | P2 | Missing | Group comparison and measurement invariance |
 | G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
@@ -107,6 +107,8 @@ refit through their public constructors.
 
 Existing cards and ledgers remain focused views and continue to be the source
 for the corresponding summary rows.
+
+**Tracking commits:** `a649e84`.
 
 **Acceptance:** generic outputs agree with current ledgers; naive/corrected and
 raw/standardized estimates cannot be confused; unavailable SEs remain explicitly
@@ -160,6 +162,8 @@ HTMT-like values are diagnostics without threshold verdicts. Reverse-keyed,
 ordinal, continuous, mixed, manifest, and sparse-support behavior is covered
 by focused tests and an installed-package smoke check.
 
+**Tracking commits:** `ba8de9c`, `91a95e9`.
+
 ### [x] G3. Unified preflight and numerical diagnostics
 
 **Evidence/gap:** validation is scattered across [model.R](../R/model.R),
@@ -205,6 +209,8 @@ use, covariance shrinkage, and effective correction strength. Stabilization is
 labelled as a numerical safeguard and is not presented as an accuracy guarantee.
 Focused tests cover structured preflight failures, sparse support, controls,
 objective/status fields, and structural correction diagnostics.
+
+**Tracking commits:** `a57b044`, `8bd3fd8`, `f8ef27e`.
 
 ### [x] G4. Explicit inference scope and reusable resampling
 
@@ -257,6 +263,8 @@ does not silently rerun shape selection or convert plausible-value draws into
 confidence intervals. Coverage, bias, and failure-rate simulations under low
 and high reliability and under shape selection remain required before making
 full-pipeline or robust-inference claims.
+
+**Tracking commits:** `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370`.
 
 **Acceptance:** repeated runs reproduce across worker counts; failures never
 silently disappear; low/high reliability and shape-selection simulations report
@@ -321,6 +329,8 @@ and independent item-block likelihoods are still not advertised as joint
 lavaan-style FIML. Prior-only rows remain explicitly identified rather than
 imputed or pooled into observed-information counts.
 
+**Tracking commits:** `311ec2d`, `8cb4304`, `d9d370b`, `e5f4ff8`.
+
 ### [x] G6. Measurement split control and honest outer validation
 
 **Evidence/gap:** [fit_states()](../R/fit.R#L40) randomly assigns folds from the
@@ -380,6 +390,9 @@ partition constraints. The entry remains **Partial** for methodology: a
 predictor-only prospective workflow that can score outcomes without their
 indicators is still G7, and independent coverage studies for outer metrics have
 not yet been added.
+
+**Tracking commits:** `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`,
+`1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f`.
 
 ### [ ] G7. Structural prediction for new observations
 
