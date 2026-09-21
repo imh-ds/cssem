@@ -1,9 +1,9 @@
 # Package audit: patched history and open findings
 
-## Current audit — 2026-09-20, commit `6e15296`
+## Current audit — 2026-09-20, commit `c981425`
 
-This document records the audit and patch history. A1–A4 below were fixed in
-this work, with focused regression tests and separate commits; A5–A10 remain
+This document records the audit and patch history. A1–A6 below were fixed in
+this work, with focused regression tests and separate commits; A7–A10 remain
 open. The earlier S/M/N/H entries are retained as a historical patch register:
 checked entries describe bugs that were edited and patched, not defects newly
 found in the current source. H3 and H4 remain open methodological disclosures.
@@ -15,7 +15,7 @@ correction, mediation/moderation, causal gating, evidence reporting, and the
 simulation/comparator workflows against their documentation and existing tests.
 Targeted probes sourced the current `R/` files directly and ran on R 4.6.0.
 They confirmed A1–A9; A10 is a source-confirmed validation-design limitation.
-Focused regression tests for A1–A4 were added, but the full test harness
+Focused regression tests for A1–A6 were added, but the full test harness
 could not run in this environment.
 This is not a claim that every function or possible input has been exhaustively
 validated. Optional lavaan/seminr integrations and full simulation studies were
@@ -39,8 +39,8 @@ under N6 was not available for verification.
 | A2 | Fixed (`eba96d5`) | Severe | Causal mediation accepts contradictory temporal declarations |
 | A3 | Fixed (`dc21536`) | Severe | Mediator subsets bypass adjustment checks for included paths |
 | A4 | Fixed (`39b777f`, `6e15296`) | Severe | Flexible causal identification is assessed with a linear model |
-| A5 | Open | Moderate | Evidence verdict reverses the specification-gap sign |
-| A6 | Open | Severe | New ordinal scores silently truncate fractional categories |
+| A5 | Fixed (`63dfa65`) | Moderate | Evidence verdict reverses the specification-gap sign |
+| A6 | Fixed (`c981425`) | Severe | New ordinal scores silently truncate fractional categories |
 | A7 | Open | Severe | Continuous/manifest factors become integer level positions |
 | A8 | Open | Moderate | Interaction correction disappears from structural reports |
 | A9 | Open | Moderate | Weak causal effects print the wrong non-causal reason |
@@ -647,7 +647,7 @@ models now report weak identification for both flexible estimands, while the
 existing noisy nonlinear DML and AME fixtures retain strong labels and finite
 estimates.
 
-### [ ] A5. Evidence verdicts reverse the specification-gap sign
+### [x] A5. Evidence verdicts reverse the specification-gap sign — fixed in `63dfa65`
 
 **Where:** [R/evidence-report.R:20](../R/evidence-report.R#L20), `.edge_verdict()`.
 
@@ -659,15 +659,20 @@ indicate predictive incompleteness. The robust-verdict condition instead uses
 returns `"Robust descriptive effect"`; changing the gap to `+.5` returns
 `"Moderate descriptive effect"`.
 
-**Proposed fix:** express acceptable shortfall with the correct sign (for the
-existing tolerance, `gap >= -0.08`) and document how missing gaps are treated.
+**Resolution:** `.edge_verdict()` now treats a theory-minus-shadow gap of at
+least `-0.08` as robust at the high-stability threshold. Negative gaps below
+that tolerance weaken the verdict, while positive gaps support robustness.
+Missing gaps remain neutral and continue to be governed by stability and
+contribution checks.
 
 **Regression checks:** cover both signs, the tolerance boundary, and unavailable
-gaps, including the end-to-end evidence report.
+gaps through the verdict helper; the existing end-to-end evidence-report tests
+continue to exercise the resulting edge verdicts.
 
-### [ ] A6. Scoring silently truncates fractional ordinal values
+### [x] A6. Scoring silently truncates fractional ordinal values — fixed in `c981425`
 
-**Where:** [R/encoder.R:58](../R/encoder.R#L58), `.prepare_for_encoder()`.
+**Where:** [R/encoder.R:21](../R/encoder.R#L21), shared ordinal validation used by
+`.prepare_item()` and `.prepare_for_encoder()`.
 
 **Issue:** fitting rejects fractional category codes, but future scoring calls
 `as.integer()` before validation. For example, values `1.9` and `2.1` become
@@ -677,12 +682,14 @@ This is distinct from the patched category-order defects S1/S2.
 **Evidence (executed):**
 `.prepare_for_encoder(c(1.9, 2.1), "ordinal", 1, 1:3)` returned `c(1L, 2L)`.
 
-**Proposed fix:** share finite whole-number validation between fitting and
-scoring, before integer coercion, while preserving factor-label mapping.
+**Resolution:** fitting and scoring now share `.validate_ordinal_codes()`, which
+rejects non-finite and fractional numeric values before `as.integer()` runs.
+Factor labels still use their stored label schema, so the S1/S2 category-label
+behavior is preserved.
 
-**Regression checks:** numeric and numeric-string fractional inputs must error
-through `score_states()`; valid integer codes, labels, and missing values must
-retain their current behavior.
+**Regression checks:** `score_states()` now errors for numeric and
+numeric-string fractional inputs; valid integer codes and missing values still
+score. Existing factor-label and unseen-category checks remain in place.
 
 ### [ ] A7. Continuous and manifest factors silently become level positions
 
@@ -778,8 +785,8 @@ agree. Include serial paths, parallel paths, interactions, and noisy mediators.
 
 ## Follow-up priorities
 
-A1–A4 are patched, but their focused tests should remain part of release
-verification. Resolve A6/A7 before scoring unchecked external data. A5/A8/A9 concern reporting
+A1–A6 are patched, but their focused tests should remain part of release
+verification. Resolve A7 before scoring unchecked external data. A8/A9 concern reporting
 and cross-API consistency. Add A10's independent checks before regenerating
 publication results, and carry forward H3/H4's disclosures. The repository's
 method notes also need synchronization with the current selector (Holm-adjusted
