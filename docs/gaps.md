@@ -356,6 +356,11 @@ evaluation evidence. Missing-data policies are explicit for both measurement
 and structural stages, and held-out data without declared indicator columns
 reports the existing G7 predictor-only limitation.
 
+Random and grouped outer evaluation should use at least three global folds so
+each training partition retains at least two measurement folds. With two folds,
+the runner keeps the partition provenance but records the one-fold training
+window as a failed partition rather than pretending that cross-fitting occurred.
+
 Focused [split tests](../tests/testthat/test-splits.R) cover deterministic,
 grouped, time-ordered, explicit, and listwise-aligned assignments. The
 [outer-validation tests](../tests/testthat/test-outer-validation.R) cover
