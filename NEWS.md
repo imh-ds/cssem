@@ -1,5 +1,81 @@
 # cssem (development version)
 
+## Bug fixes (2026-09-20 audit)
+
+* **A1 — Nonlinear mediation baselines:** mediation contrasts now use the same
+  active edge set for the shifted and zero-shift predictions. This removes the
+  observed-versus-fitted mediator substitution that could create divergent or
+  spurious nonlinear effects as the intervention step shrank.
+
+* **A2 — Causal mediation temporal order:** causal mediation now validates the
+  supplied order against every included path and adjustment variable, rejects
+  contradictory orders, and checks that confounders precede treatment and
+  mediators lie between treatment and outcome before assigning a causal label.
+
+* **A3 — Mediator-subset adjustment checks:** causal mediation now applies
+  adjustment admissibility checks to every declared treatment-to-outcome path,
+  even when a caller requests only a subset of mediators for reporting.
+
+* **A4 — Flexible causal identification:** DML and average-marginal-effect
+  estimands now diagnose treatment variation with their cross-fitted nonlinear
+  residuals. Near-deterministic or weak residual variation is unavailable or
+  unstable and cannot receive a causal-under-assumptions label.
+
+* **A5 — Evidence verdict direction:** specification-gap verdicts now interpret
+  theory-minus-shadow gaps with the correct sign, so large negative gaps weaken
+  a robustness verdict instead of being treated as strong evidence.
+
+* **A6 — Ordinal score validation:** fitting and scoring share validation that
+  rejects fractional or non-finite ordinal values before integer conversion;
+  fractional values can no longer be silently truncated into other categories.
+
+* **A7 — Numeric factor conversion:** continuous and manifest inputs now parse
+  factor labels and numeric strings by their measured values rather than factor
+  level positions, with malformed and non-finite values rejected consistently
+  during fitting and scoring.
+
+* **A8 — Interaction corrections:** product interaction edges are now eligible
+  for structural errors-in-variables correction and bootstrap reporting, with
+  constituent reliability products shown consistently across structural and
+  moderation reports.
+
+* **A9 — Causal-effect reporting:** `print.causal_effect()` now distinguishes
+  an undeclared temporal order from a declared but weakly identified effect,
+  reporting the actual reason for a non-causal label.
+
+* **A10 — Validation independence:** mediation validation now uses independent
+  analytic path-product and interaction targets, plus a separately implemented
+  intervention integration target for smooth mediation. The former propagation
+  results remain available as explicitly named sample oracles, and validation
+  output reports errors against both bases.
+
+## Historical fixes newly recorded
+
+* Interaction edges are now labelled as product terms throughout structural
+  ledgers and effect cards, and fitted-curve grids no longer emit spurious
+  warnings for interaction names.
+
+* Measurement fitting, association, structural-fold construction, and
+  mediation/moderation bootstraps now preserve the caller's random-number
+  stream after using deterministic internal seeds.
+
+* Model metadata now uses the package version, and stale comments no longer
+  claim that the eigenvalue limiter guarantees corrected estimates are never
+  worse than naive estimates.
+
+* The manuscript's ridge-penalty description now matches the log-scale penalty
+  used by ordinal estimation.
+
+* Validation item generation now preserves sparse threshold schedules when a
+  skew shift is also requested.
+
+* Comparator score frames now reject row-count mismatches unless an explicit
+  case index is supplied, preventing scores from being assigned to the wrong
+  respondents when an engine drops cases.
+
+* Simulation shard seeds are now derived from unsharded job indices, so
+  changing the shard count no longer changes the scenario-to-seed pairing.
+
 ## Breaking changes
 
 * Ordinal indicators supplied as **text** are now rejected. They were coded
