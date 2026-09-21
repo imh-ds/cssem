@@ -50,6 +50,24 @@
     retained_ids = as.integer(retained_ids))
 }
 
+.measurement_status <- function(fit, row_ids, required) {
+  required <- unique(as.character(required))
+  out <- matrix("complete", nrow = length(row_ids), ncol = length(required),
+    dimnames = list(NULL, required))
+  ledger <- fit$sample_ledger$rows
+  if (is.null(ledger) || !length(required)) return(out)
+  ledger <- ledger[ledger$stage == "measurement", , drop = FALSE]
+  for (j in seq_along(required)) {
+    one <- ledger[ledger$target == required[[j]], , drop = FALSE]
+    if (!nrow(one)) next
+    status <- stats::setNames(as.character(one$status), as.character(one$row_id))
+    matched <- unname(status[as.character(row_ids)])
+    matched[is.na(matched)] <- "excluded"
+    out[, j] <- matched
+  }
+  out
+}
+
 .association_sample_ledger <- function(association) {
   scores <- as.data.frame(association$scores)
   fit <- association$fit
@@ -62,21 +80,28 @@
   for (outcome in names(association$structure$effects)) {
     predictors <- names(association$structure$effects[[outcome]])
     required <- unique(c(outcome, unlist(lapply(predictors, .predictor_constructs), use.names = FALSE)))
+    measurement_status <- .measurement_status(fit, association_ids, required)
     observed <- rep(FALSE, input_n)
     complete <- rep(FALSE, input_n)
     observed_n <- rep(0L, input_n)
     if (all(required %in% names(scores))) {
       values <- scores[, required, drop = FALSE]
-      observed_available <- rowSums(is.finite(as.matrix(values)))
+      observed_status <- measurement_status == "complete" | measurement_status == "partial"
+      observed_available <- rowSums(observed_status & is.finite(as.matrix(values)))
       complete_available <- stats::complete.cases(values) &
-        apply(as.matrix(values), 1L, function(x) all(is.finite(x)))
+        apply(as.matrix(values), 1L, function(x) all(is.finite(x))) &
+        apply(observed_status, 1L, all)
       complete[available] <- complete_available
       observed[available] <- TRUE
       observed_n[available] <- observed_available
     }
+    input_status <- .measurement_status(fit, seq_len(input_n), required)
+    prior_only <- if (ncol(input_status)) apply(input_status == "prior_only", 1L, any) else rep(FALSE, input_n)
+    excluded_measurement <- if (ncol(input_status)) apply(input_status == "excluded", 1L, any) else rep(FALSE, input_n)
     status <- ifelse(!available, "excluded", ifelse(complete, "included", "excluded"))
-    reason <- ifelse(!available, "measurement_excluded",
-      ifelse(complete, "", "missing_score"))
+    reason <- ifelse(!available & prior_only, "prior_only_measurement",
+      ifelse(!available & excluded_measurement, "measurement_excluded",
+        ifelse(complete, "", "missing_score")))
     rows[[outcome]] <- data.frame(stage = "structural", target = outcome,
       row_id = seq_len(input_n), row_name = input_names,
       indicators_observed = as.integer(observed_n), indicators_total = length(required),
@@ -86,7 +111,7 @@
     summaries[[outcome]] <- data.frame(stage = "structural", target = outcome,
       n_total = input_n, n_retained = sum(available), n_effective = sum(complete),
       n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
-      n_prior_only = 0L, n_excluded = sum(!complete), stringsAsFactors = FALSE)
+      n_prior_only = sum(prior_only), n_excluded = sum(!complete), stringsAsFactors = FALSE)
   }
   list(summary = if (length(summaries)) do.call(rbind, summaries) else data.frame(),
     rows = if (length(rows)) do.call(rbind, rows) else data.frame(),

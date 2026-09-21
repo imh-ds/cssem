@@ -719,19 +719,22 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
+  predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
+  declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
+  if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
   score_row_ids <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(nrow(scores))
-  score_complete <- apply(as.matrix(scores), 1L, function(x) all(is.finite(x)))
+  measurement_status <- .measurement_status(fit, score_row_ids, declared)
+  observed_status <- measurement_status == "complete" | measurement_status == "partial"
+  score_complete <- apply(as.matrix(scores[, declared, drop = FALSE]), 1L, function(x) all(is.finite(x))) &
+    apply(observed_status, 1L, all)
   if (missing_policy == "error" && any(!score_complete))
-    stop(sprintf("missing_policy = \"error\" found %d row(s) with missing locked scores; use `sample_accounting()` to inspect coverage or choose `complete`.",
+    stop(sprintf("missing_policy = \"error\" found %d row(s) with missing or prior-only locked scores; use `sample_accounting()` to inspect coverage or choose `complete`.",
       sum(!score_complete)), call. = FALSE)
   if (missing_policy == "complete" && any(!score_complete)) {
     scores <- scores[score_complete, , drop = FALSE]
     score_row_ids <- score_row_ids[score_complete]
   }
   if (nrow(scores) < 2L) stop("Missing-score handling left fewer than two rows for structural fitting.", call. = FALSE)
-  predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
-  declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
-  if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
   # Per-construct reliability used by the errors-in-variables correction: the
   # posterior reliability carried on the fit, overridden construct by construct
   # by any user-supplied values. NA where unavailable so the corrected estimate is

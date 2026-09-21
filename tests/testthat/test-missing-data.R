@@ -54,22 +54,23 @@ test_that("structural accounting reports complete-case exclusions by outcome", {
     x = rnorm(n), y = rnorm(n)
   )
   data[c(4L, 9L), "x"] <- NA
+  data[4L, c("a1", "a2", "a3")] <- NA
   fit <- fit_states(specify_measurement(A = ordinal("a1", "a2", "a3"),
     X = manifest("x"), Y = manifest("y"), folds = 3L), data, seed = 4L,
     iterations = 1L, diagnostics = FALSE)
-  association <- associate(fit, specify_structure(Y ~ linear(X), order = c("A", "X", "Y")),
+  association <- associate(fit, specify_structure(Y ~ linear(X) + linear(A), order = c("A", "X", "Y")),
     structural_repeats = 1L, shadow_scope = "temporal", missing_policy = "complete")
   expect_equal(association$missing_policy, "complete")
   accounting <- sample_accounting(association)
   expect_true(any(accounting$summary$stage == "structural" & accounting$summary$target == "Y"))
   structural <- accounting$rows[accounting$rows$stage == "structural" & accounting$rows$target == "Y", , drop = FALSE]
   expect_true(any(structural$status == "excluded"))
-  expect_true(any(structural$reason %in% c("measurement_excluded", "missing_score")))
+  expect_true(any(structural$reason %in% c("prior_only_measurement", "measurement_excluded", "missing_score")))
   expect_true(all(accounting$summary$n_effective[accounting$summary$stage == "structural"] <
     accounting$summary$n_total[accounting$summary$stage == "structural"]))
 
   expect_error(
-    associate(fit, specify_structure(Y ~ linear(X), order = c("A", "X", "Y")),
+    associate(fit, specify_structure(Y ~ linear(X) + linear(A), order = c("A", "X", "Y")),
       structural_repeats = 1L, shadow_scope = "temporal", missing_policy = "error"),
     "missing_policy = \\\"error\\\""
   )
