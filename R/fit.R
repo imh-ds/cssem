@@ -43,6 +43,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
   preset <- match.arg(preset)
+  .preflight_stop(check_model(model), "Model preflight failed")
+  .preflight_stop(check_data(data, model), "Data preflight failed")
   if (preset == "exploratory") {
     if (missing(iterations)) iterations <- 4L
     if (missing(draws)) draws <- 0L
