@@ -681,9 +681,9 @@ specify_structure <- function(..., order = NULL) {
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight
 #'   structural selection defaults while iterating locally.
 #' @param missing_policy How missing locked scores are handled. The default
-#'   `"complete"` excludes rows with any non-finite score from structural
-#'   fitting and records them in [sample_accounting()]. `"error"` rejects such
-#'   rows before fitting.
+#'   `"complete"` excludes rows with any non-finite or prior-only score from
+#'   structural fitting and records them in [sample_accounting()]. `"error"`
+#'   rejects such rows before fitting.
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,

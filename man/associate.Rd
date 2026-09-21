@@ -74,9 +74,9 @@ corrected-estimate interval. Zero disables the interval.}
 independent of the structural shape-selection error rate.}
 
 \item{missing_policy}{How missing locked scores are handled. The default
-\code{"complete"} excludes rows with any non-finite score from structural
-fitting and records them in \code{sample_accounting()}. \code{"error"} rejects
-such rows before fitting.}
+\code{"complete"} excludes rows with any non-finite or prior-only score from
+structural fitting and records them in \code{sample_accounting()}. \code{"error"}
+rejects such rows before fitting.}
 
 \item{respondent_weighting}{Experimental. \code{"information"} applies
 inverse-variance respondent weighting from the posterior SD. It is
