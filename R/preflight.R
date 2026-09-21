@@ -109,7 +109,7 @@ check_model <- function(model, structure = NULL) {
       add(stage = "model", construct = nm, code = "invalid_key",
         message = "keys must contain only -1 or 1.",
         action = "Set reverse-key directions explicitly with keys = -1 or keys = 1.")
-    is_manifest <- any(scales == "manifest")
+    is_manifest <- any(!is.na(scales) & scales == "manifest")
     if (is_manifest && (length(indicators) != 1L || !all(scales == "manifest")))
       add(stage = "model", construct = nm, code = "invalid_manifest_block",
         message = "A manifest construct must contain exactly one manifest indicator.",
@@ -208,6 +208,8 @@ check_data <- function(data, model, folds = NULL) {
   if (anyDuplicated(names(data)))
     add(stage = "data", code = "duplicate_data_column", message = "data contains duplicate column names.",
       action = "Make column names unique before fitting.")
+  if (any(model_check$severity == "error"))
+    return(.preflight_table(rows, "cssem_data_check"))
   n <- nrow(data)
   if (n < 1L)
     add(stage = "data", code = "empty_data", message = "data has no rows.",
