@@ -1,9 +1,9 @@
 # Package audit: patched history and open findings
 
-## Current audit — 2026-09-20, commit `c981425`
+## Current audit — 2026-09-20, commit `89e9215`
 
-This document records the audit and patch history. A1–A6 below were fixed in
-this work, with focused regression tests and separate commits; A7–A10 remain
+This document records the audit and patch history. A1–A8 below were fixed in
+this work, with focused regression tests and separate commits; A9–A10 remain
 open. The earlier S/M/N/H entries are retained as a historical patch register:
 checked entries describe bugs that were edited and patched, not defects newly
 found in the current source. H3 and H4 remain open methodological disclosures.
@@ -15,7 +15,7 @@ correction, mediation/moderation, causal gating, evidence reporting, and the
 simulation/comparator workflows against their documentation and existing tests.
 Targeted probes sourced the current `R/` files directly and ran on R 4.6.0.
 They confirmed A1–A9; A10 is a source-confirmed validation-design limitation.
-Focused regression tests for A1–A6 were added, but the full test harness
+Focused regression tests for A1–A8 were added, but the full test harness
 could not run in this environment.
 This is not a claim that every function or possible input has been exhaustively
 validated. Optional lavaan/seminr integrations and full simulation studies were
@@ -41,8 +41,8 @@ under N6 was not available for verification.
 | A4 | Fixed (`39b777f`, `6e15296`) | Severe | Flexible causal identification is assessed with a linear model |
 | A5 | Fixed (`63dfa65`) | Moderate | Evidence verdict reverses the specification-gap sign |
 | A6 | Fixed (`c981425`) | Severe | New ordinal scores silently truncate fractional categories |
-| A7 | Open | Severe | Continuous/manifest factors become integer level positions |
-| A8 | Open | Moderate | Interaction correction disappears from structural reports |
+| A7 | Fixed (`89e9215`) | Severe | Continuous/manifest factors become integer level positions |
+| A8 | Fixed (`612fe88`) | Moderate | Interaction correction disappears from structural reports |
 | A9 | Open | Moderate | Weak causal effects print the wrong non-causal reason |
 | A10 | Open | Methodological | Mediation validation reuses the estimator as its oracle |
 
@@ -691,9 +691,9 @@ behavior is preserved.
 numeric-string fractional inputs; valid integer codes and missing values still
 score. Existing factor-label and unseen-category checks remain in place.
 
-### [ ] A7. Continuous and manifest factors silently become level positions
+### [x] A7. Continuous and manifest factors silently become level positions — fixed in `89e9215`
 
-**Where:** [R/encoder.R:22](../R/encoder.R#L22), `.prepare_item()`,
+**Where:** [R/encoder.R:35](../R/encoder.R#L35), shared numeric conversion used by `.prepare_item()`,
 `.prepare_for_encoder()`, and the manifest branches of `.fit_encoder()` and
 `.predict_encoder()`.
 
@@ -707,15 +707,17 @@ character values into missing observations without explaining the data error.
 returned `c(1, 3, 2)`, rather than the measured values or a validation error.
 The manifest paths use the same coercion.
 
-**Proposed fix:** define and enforce a numeric-input contract for continuous and
-manifest items. Reject factors/non-numeric labels, or explicitly parse numeric
-labels with loss checks; never use factor positions. Apply it to future scoring
-as well as fitting.
+**Resolution:** continuous and manifest inputs now use a shared numeric-input
+contract. Numeric-label factors and numeric strings are parsed by their values;
+malformed labels and non-finite values error before conversion. No path uses
+factor level positions, and the same validation applies to fitting and future
+scoring.
 
-**Regression checks:** numeric-label and nonnumeric-label factors, reordered
-factor levels, malformed strings, nonfinite inputs, and valid numeric controls.
+**Regression checks:** numeric-label and reordered factors retain their measured
+values; nonnumeric labels, malformed strings, and non-finite values error; valid
+numeric controls and manifest scoring remain unchanged.
 
-### [ ] A8. Interaction corrections disappear from structural reports
+### [x] A8. Interaction corrections disappear from structural reports — fixed in `612fe88`
 
 **Where:** [R/structure.R:556](../R/structure.R#L556), `.corrected_effects()`;
 compare `.eiv_coefficients()` and `.corrected_models()` in `R/mediation.R`.
@@ -730,16 +732,17 @@ so different reporting APIs disagree about correction availability.
 `corrected_estimate = NA` for `X:W`, while `.eiv_coefficients()` on the identical
 data returned a finite corrected interaction (`3.082602` in the probe).
 
-**Proposed fix:** choose one supported interaction-correction policy and apply
-it consistently to structural, simple-slope, and mediation APIs. If supported,
-include products in eligibility and interval generation; otherwise prevent the
-moderation layer from presenting that correction as available. Update the
-simple-slopes documentation, which currently says the interaction is observed.
-This probe establishes an API inconsistency, not the statistical validity of
-the product-reliability approximation for every predictor distribution.
+**Resolution:** product interactions are now eligible for structural EIV
+correction and bootstrap intervals, with the product of constituent reliabilities
+reported for the interaction. This matches the existing correction solver and
+moderation/simple-slope path; its documentation now states the same policy.
+The product-reliability approximation remains a statistical assumption for the
+interaction term, rather than a universal validity guarantee.
 
-**Regression checks:** compare correction basis, point estimates, and interval
-availability across the APIs, including swapped interaction names.
+**Regression checks:** the structural interaction estimate and interval are
+finite and match `.eiv_coefficients()`, and the reported interaction reliability
+equals the constituent product. Existing moderation tests continue to cover
+simple slopes and swapped interaction names.
 
 ### [ ] A9. Weak causal effects print the wrong reason for their label
 
@@ -785,9 +788,8 @@ agree. Include serial paths, parallel paths, interactions, and noisy mediators.
 
 ## Follow-up priorities
 
-A1–A6 are patched, but their focused tests should remain part of release
-verification. Resolve A7 before scoring unchecked external data. A8/A9 concern reporting
-and cross-API consistency. Add A10's independent checks before regenerating
+A1–A8 are patched, but their focused tests should remain part of release
+verification. A9 concerns reporting consistency. Add A10's independent checks before regenerating
 publication results, and carry forward H3/H4's disclosures. The repository's
 method notes also need synchronization with the current selector (Holm-adjusted
 curvature testing and the relative-gain floor), but were not edited here.
