@@ -223,6 +223,27 @@ test_that("scoring maps categories by label, not by position in the scoring fram
   expect_error(score_states(f, unseen), "unseen ordinal category")
 })
 
+test_that("score_states rejects fractional ordinal codes before coercion", {
+  # Regression: scoring converted numeric ordinal values with as.integer()
+  # before validation, so 1.9 silently became category 1.
+  d <- simulate_states(n = 180, seed = 23)
+  m <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3)
+  f <- fit_states(m, d, seed = 1, iterations = 8, diagnostics = FALSE)
+
+  fractional <- d[1:12, paste0("a", 1:4), drop = FALSE]
+  fractional$a1[[1L]] <- fractional$a1[[1L]] + .25
+  expect_error(score_states(f, fractional), "whole-number")
+
+  numeric_strings <- d[1:12, paste0("a", 1:4), drop = FALSE]
+  numeric_strings[] <- lapply(numeric_strings, as.character)
+  numeric_strings$a1[[1L]] <- "1.9"
+  expect_error(score_states(f, numeric_strings), "whole-number")
+
+  valid <- d[1:12, paste0("a", 1:4), drop = FALSE]
+  valid$a1[[1L]] <- NA_integer_
+  expect_no_error(score_states(f, valid))
+})
+
 test_that("seeded entry points restore the caller's random stream", {
   # Regression: fit_states(), associate(), the bootstraps and the harnesses all
   # called set.seed() and never restored it, so a user's own random draws

@@ -18,6 +18,20 @@
   numeric_x
 }
 
+.validate_ordinal_codes <- function(x) {
+  numeric_x <- suppressWarnings(as.numeric(x))
+  non_finite <- !is.na(numeric_x) & !is.finite(numeric_x)
+  non_integer <- is.finite(numeric_x) & abs(numeric_x - round(numeric_x)) > 1e-8
+  if (any(non_finite))
+    stop("Ordinal indicators must have finite whole-number category codes.", call. = FALSE)
+  if (any(non_integer))
+    stop("Ordinal indicators must have whole-number category codes (e.g. 1, 2, 3); found a non-integer value (",
+      signif(numeric_x[which(non_integer)[1L]], 6),
+      "). Declare this item continuous(), or round/bin it to categories before declaring it ordinal().",
+      call. = FALSE)
+  numeric_x
+}
+
 .prepare_item <- function(x, scale, key, levels = NULL) {
   if (scale %in% c("continuous", "manifest")) {
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
@@ -27,21 +41,13 @@
   # Ordinal category codes must be whole numbers. Silently truncating a
   # non-integer (e.g. an averaged sub-scale accidentally declared ordinal)
   # would quietly discard information instead of surfacing the mistake.
-  if (!is.factor(x)) {
-    numeric_x <- suppressWarnings(as.numeric(x))
-    non_integer <- !is.na(numeric_x) & abs(numeric_x - round(numeric_x)) > 1e-8
-    if (any(non_integer))
-      stop("Ordinal indicators must have whole-number category codes (e.g. 1, 2, 3); found a non-integer value (",
-        signif(numeric_x[which(non_integer)[1L]], 6),
-        "). Declare this item continuous(), or round/bin it to categories before declaring it ordinal().",
-        call. = FALSE)
-  }
+  numeric_x <- if (is.factor(x)) NULL else .validate_ordinal_codes(x)
   # The stored schema is the category *values* themselves -- a factor's labels in
   # its declared order, or the numeric codes -- never positions derived from the
   # frame in hand. Positions depend on which categories happen to appear, so a
   # frame with a different set of observed categories would silently map the same
   # response to a different category.
-  raw <- if (is.factor(x)) as.character(x) else as.integer(x)
+  raw <- if (is.factor(x)) as.character(x) else as.integer(numeric_x)
   lev <- if (!is.null(levels)) levels
     else if (is.factor(x)) levels(x)[sort(unique(as.integer(x)[!is.na(x)]))]
     else sort(unique(raw[!is.na(raw)]))
@@ -55,7 +61,8 @@
     y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
     return(y)
   }
-  raw <- if (is.factor(x)) as.character(x) else as.integer(.as_ordinal_codes(x))
+  x <- .as_ordinal_codes(x)
+  raw <- if (is.factor(x)) as.character(x) else as.integer(.validate_ordinal_codes(x))
   y <- match(raw, levels)
   if (any(!is.na(raw) & is.na(y))) stop("Scoring data contain an unseen ordinal category.", call. = FALSE)
   if (key < 0) y <- ifelse(is.na(y), NA_integer_, length(levels) + 1L - y)
