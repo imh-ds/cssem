@@ -3,8 +3,8 @@
 Audit date: **2026-09-20**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 and G2 are implemented below; the remaining unchecked entries
-are proposed work. Existing defect reproductions and fixes belong in
+**Status:** G1 through G3 are implemented below; the remaining unchecked
+entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -60,7 +60,7 @@ correctness concerns.
 | --- | --- | --- | --- |
 | G1 | P1 | Implemented | Standard summaries, parameter tables, and R extractors |
 | G2 | P1 | Implemented | Measurement parameter and validity assessment |
-| G3 | P1 | Partial | Unified preflight and numerical diagnostics |
+| G3 | P1 | Implemented | Unified preflight and numerical diagnostics |
 | G4 | P1 | Partial | Explicit, validated inference and reusable resampling |
 | G5 | P1 | Partial | Missing-data policy and sample accounting |
 | G6 | P1 | Partial | User-defined measurement splits and outer validation |
@@ -160,7 +160,7 @@ HTMT-like values are diagnostics without threshold verdicts. Reverse-keyed,
 ordinal, continuous, mixed, manifest, and sparse-support behavior is covered
 by focused tests and an installed-package smoke check.
 
-### [ ] G3. Unified preflight and numerical diagnostics
+### [x] G3. Unified preflight and numerical diagnostics
 
 **Evidence/gap:** validation is scattered across [model.R](../R/model.R),
 [fit.R](../R/fit.R), and [structure.R](../R/structure.R). Convergence flags exist,
@@ -185,6 +185,26 @@ Provide validated fitting controls and actionable recovery guidance.
 messages; deliberately nonconvergent fits expose their cause; stabilization is
 visible rather than interpreted as an accuracy guarantee. Coordinate input
 validation with A6/A7 in [bugs.md](bugs.md).
+
+**Implemented (2026-09-20):** [check_model()](../R/preflight.R) and
+[check_data()](../R/preflight.R) now return structured issue tables with
+severity, stage, construct, item, row, fold, stable issue codes, and recovery
+actions. They cover malformed measurement declarations, duplicate or missing
+indicators, scale/key mismatches, unsupported graph nodes and temporal order,
+empty or sparse folds, sparse ordinal categories, non-finite numeric values,
+zero-information items/constructs, and rows that rely on the prior. `fit_states()`
+runs these checks before allocating encoders and stops on errors while leaving
+warnings available through the public checks.
+
+`fit_states()` now validates and stores the measurement `tolerance` and latent
+`quadrature` controls. [numerical_diagnostics()](../R/numerical-diagnostics.R)
+exposes marginal objective start/end/change, convergence, optimizer status,
+latent design rank, and condition numbers. When paired with an association it
+also reports errors-in-variables covariance rank/conditioning, reliability-floor
+use, covariance shrinkage, and effective correction strength. Stabilization is
+labelled as a numerical safeguard and is not presented as an accuracy guarantee.
+Focused tests cover structured preflight failures, sparse support, controls,
+objective/status fields, and structural correction diagnostics.
 
 ### [ ] G4. Explicit inference scope and reusable resampling
 
@@ -507,8 +527,8 @@ present manually reusing scores as a validated higher-order latent model.
 ## Suggested delivery order
 
 1. Resolve the relevant existing correctness defects in [bugs.md](bugs.md).
-   Stabilize G1/G3/G5/G13: result contracts, preflight, sample accounting, and
-   documentation. Use the scale-aware measurement contracts delivered in G2.
+   Stabilize G5/G13: sample accounting and documentation. Use the result and
+   scale-aware measurement contracts delivered in G1-G3.
 2. Build G6's split/evaluation infrastructure and G7's prediction contract;
    use them to validate G4's inference choices. Develop G14's causal validation
    before widening causal claims.

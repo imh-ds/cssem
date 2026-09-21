@@ -10,6 +10,8 @@ fit_states(
   seed = 1L,
   draws = 0L,
   iterations = 15L,
+  tolerance = 0.001,
+  quadrature = seq(-4, 4, length.out = 31L),
   diagnostics = TRUE,
   preset = c("default", "exploratory")
 )
@@ -31,6 +33,12 @@ stops at convergence or after \code{max(8, 2 * iterations)} iterations. A
 warning (class \code{cssem_nonconvergence}) lists any construct whose full-data
 or fold encoder stopped at the cap; per-construct status is in
 \code{fit$measurement_engine}.}
+
+\item{tolerance}{Positive convergence tolerance for the maximum encoder
+parameter change.}
+
+\item{quadrature}{Strictly increasing finite latent-node values used by the
+marginal measurement encoder. At least five nodes are required.}
 
 \item{diagnostics}{Whether to calculate exploratory residual diagnostics and
 item warnings. Disable for high-throughput simulation benchmarks.}

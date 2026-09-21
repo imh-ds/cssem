@@ -161,38 +161,71 @@
 # construct runs the identical sequence of operations as before generalizing
 # to continuous/mixed items -- this function is a strict superset of the
 # prior ordinal-only estimator, not a rewrite of it.
-.fit_construct_mml <- function(Y, scales, k, iterations = 30L, nodes = seq(-4, 4, length.out = 31L)) {
+.measurement_objective <- function(encoders, Y, nodes, prior_weights) {
+  log_integrand <- matrix(log(prior_weights), nrow(Y), length(nodes), byrow = TRUE)
+  for (j in seq_along(encoders)) {
+    y <- Y[, j]; observed <- !is.na(y); e <- encoders[[j]]
+    if (!any(observed)) next
+    if (identical(e$type, "continuous")) {
+      mu <- e$intercept + e$slope * nodes
+      log_integrand[observed, ] <- log_integrand[observed, , drop = FALSE] +
+        outer(y[observed], mu, function(yy, mm) stats::dnorm(yy, mm, e$sigma, log = TRUE))
+    } else {
+      p <- .ordinal_probability(e$a, e$tau, nodes, e$k)
+      log_integrand[observed, ] <- log_integrand[observed, , drop = FALSE] +
+        t(log(p[, y[observed], drop = FALSE] + 1e-12))
+    }
+  }
+  max_log <- apply(log_integrand, 1L, max)
+  value <- max_log + log(rowSums(exp(log_integrand - max_log)))
+  if (any(!is.finite(value))) Inf else -sum(value)
+}
+
+.fit_construct_mml <- function(Y, scales, k, iterations = 30L,
+                               nodes = seq(-4, 4, length.out = 31L), tolerance = 1e-3) {
   prior_weights <- stats::dnorm(nodes); prior_weights <- prior_weights / sum(prior_weights)
   starter <- apply(Y, 2L, function(y) (y - mean(y, na.rm = TRUE)) / .safe_scale(y))
   z <- rowMeans(starter, na.rm = TRUE); z[!is.finite(z)] <- 0; z <- as.numeric(scale(z))
   encoders <- lapply(seq_len(ncol(Y)), function(j)
     if (scales[j] == "ordinal") .fit_ordinal(z, Y[, j], k[j]) else .fit_continuous(z, Y[, j]))
   converged <- FALSE
+  objective_trace <- .measurement_objective(encoders, Y, nodes, prior_weights)
+  optimizer_trace <- list()
   for (step in seq_len(iterations)) {
     posterior <- .eap_posterior(encoders, Y, nodes, prior_weights)
+    statuses <- vector("list", length(encoders))
     next_encoders <- lapply(seq_along(encoders), function(j) {
       old <- encoders[[j]]; y <- Y[, j]
       if (identical(old$type, "ordinal")) {
         start <- c(log(old$a), .threshold_parameters(old$tau))
         opt <- stats::optim(start, .ordinal_em_nll, nodes = nodes, y = y, posterior = posterior, k = old$k,
           method = "BFGS", control = list(maxit = 100L))
+        statuses[[j]] <<- list(method = "BFGS", convergence = opt$convergence,
+          message = if (is.null(opt$message)) "" else opt$message, value = opt$value)
         list(type = "ordinal", a = exp(opt$par[1L]),
           tau = cumsum(c(opt$par[2L], exp(opt$par[-c(1L, 2L)]))), k = old$k)
       } else {
-        .continuous_em_update(nodes, y, posterior)
+        updated <- .continuous_em_update(nodes, y, posterior)
+        statuses[[j]] <<- list(method = "weighted_least_squares", convergence = 0L,
+          message = "", value = NA_real_)
+        updated
       }
     })
     delta <- max(vapply(seq_along(encoders), function(j) {
       max(abs(.encoder_params(encoders[[j]]) - .encoder_params(next_encoders[[j]])))
     }, numeric(1)))
     encoders <- next_encoders
-    if (delta < 1e-3) { converged <- TRUE; break }
+    objective_trace <- c(objective_trace, .measurement_objective(encoders, Y, nodes, prior_weights))
+    optimizer_trace[[step]] <- statuses
+    if (delta < tolerance) { converged <- TRUE; break }
   }
   posterior <- .eap_posterior(encoders, Y, nodes, prior_weights)
   scores <- drop(posterior %*% nodes)
   list(encoders = encoders, nodes = nodes, prior_weights = prior_weights,
     training_scores = (scores - mean(scores)) / .safe_scale(scores),
-    converged = converged, iterations = step)
+    converged = converged, iterations = step, objective_trace = objective_trace,
+    optimizer_status = if (length(optimizer_trace)) optimizer_trace[[length(optimizer_trace)]] else list(),
+    optimizer_trace = optimizer_trace, tolerance = tolerance)
 }
 
 .fit_ordinal <- function(z, y, k = NULL) {
@@ -216,7 +249,8 @@
   list(type = "continuous", intercept = beta[1], slope = beta[2], sigma = sqrt(stats::weighted.mean((yy - drop(X %*% beta))^2, w)) + 1e-6)
 }
 
-.fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL) {
+.fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL,
+                         tolerance = 1e-3, nodes = seq(-4, 4, length.out = 31L)) {
   if (identical(spec$scales[[1L]], "manifest")) {
     y <- .as_numeric_values(data[[spec$indicators]], "manifest"); if (spec$keys[[1L]] < 0) y <- -y
     standardize <- isTRUE(spec$standardize)
@@ -224,13 +258,16 @@
     sc <- if (standardize) .safe_scale(y) else 1
     return(list(type = "manifest", indicators = spec$indicators, key = spec$keys[[1L]],
       standardize = standardize, center = center, scale = sc,
-      estimator = "manifest", converged = NA, iterations = 0L))
+      estimator = "manifest", converged = NA, iterations = 0L,
+      objective_trace = numeric(), optimizer_status = list(), optimizer_trace = list(),
+      tolerance = tolerance, nodes = nodes))
   }
   if (is.null(category_levels)) category_levels <- vector("list", length(spec$indicators))
   items <- Map(.prepare_item, data[spec$indicators], spec$scales, spec$keys, category_levels)
   Y <- do.call(cbind, lapply(items, `[[`, "y")); colnames(Y) <- spec$indicators
   k <- vapply(items, function(x) if (is.null(x$levels)) NA_integer_ else length(x$levels), integer(1))
-  fitted <- .fit_construct_mml(Y, spec$scales, k = k, iterations = max(8L, iterations * 2L))
+  fitted <- .fit_construct_mml(Y, spec$scales, k = k, iterations = max(8L, iterations * 2L),
+    nodes = nodes, tolerance = tolerance)
   estimator <- if (all(spec$scales == "ordinal")) "marginal_graded_response"
     else if (all(spec$scales == "continuous")) "marginal_linear_factor"
     else "marginal_mixed"

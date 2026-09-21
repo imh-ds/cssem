@@ -478,7 +478,12 @@ specify_structure <- function(..., order = NULL) {
   X <- X[keep, , drop = FALSE]; y <- y[keep]; w <- w[keep]
   if (!is.null(pv)) pv <- pv[keep, , drop = FALSE]
   na <- stats::setNames(rep(NA_real_, length(predictors)), predictors)
-  if (length(y) < length(predictors) + 2L || sum(w) <= 0) return(list(naive = na, corrected = na))
+  diagnostic <- list(n = length(y), rank = 0L, condition_number = NA_real_,
+    corrected_condition_number = NA_real_, singular = TRUE, correction_shrink = NA_real_,
+    correction_strength = NA_real_, reliability_floor_applied = NA, stable = NA,
+    message = "Insufficient complete rows for a structural correction.")
+  if (length(y) < length(predictors) + 2L || sum(w) <= 0)
+    return(list(naive = na, corrected = na, diagnostics = diagnostic))
   # Inverse-variance weighted moments: respondents with wide posteriors carry
   # less weight, so heteroskedastic measurement information no longer biases the
   # structural estimate toward the noisiest respondents.
@@ -487,6 +492,9 @@ specify_structure <- function(..., order = NULL) {
   Xc <- sweep(X, 2L, xbar, "-"); yc <- y - ybar
   Szz <- crossprod(Xc * w, Xc) / sw
   Szy <- crossprod(Xc * w, yc) / sw
+  diagnostic$rank <- as.integer(qr(Szz)$rank)
+  diagnostic$condition_number <- tryCatch(unname(kappa(Szz)), error = function(e) NA_real_)
+  diagnostic$singular <- diagnostic$rank < ncol(Szz) || !is.finite(diagnostic$condition_number)
   naive <- tryCatch(drop(solve(Szz, Szy)), error = function(e) na)
   # Weighted marginal reliability when per-respondent posterior variances are
   # available, otherwise the construct-level reliability estimate. An interaction
@@ -501,8 +509,11 @@ specify_structure <- function(..., order = NULL) {
     rel_w <- signal / (signal + error)
     rel <- ifelse(is.finite(rel_w), rel_w, rel)
   }
-  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0))
-    return(list(naive = stats::setNames(naive, predictors), corrected = na, stable = NA))
+  if (anyNA(rel) || any(!is.finite(rel)) || any(rel <= 0)) {
+    diagnostic$message <- "A predictor reliability is unavailable or non-positive; corrected coefficients are omitted."
+    return(list(naive = stats::setNames(naive, predictors), corrected = na,
+      stable = NA, diagnostics = diagnostic))
+  }
   # Adaptive regularization. At very low reliability a raw errors-in-variables
   # correction subtracts almost all the predictor variance, leaving a
   # near-singular covariance whose inverse explodes (the corrected estimate then
@@ -525,9 +536,20 @@ specify_structure <- function(..., order = NULL) {
       shrink <- shrink * 0.8; corrected_cov <- Szz - shrink * De; iteration <- iteration + 1L
     }
   }
+  diagnostic$corrected_condition_number <- tryCatch(unname(kappa(corrected_cov)), error = function(e) NA_real_)
+  requested_strength <- mean(1 - pmin(pmax(rel, 0), 1))
+  effective_strength <- mean(shrink * (1 - effective))
+  diagnostic$correction_shrink <- shrink
+  diagnostic$correction_strength <- if (requested_strength > 0)
+    pmin(pmax(effective_strength / requested_strength, 0), 1) else 0
+  diagnostic$reliability_floor_applied <- any(rel < reliability_floor)
   corrected <- tryCatch(drop(solve(corrected_cov, Szy)), error = function(e) na)
   stable <- all(rel >= reliability_floor) && shrink >= 1 - 1e-6
-  list(naive = stats::setNames(naive, predictors), corrected = stats::setNames(corrected, predictors), stable = stable)
+  diagnostic$stable <- stable
+  diagnostic$message <- if (stable) "Full errors-in-variables correction was numerically stable." else
+    "The correction was stabilized by a reliability floor or covariance shrinkage; this is not an accuracy guarantee."
+  list(naive = stats::setNames(naive, predictors), corrected = stats::setNames(corrected, predictors),
+    stable = stable, diagnostics = diagnostic)
 }
 
 # Percentile bootstrap of the corrected slopes, resampling respondents. This
@@ -557,6 +579,7 @@ specify_structure <- function(..., order = NULL) {
     c("linear", "monotone_increasing", "monotone_decreasing", "product"), logical(1))
   fit <- .eiv_coefficients(scores, outcome, predictors, reliability, weights, posterior_var)
   boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed, weights, posterior_var) else NULL
+  diagnostic <- fit$diagnostics
   do.call(rbind, lapply(predictors, function(p) {
     ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p]))) stats::quantile(boot[, p], c(.025, .975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
     data.frame(outcome = outcome, predictor = p,
@@ -566,6 +589,13 @@ specify_structure <- function(..., order = NULL) {
         prod(reliability[.interaction_terms(p)]) else unname(reliability[[p]]),
       corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
       eiv_applicable = applicable[[p]], eiv_stable = applicable[[p]] && isTRUE(fit$stable),
+      eiv_n = diagnostic$n, eiv_rank = diagnostic$rank,
+      eiv_condition_number = diagnostic$condition_number,
+      eiv_corrected_condition_number = diagnostic$corrected_condition_number,
+      eiv_singular = diagnostic$singular, correction_shrink = diagnostic$correction_shrink,
+      correction_strength = diagnostic$correction_strength,
+      reliability_floor_applied = diagnostic$reliability_floor_applied,
+      eiv_diagnostic = diagnostic$message,
       stringsAsFactors = FALSE)
   }))
 }
@@ -817,9 +847,11 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     effects[[outcome]] <- effect_data; predictions[[outcome]] <- as.data.frame(c(list(observed = scores[[outcome]], theory = selected$prediction), shadow_predictions))
     gaps[[outcome]] <- do.call(rbind, shadow_rows); models[[outcome]] <- full_model
   }
+  corrected_table <- do.call(rbind, corrected)
   structure(list(structure = structure, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
-    corrected_effects = do.call(rbind, corrected), reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
+    corrected_effects = corrected_table, numerical_diagnostics = .structural_numerical_diagnostics(corrected_table),
+    reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
     respondent_weighting = respondent_weighting, scores = scores,
     # Retain the resolved declaration and controls so update.cssem_association()
     # can rebuild the association through the public associate() contract.

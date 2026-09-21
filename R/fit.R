@@ -22,6 +22,10 @@
 #'   warning (class `cssem_nonconvergence`) lists any construct whose full-data
 #'   or fold encoder stopped at the cap; per-construct status is in
 #'   `fit$measurement_engine`.
+#' @param tolerance Positive convergence tolerance for the maximum encoder
+#'   parameter change.
+#' @param quadrature Strictly increasing finite latent-node values used by the
+#'   marginal measurement encoder. At least five nodes are required.
 #' @param diagnostics Whether to calculate exploratory residual diagnostics and
 #'   item warnings. Disable for high-throughput simulation benchmarks.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight fitting
@@ -38,6 +42,7 @@
 #' @family measurement fitting functions
 #' @export
 fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
+                      tolerance = 1e-3, quadrature = seq(-4, 4, length.out = 31L),
                       diagnostics = TRUE, preset = c("default", "exploratory")) {
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
@@ -45,6 +50,15 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   preset <- match.arg(preset)
   .preflight_stop(check_model(model), "Model preflight failed")
   .preflight_stop(check_data(data, model), "Data preflight failed")
+  if (length(iterations) != 1L || !is.numeric(iterations) || !is.finite(iterations) ||
+      iterations != as.integer(iterations) || iterations < 1L)
+    stop("iterations must be a positive whole-number.", call. = FALSE)
+  if (length(tolerance) != 1L || !is.numeric(tolerance) || !is.finite(tolerance) || tolerance <= 0)
+    stop("tolerance must be a positive numeric scalar.", call. = FALSE)
+  if (!is.numeric(quadrature) || length(quadrature) < 5L || any(!is.finite(quadrature)) ||
+      any(diff(quadrature) <= 0))
+    stop("quadrature must contain at least five strictly increasing finite values.", call. = FALSE)
+  quadrature <- as.numeric(quadrature)
   if (preset == "exploratory") {
     if (missing(iterations)) iterations <- 4L
     if (missing(draws)) draws <- 0L
@@ -72,7 +86,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
       data[spec$indicators], spec$scales, spec$keys)
     for (k in seq_len(model$folds)) {
       train <- data[fold != k, spec$indicators, drop = FALSE]; test <- data[fold == k, spec$indicators, drop = FALSE]
-      enc <- .fit_encoder(train, spec, iterations, category_levels)
+      enc <- .fit_encoder(train, spec, iterations, category_levels, tolerance, quadrature)
       if (isTRUE(enc$converged)) fold_converged[[nm]] <- fold_converged[[nm]] + 1L
       posterior <- .encoder_posterior(enc, test)
       if (!is.null(posterior)) {
@@ -92,7 +106,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
       im <- .item_metrics(enc, test)
       if (nrow(im)) metric_list[[paste(nm, k)]] <- cbind(construct = nm, fold = k, im)
     }
-    full[[nm]] <- .fit_encoder(data[, spec$indicators, drop = FALSE], spec, iterations)
+    full[[nm]] <- .fit_encoder(data[, spec$indicators, drop = FALSE], spec, iterations,
+      tolerance = tolerance, nodes = quadrature)
     full_score <- .predict_encoder(full[[nm]], data[, spec$indicators, drop = FALSE])
     stability[nm] <- abs(stats::cor(locked[, nm], full_score, use = "complete.obs"))
   }
@@ -133,7 +148,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   if (is.null(dim(locked))) locked <- matrix(locked, ncol = 1)
   colnames(locked) <- construct_names
   redundancy <- stats::cor(locked, use = "pairwise.complete.obs")
-  residual_dependence <- if (isTRUE(diagnostics)) .residual_dependence(model, data, iterations) else
+  residual_dependence <- if (isTRUE(diagnostics)) .residual_dependence(model, data, iterations,
+      tolerance = tolerance, nodes = quadrature) else
     data.frame(construct=character(), item_a=character(), item_b=character(), residual_correlation=numeric())
   warnings <- if (isTRUE(diagnostics)) .diagnose(model, data, locked, redundancy) else
     data.frame(type=character(), target=character(), detail=character())
@@ -152,8 +168,9 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # Keep the inputs and resolved controls needed by update.fit_states().  A
     # refit is always a fresh call to fit_states(), so update() cannot mutate
     # the fitted object or silently reuse stale scores.
+    numerical_diagnostics = .measurement_numerical_diagnostics(full, model, n = n),
     fit_settings = list(seed = seed, draws = draws, iterations = iterations,
-      diagnostics = diagnostics, preset = preset),
+      tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics, preset = preset),
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")
@@ -230,7 +247,8 @@ respondent_information <- function(fit) {
   out
 }
 
-.loo_item_residuals <- function(data, spec, iterations) {
+.loo_item_residuals <- function(data, spec, iterations, tolerance = 1e-3,
+                                nodes = seq(-4, 4, length.out = 31L)) {
   # Each residual is based on a score that excludes its own item.  This avoids
   # the circular, spuriously correlated residuals produced by a score using all
   # items, and respects the ordinal response model.
@@ -239,7 +257,8 @@ respondent_information <- function(fit) {
   for (j in seq_along(spec$indicators)) {
     keep <- setdiff(seq_along(spec$indicators), j)
     reduced <- list(indicators = spec$indicators[keep], scales = spec$scales[keep], keys = spec$keys[keep])
-    reduced_encoder <- .fit_encoder(data[, reduced$indicators, drop = FALSE], reduced, iterations)
+    reduced_encoder <- .fit_encoder(data[, reduced$indicators, drop = FALSE], reduced, iterations,
+      tolerance = tolerance, nodes = nodes)
     z <- .predict_encoder(reduced_encoder, data[, reduced$indicators, drop = FALSE])
     y <- .prepare_item(data[[spec$indicators[j]]], spec$scales[j], spec$keys[j])$y
     if (spec$scales[j] == "ordinal") {
@@ -254,11 +273,12 @@ respondent_information <- function(fit) {
   as.data.frame(residuals)
 }
 
-.residual_dependence <- function(model, data, iterations) {
+.residual_dependence <- function(model, data, iterations, tolerance = 1e-3,
+                                 nodes = seq(-4, 4, length.out = 31L)) {
   rows <- list(); n <- 0L
   for (nm in names(model$constructs)) {
     spec <- model$constructs[[nm]]
-    values <- .loo_item_residuals(data, spec, iterations)
+    values <- .loo_item_residuals(data, spec, iterations, tolerance = tolerance, nodes = nodes)
     if (is.null(values) || ncol(values) < 2L) next
     rc <- stats::cor(values, use = "pairwise.complete.obs")
     for (i in seq_len(ncol(rc) - 1L)) for (j in (i + 1L):ncol(rc)) {
