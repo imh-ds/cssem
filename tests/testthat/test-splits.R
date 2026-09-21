@@ -38,3 +38,25 @@ test_that("invalid split inputs fail before fitting", {
   expect_error(make_splits(data, method = "random", folds = 1), "folds")
   expect_error(make_splits(data, method = "group", group = rep(1:2, each = 3)), "one value per row")
 })
+
+test_that("fit_states uses an explicit split assignment", {
+  data <- simulate_states(n = 60, seed = 2)
+  model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal"),
+                           B = list(indicators = paste0("b", 1:4), scales = "ordinal")), folds = 3)
+  split <- make_splits(data, method = "random", folds = 3, seed = 12)
+  fit <- fit_states(model, data, split = split, iterations = 1, diagnostics = FALSE)
+  expect_identical(fit$folds, split$assignment)
+  expect_identical(fit$measurement_split$row_ids, seq_len(nrow(data)))
+  expect_identical(fit$measurement_split$assignment, split$assignment)
+})
+
+test_that("explicit assignments follow listwise row filtering", {
+  data <- simulate_states(n = 60, seed = 3)
+  data[5, "a1"] <- NA
+  model <- cssem_model(list(A = list(indicators = paste0("a", 1:4), scales = "ordinal")), folds = 3)
+  split <- make_splits(data, method = "random", folds = 3, seed = 13)
+  fit <- fit_states(model, data, split = split, missing_policy = "listwise", iterations = 1, diagnostics = FALSE)
+  expect_false(5L %in% fit$measurement_split$row_ids)
+  expect_equal(length(fit$measurement_split$assignment), nrow(fit$data))
+  expect_error(fit_states(model, data, split = rep(1:2, length.out = 10), iterations = 1, diagnostics = FALSE), "split")
+})

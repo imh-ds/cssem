@@ -14,7 +14,8 @@ fit_states(
   quadrature = seq(-4, 4, length.out = 31L),
   diagnostics = TRUE,
   preset = c("default", "exploratory"),
-  missing_policy = c("partial", "listwise", "error")
+  missing_policy = c("partial", "listwise", "error"),
+  split = NULL
 )
 }
 \arguments{
@@ -51,6 +52,12 @@ defaults while iterating on a live project.}
 default \code{"partial"} retains rows and lets each observed item contribute to
 the measurement posterior. \code{"listwise"} excludes rows missing any declared
 indicator before fitting. \code{"error"} rejects any missing declared indicator.}
+
+\item{split}{Optional explicit measurement split. Supply a
+\code{cssem_splits} object from \code{make_splits()} or an integer fold
+assignment with one value per input row. Explicit assignments are retained in
+the fitted object's \code{measurement_split} metadata and are filtered
+alongside listwise exclusions.}
 }
 \value{
 An object of class \code{fit_states} containing locked scores, full-data

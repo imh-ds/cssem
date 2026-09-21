@@ -34,6 +34,10 @@
 #'   default `"partial"` retains rows and lets each observed item contribute to
 #'   the measurement posterior. `"listwise"` excludes rows missing any declared
 #'   indicator before fitting. `"error"` rejects any missing declared indicator.
+#' @param split Optional explicit measurement split. Supply a `cssem_splits`
+#'   object from [make_splits()] or an integer fold assignment with one value
+#'   per input row. Explicit assignments are retained in the fitted object's
+#'   `measurement_split` metadata and are filtered alongside listwise exclusions.
 #' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -48,7 +52,7 @@
 fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       tolerance = 1e-3, quadrature = seq(-4, 4, length.out = 31L),
                       diagnostics = TRUE, preset = c("default", "exploratory"),
-                      missing_policy = c("partial", "listwise", "error")) {
+                      missing_policy = c("partial", "listwise", "error"), split = NULL) {
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
@@ -58,6 +62,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   input_row_ids <- seq_len(nrow(input_data))
   .preflight_stop(check_model(model), "Model preflight failed")
   .preflight_stop(check_data(data, model), "Data preflight failed")
+  resolved_split <- .resolve_split_assignment(split, data, model$folds)
   if (length(iterations) != 1L || !is.numeric(iterations) || !is.finite(iterations) ||
       iterations != as.integer(iterations) || iterations < 1L)
     stop("iterations must be a positive whole-number.", call. = FALSE)
@@ -85,7 +90,24 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     .preflight_stop(check_data(data, model), "Preflight checks failed after listwise missing-data exclusion")
   }
   n <- nrow(data); if (n < model$folds * 4L) warning("Small folds may make construct states unstable.", call. = FALSE)
-  set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
+  if (is.null(resolved_split)) {
+    set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
+    measurement_method <- "random"
+    measurement_provenance <- data.frame(method = "random", folds = model$folds,
+      seed = seed, group = NA_character_, time = NA_character_, stringsAsFactors = FALSE)
+  } else {
+    fold <- resolved_split$assignment
+    if (missing_policy == "listwise" && length(input_row_ids) != length(fold))
+      fold <- resolved_split$assignment[input_row_ids]
+    if (length(fold) != n || anyNA(fold) || length(unique(fold)) != model$folds)
+      stop("split must retain every model fold after missing-data filtering.", call. = FALSE)
+    measurement_method <- resolved_split$method
+    measurement_provenance <- resolved_split$metadata$provenance
+  }
+  .preflight_stop(check_data(data, model, folds = fold), "Data preflight failed for split assignment")
+  measurement_split <- structure(list(method = measurement_method, folds = model$folds,
+    assignment = as.integer(fold), row_ids = as.integer(input_row_ids),
+    provenance = measurement_provenance), class = c("cssem_splits", "list"))
   construct_names <- names(model$constructs)
   locked <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
   # Raw-scale out-of-fold posterior variance; NA for manifest constructs (no
@@ -188,13 +210,14 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     score_center = centers, score_scale = scales_raw,
     input_data = input_data, row_ids = as.integer(input_row_ids),
     missing_policy = missing_policy, sample_ledger = sample_ledger,
+    measurement_split = measurement_split,
     # Keep the inputs and resolved controls needed by update.fit_states().  A
     # refit is always a fresh call to fit_states(), so update() cannot mutate
     # the fitted object or silently reuse stale scores.
     numerical_diagnostics = .measurement_numerical_diagnostics(full, model, n = n),
     fit_settings = list(seed = seed, draws = draws, iterations = iterations,
       tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
-      preset = preset, missing_policy = missing_policy),
+      preset = preset, missing_policy = missing_policy, split = split),
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")
