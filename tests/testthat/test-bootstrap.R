@@ -28,7 +28,8 @@ test_that("reusable bootstrap records draws, failures, and configurable interval
   expect_equal(boot$replicates, repeated$replicates)
 
   failing <- function(context) {
-    if (context$replicate %% 2L == 0L) stop("intentional replicate failure")
+    if (context$replicate > 0L && context$replicate %% 2L == 0L)
+      stop("intentional replicate failure")
     c(mean_A = mean(context$scores$A))
   }
   failed <- bootstrap_model(fit, failing, reps = 6, seed = 21)
