@@ -16,7 +16,7 @@
     value <- unlist(value[1L, , drop = FALSE], use.names = TRUE)
   }
   if (!is.numeric(value) || !length(value) || is.null(names(value)) ||
-      any(!nzchar(names(value))) || anyDuplicated(names(value)))
+      any(!nzchar(names(value))) || anyDuplicated(names(value)) || any(!is.finite(value)))
     stop("statistic must return a non-empty named numeric vector.", call. = FALSE)
   stats::setNames(as.numeric(value), names(value))
 }
@@ -175,13 +175,13 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
       i <- result$replicate
       replicate_rows$status[[i]] <- result$status
       replicate_rows$failure_reason[[i]] <- if (result$status == "failed") result$failure_reason else ""
-      if (isTRUE(progress)) message(sprintf("Bootstrap replicate %d/%d: %s", i, reps, result$status))
       if (identical(result$status, "success")) {
         if (!identical(names(result$values), metric_names)) {
           replicate_rows$status[[i]] <- "failed"
           replicate_rows$failure_reason[[i]] <- "statistic returned different metric names."
         } else draws[i, ] <- result$values
       }
+      if (isTRUE(progress)) message(sprintf("Bootstrap replicate %d/%d: %s", i, reps, replicate_rows$status[[i]]))
     }
   }
   if (any(replicate_rows$status == "pending")) stop("bootstrap contains incomplete replicates.", call. = FALSE)

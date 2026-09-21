@@ -241,7 +241,8 @@ worker count, and the callback. `summary()` and `confint()` expose the stored
 percentile intervals. Runs can resume from a completed prefix, report progress,
 and use deterministic worker-safe seeds: installed-package smoke tests give
 identical draws and statuses for one and two workers. Callback errors become
-failed rows with `NA` draws instead of disappearing.
+failed rows with `NA` draws instead of disappearing; non-finite callback values
+are treated as failures as well.
 
 The structural EIV interval in [associate()](../R/structure.R) now accepts a
 `level` argument and stores it in the association settings, so that interval
