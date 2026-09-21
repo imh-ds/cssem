@@ -29,7 +29,7 @@
   out
 }
 
-.preflight_add <- function(rows, ...) c(rows, list(.preflight_issue(...)))
+.preflight_add <- function(entries, ...) c(entries, list(.preflight_issue(...)))
 
 .preflight_model_names <- function(model) {
   if (!is.list(model$constructs) || is.null(names(model$constructs))) return(character())

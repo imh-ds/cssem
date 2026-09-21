@@ -680,6 +680,10 @@ specify_structure <- function(..., order = NULL) {
 #'   validation, so it is not recommended for confirmatory estimates.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight
 #'   structural selection defaults while iterating locally.
+#' @param missing_policy How missing locked scores are handled. The default
+#'   `"complete"` excludes rows with any non-finite score from structural
+#'   fitting and records them in [sample_accounting()]. `"error"` rejects such
+#'   rows before fitting.
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
@@ -688,7 +692,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
-                             preset = c("default", "exploratory"), level = .95) {
+                             preset = c("default", "exploratory"), level = .95,
+                             missing_policy = c("complete", "error")) {
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -697,6 +702,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
   level <- .bootstrap_validate_level(level)
   respondent_weighting <- match.arg(respondent_weighting)
+  missing_policy <- match.arg(missing_policy)
   if (preset == "exploratory") {
     if (missing(spline_df)) spline_df <- 3L
     if (missing(structural_repeats)) structural_repeats <- 2L
@@ -713,6 +719,16 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
+  score_row_ids <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(nrow(scores))
+  score_complete <- apply(as.matrix(scores), 1L, function(x) all(is.finite(x)))
+  if (missing_policy == "error" && any(!score_complete))
+    stop(sprintf("missing_policy = \"error\" found %d row(s) with missing locked scores; use `sample_accounting()` to inspect coverage or choose `complete`.",
+      sum(!score_complete)), call. = FALSE)
+  if (missing_policy == "complete" && any(!score_complete)) {
+    scores <- scores[score_complete, , drop = FALSE]
+    score_row_ids <- score_row_ids[score_complete]
+  }
+  if (nrow(scores) < 2L) stop("Missing-score handling left fewer than two rows for structural fitting.", call. = FALSE)
   predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
   declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
@@ -745,6 +761,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   respondent_weights <- NULL; posterior_var <- NULL
   if (!is.null(fit$score_posterior_sd)) {
     sd <- as.data.frame(fit$score_posterior_sd)
+    if (nrow(sd) == length(score_complete) && length(score_complete) != nrow(scores))
+      sd <- sd[score_complete, , drop = FALSE]
     modeled <- intersect(all_names, names(sd))
     if (length(modeled) && nrow(sd) == nrow(scores)) {
       posterior_var <- sd^2
@@ -759,6 +777,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope
   temporal_order <- if ("temporal" %in% scopes) .resolve_temporal_order(structure, all_names) else NULL
   folds <- if (is.null(folds)) fit$folds else as.integer(folds)
+  if (length(folds) == nrow(fit$locked_scores) && length(folds) != nrow(scores)) folds <- folds[score_complete]
   if (length(folds) != nrow(scores) || length(unique(folds)) < 2L) stop("folds must assign every row to at least two validation folds.", call. = FALSE)
   fold_sets <- .structural_fold_sets(folds, structural_repeats, seed)
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
@@ -865,7 +884,9 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       shape_alpha = shape_alpha, shape_min_gain = shape_min_gain,
       structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
       reliability = reliability, eiv_bootstrap = eiv_bootstrap,
-      respondent_weighting = respondent_weighting, preset = preset, level = level),
+      respondent_weighting = respondent_weighting, preset = preset, level = level,
+      missing_policy = missing_policy),
+    row_ids = score_row_ids, missing_policy = missing_policy,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }

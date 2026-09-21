@@ -30,6 +30,10 @@
 #'   item warnings. Disable for high-throughput simulation benchmarks.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight fitting
 #'   defaults while iterating on a live project.
+#' @param missing_policy How declared indicator missingness is handled. The
+#'   default `"partial"` retains rows and lets each observed item contribute to
+#'   the measurement posterior. `"listwise"` excludes rows missing any declared
+#'   indicator before fitting. `"error"` rejects any missing declared indicator.
 #' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -43,11 +47,15 @@
 #' @export
 fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       tolerance = 1e-3, quadrature = seq(-4, 4, length.out = 31L),
-                      diagnostics = TRUE, preset = c("default", "exploratory")) {
+                      diagnostics = TRUE, preset = c("default", "exploratory"),
+                      missing_policy = c("partial", "listwise", "error")) {
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
   preset <- match.arg(preset)
+  missing_policy <- match.arg(missing_policy)
+  input_data <- data
+  input_row_ids <- seq_len(nrow(input_data))
   .preflight_stop(check_model(model), "Model preflight failed")
   .preflight_stop(check_data(data, model), "Data preflight failed")
   if (length(iterations) != 1L || !is.numeric(iterations) || !is.finite(iterations) ||
@@ -65,6 +73,17 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   }
   needed <- unlist(lapply(model$constructs, `[[`, "indicators"), use.names = FALSE)
   if (!all(needed %in% names(data))) stop("data is missing declared indicators.", call. = FALSE)
+  missing_rows <- !stats::complete.cases(data[, needed, drop = FALSE])
+  if (missing_policy == "error" && any(missing_rows))
+    stop(sprintf("missing_policy = \"error\" found %d row(s) with missing declared indicators; use `sample_accounting()` to inspect coverage or choose `partial`/`listwise`.",
+      sum(missing_rows)), call. = FALSE)
+  if (missing_policy == "listwise" && any(missing_rows)) {
+    keep <- !missing_rows
+    data <- data[keep, , drop = FALSE]
+    input_row_ids <- which(keep)
+    if (!nrow(data)) stop("missing_policy = \"listwise\" removed every row; no observations remain.", call. = FALSE)
+    .preflight_stop(check_data(data, model), "Preflight checks failed after listwise missing-data exclusion")
+  }
   n <- nrow(data); if (n < model$folds * 4L) warning("Small folds may make construct states unstable.", call. = FALSE)
   set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
   construct_names <- names(model$constructs)
@@ -157,6 +176,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   if (draws > 0L) {
     bags <- .plausible_values(oof_posterior, posterior_nodes, locked, centers, scales_raw, draws, seed)
   }
+  sample_ledger <- .measurement_sample_ledger(model, input_data, input_row_ids,
+    as.data.frame(locked), missing_policy)
   structure(list(model = model, data = data, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
@@ -165,12 +186,15 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # The standardization applied to the out-of-fold scores, retained so that
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
+    input_data = input_data, row_ids = as.integer(input_row_ids),
+    missing_policy = missing_policy, sample_ledger = sample_ledger,
     # Keep the inputs and resolved controls needed by update.fit_states().  A
     # refit is always a fresh call to fit_states(), so update() cannot mutate
     # the fitted object or silently reuse stale scores.
     numerical_diagnostics = .measurement_numerical_diagnostics(full, model, n = n),
     fit_settings = list(seed = seed, draws = draws, iterations = iterations,
-      tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics, preset = preset),
+      tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
+      preset = preset, missing_policy = missing_policy),
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")

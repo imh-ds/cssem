@@ -13,7 +13,8 @@ fit_states(
   tolerance = 0.001,
   quadrature = seq(-4, 4, length.out = 31L),
   diagnostics = TRUE,
-  preset = c("default", "exploratory")
+  preset = c("default", "exploratory"),
+  missing_policy = c("partial", "listwise", "error")
 )
 }
 \arguments{
@@ -45,6 +46,11 @@ item warnings. Disable for high-throughput simulation benchmarks.}
 
 \item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight fitting
 defaults while iterating on a live project.}
+
+\item{missing_policy}{How declared indicator missingness is handled. The
+default \code{"partial"} retains rows and lets each observed item contribute to
+the measurement posterior. \code{"listwise"} excludes rows missing any declared
+indicator before fitting. \code{"error"} rejects any missing declared indicator.}
 }
 \value{
 An object of class \code{fit_states} containing locked scores, full-data

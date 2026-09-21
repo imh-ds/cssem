@@ -31,7 +31,7 @@
       model = fit$model, data = raw, seed = seed, draws = 0L,
       iterations = settings$iterations, tolerance = settings$tolerance,
       quadrature = settings$quadrature, diagnostics = FALSE,
-      preset = settings$preset), list()))
+      preset = settings$preset, missing_policy = settings$missing_policy), list()))
     scores <- scored_fit$locked_scores
   }
   list(fit = scored_fit, scores = scores, data = raw, indices = indices,
@@ -63,6 +63,7 @@
   settings$tolerance <- if (is.null(settings$tolerance)) 1e-3 else settings$tolerance
   settings$quadrature <- if (is.null(settings$quadrature)) seq(-4, 4, length.out = 31L) else settings$quadrature
   settings$preset <- if (is.null(settings$preset)) "default" else settings$preset
+  settings$missing_policy <- if (is.null(settings$missing_policy)) "partial" else settings$missing_policy
   settings
 }
 
