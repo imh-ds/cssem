@@ -204,6 +204,15 @@
   error, instead of `as.integer()` silently truncating them and discarding
   information.
 
+* Added reusable split control and whole-pipeline outer validation. `make_splits()`
+  supports deterministic random, grouped, and forward-only time partitions with
+  integer row-ID provenance; `fit_states(split = ...)` accepts those assignments
+  explicitly; and `validate_outer()` refits measurement and structural selection
+  inside each outer training sample. Its result separates `internal_selection`
+  metrics from untouched `outer_test` predictions and retains failed partitions
+  with their stage and message. Predictor-only prospective scoring remains the
+  documented G7 limitation.
+
 ## Bug fixes
 
 * `indirect_effect()` and `causal_indirect_effect()` no longer fail with

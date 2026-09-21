@@ -63,7 +63,7 @@ correctness concerns.
 | G3 | P1 | Implemented | Unified preflight and numerical diagnostics |
 | G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling |
 | G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting |
-| G6 | P1 | Partial | User-defined measurement splits and outer validation |
+| G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation |
 | G7 | P1 | Partial | Structural prediction for new observations |
 | G8 | P2 | Missing | Group comparison and measurement invariance |
 | G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
@@ -321,7 +321,7 @@ and independent item-block likelihoods are still not advertised as joint
 lavaan-style FIML. Prior-only rows remain explicitly identified rather than
 imputed or pooled into observed-information counts.
 
-### [ ] G6. Measurement split control and honest outer validation
+### [x] G6. Measurement split control and honest outer validation
 
 **Evidence/gap:** [fit_states()](../R/fit.R#L40) randomly assigns folds from the
 model's fold count, with no fold-vector/group/time argument. `associate()` does
@@ -335,17 +335,35 @@ The nested, whole-pipeline design proposed here is a CS-SEM-specific requirement
 not a claim about SEMinR's implementation.
 [SEMinR prediction API](https://cran.r-project.org/web/packages/seminr/seminr.pdf#page=68)
 
-**Build:** explicit reusable split specifications for measurement, structural
-selection, and outer evaluation; grouped and time-respecting splits; and a
-validation runner that fits encoders, transformations, nuisance models, and
-selection entirely inside each outer training sample. Define alignment and the
-prediction target across separately fitted state scales. Label current metrics
-as internal validation rather than independent generalization estimates.
+**Implemented (2026-09-21, core workflow):** [make_splits()](../R/splits.R)
+creates deterministic random, repeated-group, and forward-only time partitions.
+Group labels remain in one fold, tied time values remain in one block, and each
+object retains integer row IDs, outer train/test partitions, and provenance.
+[fit_states()](../R/fit.R) accepts either a reusable `cssem_splits` object or an
+explicit assignment vector through `split =`; listwise filtering subsets the
+assignment and preserves the original row IDs. Refit and measurement-bootstrap
+settings retain an explicit split rather than silently drawing a new one.
 
-**Acceptance:** split tracing proves that held-out outcomes never affect model
-or shape selection; entities stay within splits; temporal tests never train on
-future observations; untouched-test performance is reported separately from
-selection metrics.
+[validate_outer()](../R/outer-validation.R) now fits measurement encoders and
+structural shape selection on each outer training sample only, scores untouched
+rows with the training encoders, and returns a typed
+`cssem_outer_validation` object. Its `selection_metrics` are labelled
+`internal_selection`, while held-out predictions and RMSE/MAE/R-squared rows
+are labelled `outer_test`. Partition provenance records train/test IDs, counts,
+method, seed, and selected shapes. A failed partition is retained with its
+partition ID, stage, and message so one failure cannot erase the remaining
+evaluation evidence. Missing-data policies are explicit for both measurement
+and structural stages, and held-out data without declared indicator columns
+reports the existing G7 predictor-only limitation.
+
+Focused [split tests](../tests/testthat/test-splits.R) cover deterministic,
+grouped, time-ordered, explicit, and listwise-aligned assignments. The
+[outer-validation tests](../tests/testthat/test-outer-validation.R) cover
+train-only selection, metric-scope separation, failure retention, and group/time
+partition constraints. The entry remains **Partial** for methodology: a
+predictor-only prospective workflow that can score outcomes without their
+indicators is still G7, and independent coverage studies for outer metrics have
+not yet been added.
 
 ### [ ] G7. Structural prediction for new observations
 
