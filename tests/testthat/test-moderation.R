@@ -76,9 +76,26 @@ test_that("moderated mediation harness recovers the index of moderated mediation
   expect_true(all(c("scenario", "n", "loading", "items") %in% names(manifest)))
   results <- validate_conditional_indirect_effect(manifest[1, ], reps = 1, seed = 5000, iterations = 4, eiv_bootstrap = 60)
   expect_true(all(c("true_index", "naive_index", "disattenuated_index",
-    "naive_abs_bias", "disattenuated_abs_bias", "index_covers_truth") %in% names(results)))
+    "naive_abs_bias", "disattenuated_abs_bias", "index_covers_truth",
+    "truth_method", "sample_oracle_index", "naive_sample_oracle_abs_error",
+    "disattenuated_sample_oracle_abs_error") %in% names(results)))
+  expect_identical(results$truth_method, "analytic_interaction")
   # Disattenuation reduces the bias of the index of moderated mediation.
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
+})
+
+test_that("moderated mediation validation uses an independent interaction truth", {
+  fx <- .moderation_fixture()
+  truth <- cssem:::.moderated_mediation_truth(fx$scores, fx$structure, "W", c(-1, 0, 1))
+  a <- unname(stats::coef(stats::lm(M ~ X, fx$scores))[["X"]])
+  outcome <- stats::coef(stats::lm(Y ~ X + M + W + M:W, fx$scores))
+  b <- unname(outcome[["M"]]); interaction <- unname(outcome[["M:W"]])
+  values <- cssem:::.moderator_values(fx$scores, "W", c(-1, 0, 1))
+  expected <- a * (b + interaction * values)
+  expect_identical(attr(truth, "method"), "analytic_interaction")
+  expect_equal(truth$conditional, expected, tolerance = 1e-10)
+  expect_equal(truth$index, cssem:::.moderated_index(expected, c(-1, 0, 1), sd(fx$scores$W)),
+    tolerance = 1e-10)
 })
 
 test_that("conditional indirect effects match analytic moderated mediation", {

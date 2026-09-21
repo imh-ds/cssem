@@ -186,8 +186,34 @@ test_that("mediation validation harness recovers the latent indirect effect", {
   expect_true(all(c("scenario", "n", "loading", "items") %in% names(manifest)))
   results <- validate_indirect_effect(manifest[1, ], reps = 1, seed = 4026, iterations = 4, eiv_bootstrap = 60)
   expect_true(all(c("true_indirect", "naive_indirect", "disattenuated_indirect",
-    "naive_abs_bias", "disattenuated_abs_bias", "disattenuated_covers_truth") %in% names(results)))
+    "naive_abs_bias", "disattenuated_abs_bias", "disattenuated_covers_truth",
+    "truth_method", "sample_oracle_indirect", "naive_sample_oracle_abs_error",
+    "disattenuated_sample_oracle_abs_error") %in% names(results)))
+  expect_identical(results$truth_method, "analytic_linear")
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
+})
+
+test_that("mediation validation uses an independent analytic truth", {
+  set.seed(4027)
+  n <- 1200
+  X <- stats::rnorm(n); M <- .5 * X + stats::rnorm(n, sd = .7)
+  Y <- .2 * X + .45 * M + stats::rnorm(n, sd = .7)
+  latent <- data.frame(X = X, M = M, Y = Y)
+  structure <- cssem:::.mediation_structure("single", "linear")
+  truth <- cssem:::.mediation_truth(latent, structure)
+  mediator_fit <- stats::lm(M ~ X, latent)
+  outcome_fit <- stats::lm(Y ~ X + M, latent)
+  a <- unname(stats::coef(mediator_fit)[["X"]])
+  b <- unname(stats::coef(outcome_fit)[["M"]])
+  direct <- unname(stats::coef(outcome_fit)[["X"]])
+  expect_identical(attr(truth, "method"), "analytic_linear")
+  expect_equal(unname(truth), c(total = direct + a * b, direct = direct, indirect_total = a * b),
+    tolerance = 1e-10)
+
+  smooth <- cssem:::.mediation_truth(latent, cssem:::.mediation_structure("single", "smooth"),
+    method = "intervention_integral")
+  expect_identical(attr(smooth, "method"), "intervention_integral")
+  expect_true(all(is.finite(smooth)))
 })
 
 test_that("mediation benchmark scores every engine against the latent truth", {

@@ -52,22 +52,105 @@
     .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
     list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
+  latent <- as.data.frame(states)
+  truth_method <- if (identical(edge_shape, "smooth")) "intervention_integral" else "analytic_linear"
+  truth <- .mediation_truth(latent, structure, method = truth_method)
+  sample_oracle <- .mediation_sample_oracle(latent, structure)
   list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure,
-       states = as.data.frame(states), truth = .mediation_truth(as.data.frame(states), structure))
+       states = latent, truth = truth, sample_oracle = sample_oracle,
+       truth_method = attr(truth, "method"))
 }
 
-# Latent-scale decomposition obtained by running the engine on the error-free
-# construct states. This is the estimand the observed-score estimate targets.
-.mediation_truth <- function(latent, structure) {
+# Independent analytic target for a linear mediation DAG. Each directed-path
+# effect is a product of separately fitted edge coefficients; no propagation or
+# mediation-core code is used, so a shared baseline error cannot cancel out.
+.linear_mediation_truth <- function(latent, structure, x, y) {
+  coefficients <- vector("list", length(structure$effects)); names(coefficients) <- names(structure$effects)
+  for (outcome in names(structure$effects)) {
+    predictors <- names(structure$effects[[outcome]])
+    fit <- stats::lm(stats::reformulate(predictors, outcome), latent)
+    coefficients[[outcome]] <- stats::setNames(
+      vapply(predictors, function(predictor) unname(stats::coef(fit)[[predictor]]), numeric(1)), predictors)
+  }
+  paths <- .structure_paths(structure, x, y)
+  path_effect <- function(path) {
+    if (length(path) < 2L) return(NA_real_)
+    prod(vapply(seq_len(length(path) - 1L), function(i)
+      coefficients[[path[[i + 1L]]]][[path[[i]]]], numeric(1)))
+  }
+  effects <- vapply(paths, path_effect, numeric(1))
+  direct_path <- which(vapply(paths, length, integer(1)) == 2L)
+  direct <- if (length(direct_path)) unname(coefficients[[y]][[x]]) else 0
+  out <- stats::setNames(c(total = sum(effects), direct = direct, indirect_total = sum(effects) - direct),
+    c("total", "direct", "indirect_total"))
+  attr(out, "method") <- "analytic_linear"
+  out
+}
+
+# The prior validation target is retained as an explicitly named sample oracle.
+# It measures agreement with the package's own fitted-state propagation, not
+# independent correctness of that propagation.
+.mediation_sample_oracle <- function(latent, structure,
+                                     x = names(latent)[[1L]],
+                                     y = names(latent)[[length(names(latent))]]) {
   models <- stats::setNames(vector("list", length(latent)), names(latent))
   for (outcome in names(structure$effects)) {
     predictors <- names(structure$effects[[outcome]])
     models[[outcome]] <- .fit_shape_model(latent, outcome, stats::setNames(rep("linear", length(predictors)), predictors))
   }
-  names_in_order <- names(latent)
-  core <- .cssem_mediation_core(models, latent, structure, names_in_order[[1L]], names_in_order[[length(names_in_order)]])
+  core <- .cssem_mediation_core(models, latent, structure, x, y)
   summary <- core$summary
   stats::setNames(summary$naive_effect, summary$component)[c("total", "direct", "indirect_total")]
+}
+
+# Independently integrate a nonlinear structural model under a shift in x. The
+# active-edge traversal is local to this validation helper: nodes with no
+# active incoming edge retain their observed latent value, and both intervention
+# arms are built from the same latent records. This deliberately does not call
+# .propagate_y(), .mediation_effect(), or .cssem_mediation_core().
+.intervention_mediation_truth <- function(latent, structure, models, x, y, delta = 1) {
+  order <- .resolve_temporal_order(structure, names(latent))
+  all_edges <- .model_edges(models)
+  propagate <- function(shift, active) {
+    frame <- latent
+    frame[[x]] <- latent[[x]] + shift
+    for (node in order) {
+      model <- models[[node]]
+      if (is.null(model) || identical(node, x)) next
+      constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+      incoming <- vapply(constructs, function(construct) .edge(construct, node) %in% active, logical(1))
+      if (!any(incoming)) next
+      inputs <- as.data.frame(stats::setNames(lapply(constructs, function(construct)
+        if (.edge(construct, node) %in% active) frame[[construct]] else latent[[construct]]), constructs),
+        stringsAsFactors = FALSE)
+      frame[[node]] <- .predict_shape_model(model, inputs)
+    }
+    frame[[y]]
+  }
+  effect <- function(active) mean(propagate(delta, active) - propagate(0, active), na.rm = TRUE) / delta
+  total <- effect(all_edges)
+  direct <- if (.edge(x, y) %in% all_edges) effect(.edge(x, y)) else 0
+  out <- stats::setNames(c(total = total, direct = direct, indirect_total = total - direct),
+    c("total", "direct", "indirect_total"))
+  attr(out, "method") <- "intervention_integral"
+  out
+}
+
+# Build fixed-shape models only for the independent nonlinear validation path.
+.mediation_truth <- function(latent, structure, x = names(latent)[[1L]],
+                             y = names(latent)[[length(names(latent))]], method = "analytic_linear") {
+  if (!identical(method, "intervention_integral"))
+    return(.linear_mediation_truth(latent, structure, x, y))
+  models <- stats::setNames(vector("list", length(latent)), names(latent))
+  for (outcome in names(structure$effects)) {
+    predictors <- names(structure$effects[[outcome]])
+    shapes <- stats::setNames(vapply(predictors, function(predictor) {
+      policy <- structure$effects[[outcome]][[predictor]]$shape
+      if (.is_interaction(predictor)) "product" else if (identical(policy, "smooth")) "smooth_df3" else "linear"
+    }, character(1)), predictors)
+    models[[outcome]] <- .fit_shape_model(latent, outcome, shapes)
+  }
+  .intervention_mediation_truth(latent, structure, models, x, y)
 }
 
 .mediation_validation_one <- function(job) {
@@ -87,6 +170,7 @@
   summary <- mediation$summary
   indirect <- summary[summary$component == "indirect_total", , drop = FALSE]
   truth <- generated$truth
+  sample_oracle <- generated$sample_oracle
   # NA when disattenuation was unavailable (a path traverses a selected smooth
   # edge), so coverage is summarized only over reps where it could be assessed.
   covers <- if (!is.finite(indirect$disattenuated_ci_low) || !is.finite(indirect$disattenuated_ci_high)) NA else
@@ -94,10 +178,13 @@
       truth[["indirect_total"]] <= indirect$disattenuated_ci_high
   data.frame(
     scenario = setting$scenario, replication = job$replication, n = setting$n, loading = setting$loading,
+    truth_method = generated$truth_method, sample_oracle_indirect = sample_oracle[["indirect_total"]],
     true_indirect = truth[["indirect_total"]], naive_indirect = indirect$naive_effect,
     disattenuated_indirect = indirect$disattenuated_effect,
     naive_abs_bias = abs(indirect$naive_effect - truth[["indirect_total"]]),
     disattenuated_abs_bias = abs(indirect$disattenuated_effect - truth[["indirect_total"]]),
+    naive_sample_oracle_abs_error = abs(indirect$naive_effect - sample_oracle[["indirect_total"]]),
+    disattenuated_sample_oracle_abs_error = abs(indirect$disattenuated_effect - sample_oracle[["indirect_total"]]),
     disattenuated_ci_low = indirect$disattenuated_ci_low, disattenuated_ci_high = indirect$disattenuated_ci_high,
     disattenuated_covers_truth = covers,
     true_direct = truth[["direct"]],

@@ -13,9 +13,41 @@
   )
 }
 
-# Latent-scale conditional indirect effects and index of moderated mediation,
-# computed by the propagation engine on the error-free construct states.
+# Independent analytic target for the linear interaction data-generating models.
+# The conditional indirect effect is a product of separately fitted path
+# coefficients, with the interaction coefficient changing either the a- or
+# b-path. No moderated propagation helper is used here.
 .moderated_mediation_truth <- function(latent, structure, moderator, levels) {
+  names_in_order <- names(latent); x <- names_in_order[[1L]]; y <- names_in_order[[length(names_in_order)]]
+  paths <- Filter(function(path) length(path) > 2L, .structure_paths(structure, x, y))
+  if (length(paths) != 1L) stop("Independent moderated truth requires one mediating path.", call. = FALSE)
+  mediator <- paths[[1L]][[2L]]
+  mediator_fit <- stats::lm(stats::reformulate(names(structure$effects[[mediator]]), mediator), latent)
+  outcome_fit <- stats::lm(stats::reformulate(names(structure$effects[[y]]), y), latent)
+  mediator_coefficients <- stats::coef(mediator_fit); outcome_coefficients <- stats::coef(outcome_fit)
+  interaction <- function(predictors, left, right) {
+    hits <- predictors[vapply(predictors, function(predictor)
+      .is_interaction(predictor) && setequal(.interaction_terms(predictor), c(left, right)), logical(1))]
+    if (length(hits)) hits[[1L]] else NA_character_
+  }
+  b_interaction <- interaction(names(structure$effects[[y]]), mediator, moderator)
+  a_interaction <- interaction(names(structure$effects[[mediator]]), x, moderator)
+  a <- unname(mediator_coefficients[[x]]); b <- unname(outcome_coefficients[[mediator]])
+  values <- .moderator_values(latent, moderator, levels)
+  if (!is.na(b_interaction)) {
+    conditional <- a * (b + unname(outcome_coefficients[[b_interaction]]) * values)
+  } else if (!is.na(a_interaction)) {
+    conditional <- (a + unname(mediator_coefficients[[a_interaction]]) * values) * b
+  } else stop("No declared interaction changes the mediated path.", call. = FALSE)
+  out <- list(conditional = conditional,
+    index = .moderated_index(conditional, levels, .safe_scale(latent[[moderator]])))
+  attr(out, "method") <- "analytic_interaction"
+  out
+}
+
+# Retain the propagation-based target as an explicitly named sample oracle for
+# comparison. It is not used as the independent population truth.
+.moderated_mediation_sample_oracle <- function(latent, structure, moderator, levels) {
   models <- stats::setNames(vector("list", length(latent)), names(latent))
   for (outcome in names(structure$effects)) {
     predictors <- names(structure$effects[[outcome]])
@@ -51,8 +83,11 @@
     .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
     list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
-  list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure, states = as.data.frame(states),
-       truth = .moderated_mediation_truth(as.data.frame(states), structure, "W", c(-1, 0, 1)))
+  latent <- as.data.frame(states)
+  truth <- .moderated_mediation_truth(latent, structure, "W", c(-1, 0, 1))
+  list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure, states = latent,
+       truth = truth, sample_oracle = .moderated_mediation_sample_oracle(latent, structure, "W", c(-1, 0, 1)),
+       truth_method = attr(truth, "method"))
 }
 
 .moderated_mediation_validation_one <- function(job) {
@@ -69,11 +104,15 @@
     naive <- conditional_indirect_effect(association, x, y, "W", eiv_bootstrap = 0L, disattenuate = FALSE)
   })["elapsed"]
   true_index <- generated$truth$index
+  sample_oracle_index <- generated$sample_oracle$index
   ci <- disattenuated$index$ci
   covers <- if (!is.finite(ci[[1L]]) || !is.finite(ci[[2L]])) NA else true_index >= ci[[1L]] && true_index <= ci[[2L]]
   data.frame(scenario = setting$scenario, replication = job$replication, n = setting$n, loading = setting$loading,
+    truth_method = generated$truth_method, sample_oracle_index = sample_oracle_index,
     true_index = true_index, naive_index = naive$index$estimate, disattenuated_index = disattenuated$index$estimate,
     naive_abs_bias = abs(naive$index$estimate - true_index), disattenuated_abs_bias = abs(disattenuated$index$estimate - true_index),
+    naive_sample_oracle_abs_error = abs(naive$index$estimate - sample_oracle_index),
+    disattenuated_sample_oracle_abs_error = abs(disattenuated$index$estimate - sample_oracle_index),
     index_ci_low = ci[[1L]], index_ci_high = ci[[2L]], index_covers_truth = covers,
     runtime_seconds = unname(elapsed), worker_pid = Sys.getpid(), stringsAsFactors = FALSE)
 }
