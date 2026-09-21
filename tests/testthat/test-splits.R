@@ -31,12 +31,16 @@ test_that("time splits are forward-only", {
   expect_length(unique(tied$assignment[1:2]), 1L)
   data$time[5] <- NA
   expect_error(make_splits(data, method = "time", time = "time"), "time")
+  data$time[5] <- Inf
+  expect_error(make_splits(data, method = "time", time = "time"), "finite")
 })
 
 test_that("invalid split inputs fail before fitting", {
   data <- data.frame(x = seq_len(8))
   expect_error(make_splits(data, method = "random", folds = 1), "folds")
   expect_error(make_splits(data, method = "group", group = rep(1:2, each = 3)), "one value per row")
+  expect_error(fit_states(specify_measurement(A = ordinal("x1", "x2"), folds = 2),
+    data.frame(x1 = 1:8, x2 = 1:8), split = as.list(rep(1:2, each = 4)), diagnostics = FALSE), "split")
 })
 
 test_that("fit_states uses an explicit split assignment", {
@@ -58,5 +62,6 @@ test_that("explicit assignments follow listwise row filtering", {
   fit <- fit_states(model, data, split = split, missing_policy = "listwise", iterations = 1, diagnostics = FALSE)
   expect_false(5L %in% fit$measurement_split$row_ids)
   expect_equal(length(fit$measurement_split$assignment), nrow(fit$data))
+  expect_output(print(fit$measurement_split), "CS-SEM splits")
   expect_error(fit_states(model, data, split = rep(1:2, length.out = 10), iterations = 1, diagnostics = FALSE), "split")
 })

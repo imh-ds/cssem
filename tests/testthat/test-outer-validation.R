@@ -39,3 +39,34 @@ test_that("failed outer partitions are retained", {
   expect_true(nrow(result$failures) >= 1L)
   expect_true(all(c("outer_id", "stage", "message") %in% names(result$failures)))
 })
+
+test_that("outer selection is isolated from held-out outcomes", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 24, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  splits <- make_splits(generated$data, method = "random", folds = 3, seed = 6)
+  altered <- generated$data
+  altered[splits$outer$test_ids[[1]], c("loyalty1", "loyalty2", "loyalty3")] <- 1L
+  args <- list(iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1L, shadow_scope = "temporal"))
+  original <- do.call(validate_outer, c(list(generated$model, generated$structure, generated$data, splits), args))
+  changed <- do.call(validate_outer, c(list(generated$model, generated$structure, altered, splits), args))
+  first_original <- original$selection_metrics[original$selection_metrics$outer_id == 1L, , drop = FALSE]
+  first_changed <- changed$selection_metrics[changed$selection_metrics$outer_id == 1L, , drop = FALSE]
+  expect_identical(first_original, first_changed)
+})
+
+test_that("malformed outer partitions fail before fitting", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 25, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  splits <- make_splits(generated$data, method = "random", folds = 3, seed = 7)
+  splits$outer$test_ids[[1L]] <- c(splits$outer$test_ids[[1L]], splits$outer$train_ids[[1L]][[1L]])
+  expect_error(validate_outer(generated$model, generated$structure, generated$data, splits), "overlapping")
+})
+
+test_that("outer validation reports the G7 outcome-column limitation", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 26, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  splits <- make_splits(generated$data, method = "random", folds = 3, seed = 8)
+  incomplete <- generated$data[, setdiff(names(generated$data), "loyalty1"), drop = FALSE]
+  expect_error(validate_outer(generated$model, generated$structure, incomplete, splits), "G7 limitation")
+})

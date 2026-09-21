@@ -78,6 +78,44 @@
   row
 }
 
+.outer_validate_ids <- function(value, label, n) {
+  if (!is.numeric(value) || !length(value) || any(!is.finite(value)) ||
+      any(value != as.integer(value)))
+    stop(sprintf("Outer %s IDs must be a non-empty integer vector.", label), call. = FALSE)
+  value <- as.integer(value)
+  if (any(value < 1L | value > n) || anyDuplicated(value))
+    stop(sprintf("Outer %s IDs must be unique and within the supplied data.", label), call. = FALSE)
+  value
+}
+
+.outer_validate_partitions <- function(splits, data) {
+  if (!nrow(splits$outer)) stop("splits must contain at least one outer partition.", call. = FALSE)
+  n <- nrow(data); partitions <- vector("list", nrow(splits$outer))
+  for (i in seq_len(nrow(splits$outer))) {
+    row <- splits$outer[i, , drop = FALSE]
+    train <- .outer_validate_ids(row$train_ids[[1L]], "training", n)
+    test <- .outer_validate_ids(row$test_ids[[1L]], "test", n)
+    if (any(train %in% test)) stop(sprintf("Outer partition %s has overlapping training and test IDs.", row$outer_id[[1L]]), call. = FALSE)
+    if (splits$method %in% c("random", "group") && !identical(sort(c(train, test)), seq_len(n)))
+      stop(sprintf("Outer partition %s must cover every row exactly once.", row$outer_id[[1L]]), call. = FALSE)
+    partitions[[i]] <- list(train_ids = train, test_ids = test)
+  }
+  provenance <- splits$provenance
+  source_group <- if (nrow(provenance) && "group" %in% names(provenance)) as.character(provenance$group[[1L]]) else NA_character_
+  if (splits$method == "group" && !is.na(source_group) && source_group %in% names(data)) {
+    groups <- data[[source_group]]
+    for (i in seq_along(partitions)) if (any(groups[partitions[[i]]$test_ids] %in% groups[partitions[[i]]$train_ids]))
+      stop(sprintf("Outer group partition %s places one group in both training and test data.", splits$outer$outer_id[[i]]), call. = FALSE)
+  }
+  source_time <- if (nrow(provenance) && "time" %in% names(provenance)) as.character(provenance$time[[1L]]) else NA_character_
+  if (splits$method == "time" && !is.na(source_time) && source_time %in% names(data)) {
+    times <- data[[source_time]]
+    for (i in seq_along(partitions)) if (max(times[partitions[[i]]$train_ids]) >= min(times[partitions[[i]]$test_ids]))
+      stop(sprintf("Outer time partition %s uses a test row at or before its training maximum.", splits$outer$outer_id[[i]]), call. = FALSE)
+  }
+  partitions
+}
+
 #' Validate measurement, structural selection, and held-out prediction together
 #'
 #' Fits each outer partition using training rows only. Measurement assignments
@@ -128,14 +166,21 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
   resolved <- .resolve_split_assignment(splits, data, model$folds)
   if (is.null(splits$outer) || !all(c("outer_id", "train_ids", "test_ids") %in% names(splits$outer)))
     stop("splits must include outer train/test partitions.", call. = FALSE)
+  partition_ids <- .outer_validate_partitions(splits, data)
   indicator_order <- unlist(lapply(model$constructs, `[[`, "indicators"), use.names = FALSE)
+  outcome_indicators <- unique(unlist(lapply(names(structure$effects), function(outcome)
+    model$constructs[[outcome]]$indicators), use.names = FALSE))
+  missing_outcome_columns <- setdiff(outcome_indicators, names(data))
+  if (length(missing_outcome_columns))
+    stop(paste0("G7 limitation: predictor-only prospective scoring is unsupported; held-out data are missing declared outcome indicator column(s): ",
+      paste(missing_outcome_columns, collapse = ", "), "."), call. = FALSE)
   prediction_rows <- list(); test_metric_rows <- list(); selection_rows <- list()
   provenance_rows <- list(); failure_rows <- list()
   for (i in seq_len(nrow(splits$outer))) {
     partition <- splits$outer[i, , drop = FALSE]
     outer_id <- as.integer(partition$outer_id[[1L]])
-    train_ids <- as.integer(partition$train_ids[[1L]])
-    test_ids <- as.integer(partition$test_ids[[1L]])
+    train_ids <- partition_ids[[i]]$train_ids
+    test_ids <- partition_ids[[i]]$test_ids
     partition_seed <- as.numeric(seed) + outer_id - 1
     stage <- "measurement"
     selected_shapes <- NA_character_

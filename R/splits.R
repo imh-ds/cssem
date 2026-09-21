@@ -80,6 +80,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
     time_values <- .split_values(data, time, "time")
     if (!is.numeric(time_values) && !inherits(time_values, c("Date", "POSIXct", "POSIXlt")))
       stop("time must be numeric, Date, or POSIXct values.", call. = FALSE)
+    if (any(!is.finite(time_values))) stop("time must contain only finite values.", call. = FALSE)
     ordered_values <- sort(unique(time_values))
     if (length(ordered_values) < folds) stop("time must contain at least one unique value per fold.", call. = FALSE)
     time_blocks <- cut(seq_along(ordered_values), breaks = folds, labels = FALSE,
@@ -114,7 +115,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
       method = "explicit", folds = NA_integer_, seed = NA_real_,
       group = NA_character_, time = NA_character_, stringsAsFactors = FALSE))
   }
-  if (length(assignment) != n || any(!is.finite(assignment)) ||
+  if (!is.numeric(assignment) || length(assignment) != n || any(!is.finite(assignment)) ||
       any(assignment != as.integer(assignment)) || any(assignment < 1L))
     stop("split must provide one positive integer assignment per row.", call. = FALSE)
   assignment <- as.integer(assignment)
@@ -130,6 +131,6 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
 #' @export
 print.cssem_splits <- function(x, ...) {
   cat("CS-SEM splits: ", x$method, " (", x$folds, " folds)\n", sep = "")
-  if (nrow(x$outer)) print(x$outer[, c("outer_id", "train_n", "test_n"), drop = FALSE], row.names = FALSE)
+  if (!is.null(x$outer) && nrow(x$outer)) print(x$outer[, c("outer_id", "train_n", "test_n"), drop = FALSE], row.names = FALSE)
   invisible(x)
 }

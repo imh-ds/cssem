@@ -21,18 +21,52 @@
   stats::setNames(as.numeric(value), names(value))
 }
 
+.bootstrap_measurement_split <- function(fit, indices, settings) {
+  if (is.null(settings$split)) return(list(model = fit$model, split = NULL))
+  source <- fit$measurement_split
+  assignment <- if (!is.null(source) && length(source$assignment) == nrow(fit$data)) {
+    source$assignment
+  } else if (inherits(settings$split, "cssem_splits") &&
+             length(settings$split$assignment) == length(settings$split$row_ids)) {
+    position <- match(fit$row_ids, settings$split$row_ids)
+    if (anyNA(position)) stop("Stored split row IDs do not match the fitted data for bootstrap refitting.", call. = FALSE)
+    settings$split$assignment[position]
+  } else {
+    settings$split
+  }
+  if (!is.numeric(assignment) || length(assignment) != nrow(fit$data) ||
+      any(!is.finite(assignment)) || any(assignment != as.integer(assignment)))
+    stop("Stored split must provide one finite integer assignment per fitted row for bootstrap refitting.", call. = FALSE)
+  assignment <- as.integer(assignment[indices])
+  levels <- sort(unique(assignment))
+  if (length(levels) < 2L)
+    stop("A bootstrap resample must retain at least two measurement folds for refitting.", call. = FALSE)
+  assignment <- match(assignment, levels)
+  model <- fit$model; model$folds <- length(levels)
+  provenance <- if (!is.null(source$provenance)) source$provenance else data.frame(
+    method = "bootstrap", folds = length(levels), seed = NA_real_,
+    group = NA_character_, time = NA_character_, stringsAsFactors = FALSE)
+  provenance$folds <- length(levels)
+  split <- structure(list(method = if (is.null(source$method)) "bootstrap" else source$method,
+    folds = length(levels), seed = if (is.null(source$seed)) NA_real_ else source$seed,
+    assignment = as.integer(assignment), row_ids = seq_along(indices),
+    provenance = provenance), class = c("cssem_splits", "list"))
+  list(model = model, split = split)
+}
+
 .bootstrap_context <- function(fit, indices, refit, replicate, seed, settings) {
   raw <- fit$data[indices, , drop = FALSE]
   if (refit == "locked_scores") {
     scored_fit <- fit
     scores <- fit$locked_scores[indices, , drop = FALSE]
   } else {
+    refit_spec <- .bootstrap_measurement_split(fit, indices, settings)
     scored_fit <- do.call(.fit_states_quiet, c(list(
-      model = fit$model, data = raw, seed = seed, draws = 0L,
+      model = refit_spec$model, data = raw, seed = seed, draws = 0L,
       iterations = settings$iterations, tolerance = settings$tolerance,
       quadrature = settings$quadrature, diagnostics = FALSE,
       preset = settings$preset, missing_policy = settings$missing_policy,
-      split = settings$split), list()))
+      split = refit_spec$split), list()))
     scores <- scored_fit$locked_scores
   }
   list(fit = scored_fit, scores = scores, data = raw, indices = indices,

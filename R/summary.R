@@ -468,7 +468,7 @@ nobs.conditional_indirect_effect <- nobs.indirect_effect
 #' @export
 update.fit_states <- function(object, model = NULL, data = NULL, ..., evaluate = TRUE) {
   if (is.null(model)) model <- object$model
-  if (is.null(data)) data <- object$data
+  if (is.null(data)) data <- if (!is.null(object$input_data)) object$input_data else object$data
   if (is.null(model) || is.null(data)) stop("update.fit_states() needs the original model and data; this fit predates stored update inputs, so supply both.", call. = FALSE)
   settings <- if (is.null(object$fit_settings)) list() else object$fit_settings
   settings$model <- model; settings$data <- data

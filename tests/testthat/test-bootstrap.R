@@ -57,3 +57,19 @@ test_that("bootstrap measurement refits and resumability are explicit", {
   expect_equal(resumed$draws[seq_len(3L), , drop = FALSE], partial$draws)
   expect_equal(nrow(resumed$replicates), 5L)
 })
+
+test_that("bootstrap refits remap explicit measurement splits", {
+  data <- simulate_states(n = 54, seed = 63)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3)
+  split <- make_splits(data, method = "random", folds = 3, seed = 7)
+  fit <- fit_states(model, data, split = split, iterations = 1, diagnostics = FALSE)
+  statistic <- function(context) c(mean_A = mean(context$scores$A))
+  boot <- bootstrap_model(fit, statistic, reps = 4, refit = "measurement", seed = 26)
+  expect_true(all(boot$replicates$status == "success"))
+
+  data[3, "a1"] <- NA
+  listwise <- fit_states(model, data, split = split, missing_policy = "listwise",
+    iterations = 1, diagnostics = FALSE)
+  updated <- update(listwise, iterations = 1, diagnostics = FALSE)
+  expect_equal(nrow(updated$data), nrow(listwise$data))
+})
