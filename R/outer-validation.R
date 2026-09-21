@@ -70,10 +70,11 @@
 }
 
 .outer_provenance_row <- function(outer_id, splits, train_ids, test_ids, seed, status,
-                                  selected_shapes = NA_character_) {
+                                  selected_shapes = NA_character_, status_detail = "") {
   row <- data.frame(outer_id = as.integer(outer_id), method = as.character(splits$method),
     seed = as.numeric(seed), train_n = length(train_ids), test_n = length(test_ids),
-    status = status, selected_shapes = selected_shapes, stringsAsFactors = FALSE)
+    status = status, status_detail = status_detail, selected_shapes = selected_shapes,
+    stringsAsFactors = FALSE)
   row$train_ids <- list(as.integer(train_ids)); row$test_ids <- list(as.integer(test_ids))
   row
 }
@@ -110,8 +111,12 @@
       stop(sprintf("Outer group partition %s places one group in both training and test data.", splits$outer$outer_id[[i]]), call. = FALSE)
   }
   source_time <- if (nrow(provenance) && "time" %in% names(provenance)) as.character(provenance$time[[1L]]) else NA_character_
-  if (splits$method == "time" && !is.na(source_time) && source_time %in% names(data)) {
-    times <- data[[source_time]]
+  if (splits$method == "time") {
+    if (!is.na(source_time) && source_time != "<vector>" && !(source_time %in% names(data)))
+      stop(sprintf("Time source column '%s' is unavailable for outer partition validation.", source_time), call. = FALSE)
+    times <- if (!is.na(source_time) && source_time != "<vector>") data[[source_time]] else splits$time_values
+    if (is.null(times) || length(times) != n || any(!is.finite(times)))
+      stop("Time outer partitions cannot be verified because their source values are unavailable or non-finite.", call. = FALSE)
     for (i in seq_along(partitions)) if (max(times[partitions[[i]]$train_ids]) >= min(times[partitions[[i]]$test_ids]))
       stop(sprintf("Outer time partition %s uses a test row at or before its training maximum.", splits$outer$outer_id[[i]]), call. = FALSE)
   }
@@ -195,6 +200,7 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
     partition_seed <- as.numeric(seed) + outer_id - 1
     stage <- "measurement"
     selected_shapes <- NA_character_
+    status_detail <- ""
     status <- "failed"
     tryCatch({
       train_split <- .outer_training_split(splits, resolved$assignment, train_ids)
@@ -251,13 +257,16 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
       }
       if (length(metrics_for_partition)) test_metric_rows[[length(test_metric_rows) + 1L]] <- do.call(rbind, metrics_for_partition)
       if (length(prediction_for_partition)) prediction_rows[[length(prediction_rows) + 1L]] <- do.call(rbind, prediction_for_partition)
-      status <- "success"
+      has_observed_test <- length(metrics_for_partition) && any(vapply(metrics_for_partition,
+        function(row) isTRUE(row$n[[1L]] > 0L), logical(1)))
+      status <- if (has_observed_test) "success" else "partial"
+      if (!has_observed_test) status_detail <- "no_observed_outcome"
     }, error = function(condition) {
       failure_rows[[length(failure_rows) + 1L]] <<- data.frame(outer_id = outer_id,
         stage = stage, message = conditionMessage(condition), stringsAsFactors = FALSE)
     })
     provenance_rows[[length(provenance_rows) + 1L]] <- .outer_provenance_row(
-      outer_id, splits, train_ids, test_ids, partition_seed, status, selected_shapes)
+      outer_id, splits, train_ids, test_ids, partition_seed, status, selected_shapes, status_detail)
   }
   failures <- if (length(failure_rows)) do.call(rbind, failure_rows) else .outer_empty_failures()
   predictions <- if (length(prediction_rows)) do.call(rbind, prediction_rows) else .outer_empty_predictions()

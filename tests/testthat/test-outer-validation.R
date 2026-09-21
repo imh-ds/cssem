@@ -29,6 +29,12 @@ test_that("group and time outer partitions preserve their constraints", {
     folds = 3, seed = 4)
   vector_group$group_values <- NULL
   expect_error(validate_outer(generated$model, generated$structure, generated$data, vector_group), "cannot be verified")
+  vector_time <- make_splits(generated$data, method = "time", time = seq_len(nrow(generated$data)), folds = 3)
+  vector_time$time_values <- rev(vector_time$time_values)
+  expect_error(validate_outer(generated$model, generated$structure, generated$data, vector_time), "at or before")
+  named_time <- make_splits(generated$data, method = "time", time = "time", folds = 3)
+  expect_error(validate_outer(generated$model, generated$structure,
+    generated$data[, setdiff(names(generated$data), "time"), drop = FALSE], named_time), "source column")
 })
 
 test_that("failed outer partitions are retained", {
@@ -88,7 +94,7 @@ test_that("outer metrics exclude prior-only held-out states", {
   generated$model$folds <- 3L
   splits <- make_splits(generated$data, method = "random", folds = 3, seed = 9)
   first_test <- splits$outer$test_ids[[1L]]
-  generated$data[first_test, c("loyalty1", "loyalty2", "loyalty3")] <- NA_integer_
+  generated$data[first_test, unlist(lapply(generated$model$constructs, `[[`, "indicators"), use.names = FALSE)] <- NA_integer_
   result <- validate_outer(generated$model, generated$structure, generated$data, splits,
     iterations = 1, diagnostics = FALSE,
     structural_args = list(structural_repeats = 1L, shadow_scope = "temporal"))
@@ -96,4 +102,6 @@ test_that("outer metrics exclude prior-only held-out states", {
     result$test_metrics$outcome == "Loyalty", , drop = FALSE]
   expect_equal(loyalty_metric$n, 0L)
   expect_false(any(result$predictions$outer_id == 1L & result$predictions$outcome == "Loyalty"))
+  expect_equal(result$provenance$status_detail[result$provenance$outer_id == 1L], "no_observed_outcome")
+  expect_equal(result$provenance$status[result$provenance$outer_id == 1L], "partial")
 })

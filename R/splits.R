@@ -66,7 +66,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
   if (length(seed) != 1L || !is.numeric(seed) || !is.finite(seed))
     stop("seed must be a finite numeric scalar.", call. = FALSE)
   .preserve_seed(); set.seed(seed)
-  source_group <- NULL; source_time <- NULL; group_values <- NULL
+  source_group <- NULL; source_time <- NULL; group_values <- NULL; time_values <- NULL
   if (method == "group") {
     if (is.null(group)) stop("group is required for method = \"group\".", call. = FALSE)
     group_values <- .split_values(data, group, "group")
@@ -88,6 +88,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
       include.lowest = TRUE)
     assignment <- as.integer(time_blocks[match(time_values, ordered_values)])
     source_time <- if (length(time) == 1L && is.character(time)) time else "<vector>"
+    time_values <- time_values
   } else {
     assignment <- sample(rep(seq_len(folds), length.out = n))
   }
@@ -99,7 +100,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
     stringsAsFactors = FALSE)
   structure(list(method = method, folds = folds, seed = seed,
     assignment = assignment, row_ids = seq_len(n), outer = outer,
-    provenance = provenance, group_values = group_values), class = c("cssem_splits", "list"))
+    provenance = provenance, group_values = group_values, time_values = time_values), class = c("cssem_splits", "list"))
 }
 
 .resolve_split_assignment <- function(split, data, default_folds) {
