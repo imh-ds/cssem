@@ -61,7 +61,7 @@ correctness concerns.
 | G1 | P1 | Implemented | Standard summaries, parameter tables, and R extractors |
 | G2 | P1 | Implemented | Measurement parameter and validity assessment |
 | G3 | P1 | Implemented | Unified preflight and numerical diagnostics |
-| G4 | P1 | Partial | Explicit, validated inference and reusable resampling |
+| G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling |
 | G5 | P1 | Partial | Missing-data policy and sample accounting |
 | G6 | P1 | Partial | User-defined measurement splits and outer validation |
 | G7 | P1 | Partial | Structural prediction for new observations |
@@ -206,7 +206,7 @@ labelled as a numerical safeguard and is not presented as an accuracy guarantee.
 Focused tests cover structured preflight failures, sparse support, controls,
 objective/status fields, and structural correction diagnostics.
 
-### [ ] G4. Explicit inference scope and reusable resampling
+### [x] G4. Explicit inference scope and reusable resampling
 
 **Evidence/gap:** inference exists, but it is fragmented. The
 [structural bootstrap](../R/structure.R#L536) resamples locked scores;
@@ -229,6 +229,33 @@ successful counts, confidence level, and the components refitted. Add progress,
 safe parallel execution, and resumability for long runs. Implement robust or
 full-pipeline inference only with derivation and coverage checks appropriate to
 the estimand; ordinary bootstrapping is not automatically valid after selection.
+
+**Implemented (2026-09-20, core workflow):** [bootstrap_model()](../R/bootstrap.R)
+is a public resampling contract. A callback receives the resampled data and
+scores and returns a named estimand vector; the caller explicitly chooses
+`refit = "locked_scores"` for conditional inference or `refit = "measurement"`
+for an encoder refit in every replicate. The returned `cssem_bootstrap` object
+retains the point estimate, draws, per-replicate seeds and statuses, failure
+reasons, successful and failed counts, confidence level, refit component,
+worker count, and the callback. `summary()` and `confint()` expose the stored
+percentile intervals. Runs can resume from a completed prefix, report progress,
+and use deterministic worker-safe seeds: installed-package smoke tests give
+identical draws and statuses for one and two workers. Callback errors become
+failed rows with `NA` draws instead of disappearing.
+
+The structural EIV interval in [associate()](../R/structure.R) now accepts a
+`level` argument and stores it in the association settings, so that interval
+also no longer assumes 95% when requested. Focused tests cover deterministic
+draws, configurable intervals, failure accounting, measurement-refit mode,
+resumability, and the structural level control.
+
+This remains **Partial** for methodological scope. Existing mediation,
+moderation, and causal convenience helpers continue to describe their
+conditional-on-locked-scores, fixed-shape bootstrap estimands. The new engine
+does not silently rerun shape selection or convert plausible-value draws into
+confidence intervals. Coverage, bias, and failure-rate simulations under low
+and high reliability and under shape selection remain required before making
+full-pipeline or robust-inference claims.
 
 **Acceptance:** repeated runs reproduce across worker counts; failures never
 silently disappear; low/high reliability and shape-selection simulations report
