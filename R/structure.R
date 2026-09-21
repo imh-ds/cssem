@@ -548,12 +548,13 @@ specify_structure <- function(..., order = NULL) {
 }
 
 # Corrected structural effects for one outcome. Edges whose selected shape is
-# linear or monotone are disattenuated; smooth edges are reported but not yet
-# corrected (closed-form errors-in-variables for splines is out of scope).
+# linear, monotone, or product are disattenuated; smooth edges are reported but
+# not yet corrected (closed-form errors-in-variables for splines is out of scope).
 .corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed,
                                weights = NULL, posterior_var = NULL) {
   predictors <- names(selected_shapes)
-  applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in% c("linear", "monotone_increasing", "monotone_decreasing"), logical(1))
+  applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in%
+    c("linear", "monotone_increasing", "monotone_decreasing", "product"), logical(1))
   fit <- .eiv_coefficients(scores, outcome, predictors, reliability, weights, posterior_var)
   boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed, weights, posterior_var) else NULL
   do.call(rbind, lapply(predictors, function(p) {
@@ -561,7 +562,8 @@ specify_structure <- function(..., order = NULL) {
     data.frame(outcome = outcome, predictor = p,
       naive_estimate = if (applicable[[p]]) unname(fit$naive[[p]]) else NA_real_,
       corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
-      predictor_reliability = if (.is_interaction(p)) NA_real_ else unname(reliability[[p]]),
+      predictor_reliability = if (.is_interaction(p))
+        prod(reliability[.interaction_terms(p)]) else unname(reliability[[p]]),
       corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
       eiv_applicable = applicable[[p]], eiv_stable = applicable[[p]] && isTRUE(fit$stable),
       stringsAsFactors = FALSE)

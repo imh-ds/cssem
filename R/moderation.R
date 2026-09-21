@@ -112,8 +112,9 @@
 #' (`slope(w) = b_predictor + b_interaction * w`), with bootstrap intervals and a
 #' Johnson-Neyman region: the range of the moderator over which the conditional
 #' slope is distinguishable from zero. The moderator must appear in a declared
-#' `predictor`-by-`moderator` interaction on the outcome. The focal main effect is
-#' disattenuated; the interaction term is treated as observed.
+#' `predictor`-by-`moderator` interaction on the outcome. The focal main effect
+#' and interaction term are disattenuated; the interaction uses the product of
+#' the constituent construct reliabilities.
 #'
 #' @param association A `cssem_association` from [associate()].
 #' @param outcome Outcome construct carrying the moderated effect.

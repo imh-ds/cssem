@@ -344,3 +344,26 @@ test_that("an interaction edge is labelled a product everywhere, and curves are 
   # The fitted curve for the nonlinear edge is still produced in full.
   expect_equal(sum(!is.na(card$effects$fitted)), 50L)
 })
+
+test_that("structural reports expose interaction errors-in-variables corrections", {
+  # Regression: the correction solver handled product terms, but the
+  # structural report excluded the product shape and returned no corrected
+  # estimate or interval for the same interaction.
+  set.seed(81)
+  n <- 500
+  X <- stats::rnorm(n); W <- stats::rnorm(n)
+  Y <- .4 * X + .6 * W + 1.8 * X * W + stats::rnorm(n, sd = .7)
+  scores <- data.frame(X = as.numeric(scale(X)), W = as.numeric(scale(W)),
+    Y = as.numeric(scale(Y)))
+  selected <- c(X = "linear", W = "linear", "X:W" = "product")
+  reported <- cssem:::.corrected_effects(scores, "Y", selected,
+    c(X = .8, W = .8, Y = .9), replicates = 40L, seed = 81L)
+  interaction <- reported[reported$predictor == "X:W", , drop = FALSE]
+  direct <- cssem:::.eiv_coefficients(scores, "Y", names(selected),
+    c(X = .8, W = .8, Y = .9))
+  expect_true(isTRUE(interaction$eiv_applicable))
+  expect_true(is.finite(interaction$corrected_estimate))
+  expect_true(is.finite(interaction$corrected_ci_low) && is.finite(interaction$corrected_ci_high))
+  expect_equal(interaction$corrected_estimate, unname(direct$corrected[["X:W"]]))
+  expect_equal(interaction$predictor_reliability, .8 * .8)
+})
