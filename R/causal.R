@@ -288,10 +288,12 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
 #' @export
 print.causal_effect <- function(x, ...) {
   cat(sprintf("CS-SEM effect: %s -> %s  (n = %d)\n", x$treatment, x$outcome, x$n))
-  labels <- c(causal_under_assumptions = "Causal under assumptions",
-    adjusted_association = "Adjusted association (not causal: no declared temporal order)",
-    unadjusted_association = "Unadjusted association (not causal: no adjustment set)")
-  cat("Interpretation: ", labels[[x$label]], "\n", sep = "")
+  interpretation <- if (identical(x$label, "causal_under_assumptions")) "Causal under assumptions"
+    else if (identical(x$label, "unadjusted_association")) "Unadjusted association (not causal: no adjustment set)"
+    else if (!isTRUE(x$temporal_order_declared)) "Adjusted association (not causal: no declared temporal order)"
+    else sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
+      x$identification_strength)
+  cat("Interpretation: ", interpretation, "\n", sep = "")
   cat("Adjustment set: ", if (length(x$adjust)) paste(x$adjust, collapse = ", ") else "(none)", "\n")
   flexible <- x$estimand %in% c("adjusted_dml", "adjusted_ame")
   ame <- identical(x$estimand, "adjusted_ame")

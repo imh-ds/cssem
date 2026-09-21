@@ -138,6 +138,26 @@ test_that("a causal label requires both an adjustment set and a temporal order",
   expect_identical(causal_effect(association, "X", "Y")$label, "unadjusted_association")
 })
 
+test_that("causal_effect prints the reason for a non-causal label", {
+  skeleton <- function(label, declared, strength) structure(list(
+    treatment = "X", outcome = "Y", adjust = "C", estimand = "adjusted_linear",
+    claim_type = "total (adjusted)", unadjusted = .5, adjusted_naive = .3,
+    adjusted_effect = .35, ci_low = NA_real_, ci_high = NA_real_,
+    disattenuated = FALSE, stable = TRUE, bootstrap = 0L, n = 300L,
+    temporal_order_declared = declared, identification_strength = strength,
+    treatment_r2 = 1 - strength, outcome_r2 = .2, robustness_value = .2,
+    reliability_sensitivity = NULL, label = label, status = label),
+    class = "causal_effect")
+
+  weak <- skeleton("adjusted_association", TRUE, .04)
+  expect_output(print(weak), "weak identification")
+  expect_false(any(grepl("no declared temporal order", capture.output(print(weak)))))
+  expect_output(print(skeleton("adjusted_association", FALSE, .8)),
+    "no declared temporal order")
+  expect_output(print(skeleton("causal_under_assumptions", TRUE, .8)),
+    "Causal under assumptions")
+})
+
 test_that("route builds a Path Routing Table with honest defaults", {
   generated <- cssem:::.structural_validation_data("linear", 400, 5, items = 4L)
   fit <- fit_states(generated$model, generated$data, seed = 5, iterations = 4, diagnostics = FALSE)
