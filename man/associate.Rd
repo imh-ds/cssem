@@ -19,7 +19,8 @@ associate(
   reliability = NULL,
   eiv_bootstrap = 0L,
   respondent_weighting = c("none", "information"),
-  preset = c("default", "exploratory")
+  preset = c("default", "exploratory"),
+  level = 0.95
 )
 }
 \arguments{
@@ -67,6 +68,9 @@ the corrected estimate is omitted rather than reported uncorrected.}
 
 \item{eiv_bootstrap}{Number of percentile-bootstrap replicates for the
 corrected-estimate interval. Zero disables the interval.}
+
+\item{level}{Confidence level for the corrected-estimate interval. This is
+independent of the structural shape-selection error rate.}
 
 \item{respondent_weighting}{Experimental. \code{"information"} applies
 inverse-variance respondent weighting from the posterior SD. It is

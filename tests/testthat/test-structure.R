@@ -43,6 +43,22 @@ test_that("a user-supplied reliability is the one the correction uses", {
   expect_error(associate(fit, structure_spec, reliability = c(A = 1.5)), "\\(0, 1\\]")
 })
 
+test_that("structural bootstrap intervals honor an explicit confidence level", {
+  set.seed(22)
+  n <- 90
+  fit <- structure(list(
+    locked_scores = data.frame(A = rnorm(n), B = rnorm(n)),
+    folds = rep(1:3, length.out = n)
+  ), class = "fit_states")
+  association <- associate(fit, specify_structure(B ~ linear(A), order = c("A", "B")),
+    structural_repeats = 1L, shadow_scope = "temporal", reliability = c(A = .7, B = .8),
+    eiv_bootstrap = 40L, level = .80, seed = 6L)
+  expect_equal(association$level, .80)
+  expect_equal(association$association_settings$level, .80)
+  expect_true(is.finite(association$corrected_effects$corrected_ci_low))
+  expect_true(is.finite(association$corrected_effects$corrected_ci_high))
+})
+
 test_that("edge declarations support policies while preserving character vectors", {
   declared <- cssem_structure(list(
     Quality = list(Trust = cssem_effect("monotone_increasing")),

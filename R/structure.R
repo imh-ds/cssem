@@ -556,7 +556,7 @@ specify_structure <- function(..., order = NULL) {
 # reflects sampling variability of the errors-in-variables estimator; the
 # reliability inputs are held fixed at their measurement-model estimates.
 .eiv_bootstrap <- function(scores, outcome, predictors, reliability, replicates, seed,
-                           weights = NULL, posterior_var = NULL) {
+                           weights = NULL, posterior_var = NULL, level = .95) {
   if (replicates < 1L) return(NULL)
   set.seed(seed + 4242L); n <- nrow(scores)
   estimates <- matrix(NA_real_, replicates, length(predictors), dimnames = list(NULL, predictors))
@@ -573,15 +573,17 @@ specify_structure <- function(..., order = NULL) {
 # linear, monotone, or product are disattenuated; smooth edges are reported but
 # not yet corrected (closed-form errors-in-variables for splines is out of scope).
 .corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed,
-                               weights = NULL, posterior_var = NULL) {
+                               weights = NULL, posterior_var = NULL, level = .95) {
   predictors <- names(selected_shapes)
   applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in%
     c("linear", "monotone_increasing", "monotone_decreasing", "product"), logical(1))
   fit <- .eiv_coefficients(scores, outcome, predictors, reliability, weights, posterior_var)
-  boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed, weights, posterior_var) else NULL
+  boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed,
+    weights, posterior_var, level) else NULL
   diagnostic <- fit$diagnostics
   do.call(rbind, lapply(predictors, function(p) {
-    ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p]))) stats::quantile(boot[, p], c(.025, .975), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p])))
+      stats::quantile(boot[, p], c((1 - level) / 2, (1 + level) / 2), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
     data.frame(outcome = outcome, predictor = p,
       naive_estimate = if (applicable[[p]]) unname(fit$naive[[p]]) else NA_real_,
       corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
@@ -669,6 +671,8 @@ specify_structure <- function(..., order = NULL) {
 #'   the corrected estimate is omitted rather than reported uncorrected.
 #' @param eiv_bootstrap Number of percentile-bootstrap replicates for the
 #'   corrected-estimate interval. Zero disables the interval.
+#' @param level Confidence level for the corrected-estimate interval. This is
+#'   independent of the structural shape-selection error rate.
 #' @param respondent_weighting Experimental. `"information"` applies
 #'   inverse-variance respondent weighting from the posterior SD. It is
 #'   `"none"` by default: because posterior width is score-dependent, weighting
@@ -684,13 +688,14 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              shadow_scope = c("both", "temporal", "unrestricted"),
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
-                             preset = c("default", "exploratory")) {
+                             preset = c("default", "exploratory"), level = .95) {
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
   preset <- match.arg(preset)
   eiv_bootstrap <- as.integer(eiv_bootstrap)
   if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
+  level <- .bootstrap_validate_level(level)
   respondent_weighting <- match.arg(respondent_weighting)
   if (preset == "exploratory") {
     if (missing(spline_df)) spline_df <- 3L
@@ -804,7 +809,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
     corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
-      weights = respondent_weights, posterior_var = posterior_var)
+      weights = respondent_weights, posterior_var = posterior_var, level = level)
     edge_p <- function(predictor) if (predictor %in% names(adjusted)) unname(adjusted[[predictor]]) else NA_real_
     # The baseline shape of an interaction predictor is "product", not "linear":
     # effect_card() has always said so, and the ledger reading "linear" made the
@@ -852,7 +857,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = corrected_table, numerical_diagnostics = .structural_numerical_diagnostics(corrected_table),
     reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
-    respondent_weighting = respondent_weighting, scores = scores,
+    respondent_weighting = respondent_weighting, level = level, scores = scores,
     # Retain the resolved declaration and controls so update.cssem_association()
     # can rebuild the association through the public associate() contract.
     association_settings = list(folds = folds, spline_df = spline_df,
@@ -860,7 +865,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       shape_alpha = shape_alpha, shape_min_gain = shape_min_gain,
       structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
       reliability = reliability, eiv_bootstrap = eiv_bootstrap,
-      respondent_weighting = respondent_weighting, preset = preset),
+      respondent_weighting = respondent_weighting, preset = preset, level = level),
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }
