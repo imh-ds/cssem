@@ -7,7 +7,9 @@
 # plain-language verdict derived from transparent rules over the raw signals; no
 # single composite score stands in for a p-value.
 
-# Shadow-gap thresholds follow ideation.md: <=0.08 mild underspecification.
+# Shadow-gap thresholds follow ideation.md: a theory-minus-shadow gap no lower
+# than -0.08 is treated as mild underspecification or better. Missing gaps stay
+# neutral because the edge's stability and contribution rules still apply.
 .EVIDENCE_GAP_OK <- 0.08
 
 # A smooth edge has no scalar estimate, so its magnitude is read from its
@@ -17,7 +19,7 @@
   if (!is.finite(stability) || stability < 0.6) return("Weak / unstable")
   negligible <- (is.finite(estimate) && abs(estimate) < 0.05) || (is.finite(contribution) && contribution < 0.01)
   if (negligible) return("Weak / unstable")
-  strong <- stability >= 0.85 && (!is.finite(gap) || gap <= .EVIDENCE_GAP_OK)
+  strong <- stability >= 0.85 && (!is.finite(gap) || gap >= -.EVIDENCE_GAP_OK)
   strength <- if (strong) "Robust" else "Moderate"
   # A causal edge whose identification failed is reported as the descriptive
   # effect it is, with the failure named, rather than as a causal pathway.

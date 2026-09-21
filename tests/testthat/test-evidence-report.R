@@ -55,6 +55,22 @@ test_that("a smooth edge (no scalar estimate) is scored on contribution", {
   expect_match(cssem:::.edge_verdict(1.0, 0.4, 0.2, 0.03, "representational"), "Representational")
 })
 
+test_that("evidence verdicts interpret shadow gaps with the correct sign", {
+  # Regression: theory-minus-shadow gaps are negative when the shadow model
+  # exposes a predictive shortfall, but the robust rule treated any negative
+  # gap as acceptable and penalized positive gaps.
+  expect_identical(cssem:::.edge_verdict(1.0, .5, .1, -.5, "associational"),
+    "Moderate descriptive effect")
+  expect_identical(cssem:::.edge_verdict(1.0, .5, .1, .5, "associational"),
+    "Robust descriptive effect")
+  expect_identical(cssem:::.edge_verdict(1.0, .5, .1, -.08, "associational"),
+    "Robust descriptive effect")
+  expect_identical(cssem:::.edge_verdict(1.0, .5, .1, -.081, "associational"),
+    "Moderate descriptive effect")
+  expect_identical(cssem:::.edge_verdict(1.0, .5, .1, NA_real_, "associational"),
+    "Robust descriptive effect")
+})
+
 test_that("without routing, all effect edges are associational and optional sections are absent", {
   p <- .evidence_pipeline()
   report <- evidence_report(p$association)
