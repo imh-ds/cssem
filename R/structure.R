@@ -817,10 +817,18 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     effects[[outcome]] <- effect_data; predictions[[outcome]] <- as.data.frame(c(list(observed = scores[[outcome]], theory = selected$prediction), shadow_predictions))
     gaps[[outcome]] <- do.call(rbind, shadow_rows); models[[outcome]] <- full_model
   }
-  structure(list(structure = structure, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
+  structure(list(structure = structure, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = do.call(rbind, corrected), reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
     respondent_weighting = respondent_weighting, scores = scores,
+    # Retain the resolved declaration and controls so update.cssem_association()
+    # can rebuild the association through the public associate() contract.
+    association_settings = list(folds = folds, spline_df = spline_df,
+      smooth_uncertainty = smooth_uncertainty, shape_stability_min = shape_stability_min,
+      shape_alpha = shape_alpha, shape_min_gain = shape_min_gain,
+      structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
+      reliability = reliability, eiv_bootstrap = eiv_bootstrap,
+      respondent_weighting = respondent_weighting, preset = preset),
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
 }

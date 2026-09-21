@@ -139,7 +139,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   if (draws > 0L) {
     bags <- .plausible_values(oof_posterior, posterior_nodes, locked, centers, scales_raw, draws, seed)
   }
-  structure(list(model = model, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
+  structure(list(model = model, data = data, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
     warnings = warnings, residual_dependence = residual_dependence,
@@ -147,6 +147,11 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # The standardization applied to the out-of-fold scores, retained so that
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
+    # Keep the inputs and resolved controls needed by update.fit_states().  A
+    # refit is always a fresh call to fit_states(), so update() cannot mutate
+    # the fitted object or silently reuse stale scores.
+    fit_settings = list(seed = seed, draws = draws, iterations = iterations,
+      diagnostics = diagnostics, preset = preset),
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")
