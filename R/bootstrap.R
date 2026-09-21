@@ -105,8 +105,8 @@
 #'   available to the workers.
 #' @param resume An earlier `cssem_bootstrap` object with the same `seed`,
 #'   `level`, and `refit`, used to continue a partially completed run.
-#' @param progress Reserved for a future progress display; accepted for API
-#'   stability and does not alter results.
+#' @param progress Whether to report completion of each replicate with a
+#'   concise message. It does not alter the results.
 #' @return An object of class `cssem_bootstrap` containing replicate draws,
 #'   statuses, failure reasons, summary intervals, and reproducibility metadata.
 #' @export
@@ -175,6 +175,7 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
       i <- result$replicate
       replicate_rows$status[[i]] <- result$status
       replicate_rows$failure_reason[[i]] <- if (result$status == "failed") result$failure_reason else ""
+      if (isTRUE(progress)) message(sprintf("Bootstrap replicate %d/%d: %s", i, reps, result$status))
       if (identical(result$status, "success")) {
         if (!identical(names(result$values), metric_names)) {
           replicate_rows$status[[i]] <- "failed"

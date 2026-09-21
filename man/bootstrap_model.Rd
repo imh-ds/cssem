@@ -33,7 +33,7 @@ bootstrap_model(
 
 \item{resume}{An earlier \code{cssem_bootstrap} object with the same \code{seed}, \code{level}, and \code{refit}, used to continue a partially completed run.}
 
-\item{progress}{Reserved for a future progress display; accepted for API stability and does not alter results.}
+\item{progress}{Whether to report completion of each replicate with a concise message. It does not alter the results.}
 }
 \value{
 An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata.
