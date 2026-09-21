@@ -181,7 +181,7 @@ conditional_slopes <- function(association, outcome, predictor, moderator, level
     jn <- list(grid = grid, significant = significant, intervals = .significant_intervals(grid, significant))
   }
 
-  structure(list(outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
+  structure(list(association = association, outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
     slopes = slopes, interaction = interaction, disattenuated = disattenuated, bootstrap = eiv_bootstrap,
     johnson_neyman = jn, status = "associational"), class = "conditional_slopes")
 }
@@ -312,7 +312,7 @@ conditional_indirect_effect <- function(association, x, y, moderator, levels = c
                      if (is.null(intervals)) NULL else intervals$dis_index, index_use_dis)
   )
 
-  structure(list(x = x, y = y, moderator = moderator, levels = levels, conditional = conditional, index = index,
+  structure(list(association = association, x = x, y = y, moderator = moderator, levels = levels, conditional = conditional, index = index,
     n = nrow(scores), disattenuated = disattenuated, bootstrap = eiv_bootstrap,
     min_reliability = min_reliability, status = "associational"), class = "conditional_indirect_effect")
 }

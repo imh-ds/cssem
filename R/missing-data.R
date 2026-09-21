@@ -94,6 +94,46 @@
     retained_n = sum(available), retained_ids = association_ids)
 }
 
+.effect_sample_ledger <- function(effect, stage = "causal", target = NULL,
+                                  required = character()) {
+  association <- effect$association
+  if (!inherits(association, "cssem_association"))
+    stop("The effect object does not retain its source association; refit the effect to obtain sample accounting.", call. = FALSE)
+  fit <- association$fit
+  scores <- as.data.frame(association$scores)
+  input_n <- if (!is.null(fit$sample_ledger$input_n)) fit$sample_ledger$input_n else nrow(scores)
+  input_names <- if (!is.null(fit$input_data)) .sample_row_names(fit$input_data) else as.character(seq_len(input_n))
+  association_ids <- if (!is.null(association$row_ids)) as.integer(association$row_ids) else seq_len(nrow(scores))
+  available <- seq_len(input_n) %in% association_ids
+  required <- unique(required[required %in% names(scores)])
+  observed_n <- rep(0L, input_n)
+  complete <- rep(FALSE, input_n)
+  if (length(required)) {
+    values <- scores[, required, drop = FALSE]
+    observed_available <- rowSums(is.finite(as.matrix(values)))
+    complete_available <- stats::complete.cases(values) &
+      apply(as.matrix(values), 1L, function(x) all(is.finite(x)))
+    observed_n[available] <- observed_available
+    complete[available] <- complete_available
+  }
+  target <- if (is.null(target)) "effect" else as.character(target)
+  status <- ifelse(!available, "excluded", ifelse(complete, "included", "excluded"))
+  reason <- ifelse(!available, "measurement_excluded",
+    ifelse(complete, "", "missing_score"))
+  rows <- data.frame(stage = stage, target = target, row_id = seq_len(input_n),
+    row_name = input_names, indicators_observed = as.integer(observed_n),
+    indicators_total = length(required), observed_fraction = if (length(required))
+      observed_n / length(required) else 1,
+    status = status, retained = available, score_finite = complete,
+    reason = reason, stringsAsFactors = FALSE)
+  summary <- data.frame(stage = stage, target = target, n_total = input_n,
+    n_retained = sum(available), n_effective = sum(complete),
+    n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
+    n_prior_only = 0L, n_excluded = sum(!complete), stringsAsFactors = FALSE)
+  list(summary = summary, rows = rows, retained_n = sum(available),
+    retained_ids = association_ids)
+}
+
 #' Report missing-data coverage and effective sample sizes
 #'
 #' Returns a stable sample ledger for measurement and structural stages. The
@@ -103,7 +143,7 @@
 #' prior-only state is identified explicitly rather than counted as observed
 #' measurement evidence.
 #'
-#' @param object A `fit_states` or `cssem_association` object.
+#' @param object A `fit_states`, `cssem_association`, or derived effect object.
 #' @param ... Unused.
 #' @return An object of class `cssem_sample_accounting` with `summary`, `rows`,
 #'   `policy`, `input_n`, and `retained_n` fields.
@@ -132,6 +172,67 @@ sample_accounting.cssem_association <- function(object, ...) {
     policy = object$missing_policy, input_n = measurement$input_n,
     retained_n = structural$retained_n,
     retained_ids = structural$retained_ids)
+  class(out) <- c("cssem_sample_accounting", "list")
+  out
+}
+
+#' @export
+sample_accounting.causal_effect <- function(object, ...) {
+  if (!inherits(object, "causal_effect")) stop("object must be a causal_effect object.", call. = FALSE)
+  measurement <- sample_accounting(object$association)
+  effect <- .effect_sample_ledger(object, stage = "causal",
+    target = paste(object$treatment, object$outcome, sep = " -> "),
+    required = c(object$treatment, object$outcome, object$adjust))
+  out <- list(summary = rbind(measurement$summary, effect$summary),
+    rows = rbind(measurement$rows, effect$rows),
+    policy = object$association$missing_policy, input_n = measurement$input_n,
+    retained_n = effect$retained_n, retained_ids = effect$retained_ids)
+  class(out) <- c("cssem_sample_accounting", "list")
+  out
+}
+
+#' @export
+sample_accounting.indirect_effect <- function(object, ...) {
+  if (!inherits(object, "indirect_effect")) stop("object must be an indirect_effect object.", call. = FALSE)
+  measurement <- sample_accounting(object$association)
+  effect <- .effect_sample_ledger(object, stage = "causal",
+    target = paste(object$x, object$y, sep = " -> "),
+    required = c(object$x, object$y, object$mediators))
+  out <- list(summary = rbind(measurement$summary, effect$summary),
+    rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
+    input_n = measurement$input_n, retained_n = effect$retained_n,
+    retained_ids = effect$retained_ids)
+  class(out) <- c("cssem_sample_accounting", "list")
+  out
+}
+
+#' @export
+sample_accounting.conditional_slopes <- function(object, ...) {
+  if (!inherits(object, "conditional_slopes")) stop("object must be a conditional_slopes object.", call. = FALSE)
+  measurement <- sample_accounting(object$association)
+  effect <- .effect_sample_ledger(object, stage = "causal",
+    target = paste(object$predictor, object$outcome, sep = " -> "),
+    required = c(object$predictor, object$outcome, object$moderator))
+  out <- list(summary = rbind(measurement$summary, effect$summary),
+    rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
+    input_n = measurement$input_n, retained_n = effect$retained_n,
+    retained_ids = effect$retained_ids)
+  class(out) <- c("cssem_sample_accounting", "list")
+  out
+}
+
+#' @export
+sample_accounting.conditional_indirect_effect <- function(object, ...) {
+  if (!inherits(object, "conditional_indirect_effect"))
+    stop("object must be a conditional_indirect_effect object.", call. = FALSE)
+  measurement <- sample_accounting(object$association)
+  effect <- .effect_sample_ledger(object, stage = "causal",
+    target = paste(object$x, object$y, sep = " -> "),
+    required = c(object$x, object$y, object$moderator))
+  out <- list(summary = rbind(measurement$summary, effect$summary),
+    rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
+    input_n = measurement$input_n, retained_n = effect$retained_n,
+    retained_ids = effect$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
 }

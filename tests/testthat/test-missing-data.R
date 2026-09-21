@@ -73,4 +73,11 @@ test_that("structural accounting reports complete-case exclusions by outcome", {
       structural_repeats = 1L, shadow_scope = "temporal", missing_policy = "error"),
     "missing_policy = \\\"error\\\""
   )
+
+  effect <- causal_effect(association, treatment = "X", outcome = "Y",
+    disattenuate = FALSE)
+  effect_accounting <- sample_accounting(effect)
+  expect_true(any(effect_accounting$summary$stage == "causal" &
+    effect_accounting$summary$target == "X -> Y"))
+  expect_equal(effect_accounting$input_n, nrow(data))
 })

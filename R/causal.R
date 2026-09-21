@@ -271,6 +271,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
   structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
+    association = association,
     claim_type = claim_type, adjusted_mediators = adjusted_mediators,
     unadjusted = unadjusted, adjusted_naive = adjusted_naive, adjusted_effect = adjusted_effect,
     ci_low = interval[[1L]], ci_high = interval[[2L]], disattenuated = disattenuated, stable = stable,

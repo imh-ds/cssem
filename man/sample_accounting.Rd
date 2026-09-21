@@ -7,7 +7,7 @@
 sample_accounting(object, ...)
 }
 \arguments{
-\item{object}{A \code{fit_states} or \code{cssem_association} object.}
+\item{object}{A \code{fit_states}, \code{cssem_association}, or derived effect object.}
 
 \item{...}{Unused.}
 }
@@ -16,12 +16,13 @@ An object of class \code{cssem_sample_accounting} with \code{summary},
 \code{rows}, \code{policy}, \code{input_n}, and \code{retained_n} fields.
 }
 \description{
-Returns a stable sample ledger for measurement and structural stages. The row
-table distinguishes complete, partial, prior-only, and excluded records; the
-summary table reports per-target effective sample sizes. Partial item responses
-remain valid in the default \code{partial} measurement policy, but a prior-only
-state is identified explicitly rather than counted as observed measurement
-evidence.
+Returns a stable sample ledger for measurement, structural, and derived causal
+stages. The row table distinguishes complete, partial, prior-only, included,
+and excluded records; the summary table reports per-target effective sample
+sizes. Partial item responses remain valid in the default \code{partial}
+measurement policy, but a prior-only state is identified explicitly rather than
+counted as observed measurement evidence. Effect objects retain their source
+association so the same input row IDs and exclusion reasons remain available.
 }
 \examples{
 \dontrun{

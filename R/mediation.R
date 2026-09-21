@@ -391,7 +391,8 @@ indirect_effect <- function(association, x, y, mediators = NULL, disattenuate = 
     if (!nrow(core$path_specific)) stop("No mediating path passes only through the requested mediators.", call. = FALSE)
   }
 
-  structure(c(core, list(x = x, y = y, n = nrow(scores), delta = delta,
+  structure(c(core, list(association = association, x = x, y = y, mediators = mediators,
+    n = nrow(scores), delta = delta,
     disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap, status = "associational")),
     class = "indirect_effect")
 }
