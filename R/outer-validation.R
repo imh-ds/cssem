@@ -149,6 +149,9 @@
 #'   selection: `"complete"` or `"error"`.
 #' @return An object of class `cssem_outer_validation` containing predictions,
 #'   internal selection metrics, held-out metrics, provenance, and failures.
+#'   The provenance table includes `status_detail` when a partition has no
+#'   observed held-out outcomes; split provenance retains the source group/time
+#'   vectors needed to recheck grouped and time-ordered constraints.
 #' @export
 validate_outer <- function(model, structure, data, splits, seed = 1L,
                            iterations = 15L, tolerance = 1e-3,

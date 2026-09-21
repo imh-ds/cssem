@@ -25,6 +25,12 @@ test_that("group and time outer partitions preserve their constraints", {
   expect_true(all(vapply(seq_len(nrow(timed$outer)), function(i) {
     max(generated$data$time[timed$outer$train_ids[[i]]]) < min(generated$data$time[timed$outer$test_ids[[i]]])
   }, logical(1))))
+  dated <- make_splits(generated$data, method = "time",
+    time = as.Date("2020-01-01") + seq_len(nrow(generated$data)), folds = 3)
+  expect_true(all(vapply(seq_len(nrow(dated$outer)), function(i) {
+    max(dated$time_values[dated$outer$train_ids[[i]]]) <
+      min(dated$time_values[dated$outer$test_ids[[i]]])
+  }, logical(1))))
   vector_group <- make_splits(generated$data, method = "group", group = generated$data$entity,
     folds = 3, seed = 4)
   vector_group$group_values <- NULL

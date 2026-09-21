@@ -57,7 +57,10 @@ selection: \code{"complete"} or \code{"error"}.}
 }
 \value{
 An object of class \code{cssem_outer_validation} containing predictions,
-internal selection metrics, held-out metrics, provenance, and failures.
+internal selection metrics, held-out metrics, provenance, and failures. The
+provenance table includes \code{status_detail} when a partition has no observed
+held-out outcomes; split provenance retains source group/time vectors needed to
+recheck grouped and time-ordered constraints.
 }
 \description{
 Fits each outer partition using training rows only. Measurement assignments

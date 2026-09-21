@@ -367,6 +367,10 @@ Random and grouped outer evaluation should use at least three global folds so
 each training partition retains at least two measurement folds. With two folds,
 the runner keeps the partition provenance but records the one-fold training
 window as a failed partition rather than pretending that cross-fitting occurred.
+The first forward-only time partition has the same constraint: it contains only
+the earliest time block, so it is retained as a failed partition unless the
+measurement split assignment supplies at least two folds inside that training
+window. Later time partitions can still provide valid outer estimates.
 
 Focused [split tests](../tests/testthat/test-splits.R) cover deterministic,
 grouped, time-ordered, explicit, and listwise-aligned assignments. The
