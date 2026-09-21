@@ -508,7 +508,7 @@ present manually reusing scores as a validated higher-order latent model.
 
 1. Resolve the relevant existing correctness defects in [bugs.md](bugs.md).
    Stabilize G1/G3/G5/G13: result contracts, preflight, sample accounting, and
-   documentation. Expose existing measurement quantities through G2.
+   documentation. Use the scale-aware measurement contracts delivered in G2.
 2. Build G6's split/evaluation infrastructure and G7's prediction contract;
    use them to validate G4's inference choices. Develop G14's causal validation
    before widening causal claims.
@@ -520,4 +520,5 @@ present manually reusing scores as a validated higher-order latent model.
 **Completion rule for future work:** an entry is complete only when its public
 workflow, documentation, edge-case behavior, and stated numerical/methodological
 validation are delivered. Adding an exported function alone does not close a
-methodological gap. No entry is marked complete by this audit.
+methodological gap. Existing completed entries record the evidence for that
+completion; future entries should meet the same standard.
