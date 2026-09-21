@@ -338,7 +338,8 @@ not a claim about SEMinR's implementation.
 **Implemented (2026-09-21, core workflow):** [make_splits()](../R/splits.R)
 creates deterministic random, repeated-group, and forward-only time partitions.
 Group labels remain in one fold, tied time values remain in one block, and each
-object retains integer row IDs, outer train/test partitions, and provenance.
+object retains integer row IDs, outer train/test partitions, and provenance,
+including source group/time vectors when a split was created from a vector.
 [fit_states()](../R/fit.R) accepts either a reusable `cssem_splits` object or an
 explicit assignment vector through `split =`; listwise filtering subsets the
 assignment and preserves the original row IDs. Refit and measurement-bootstrap
@@ -357,7 +358,10 @@ and structural stages, and held-out data without declared indicator columns
 reports the existing G7 predictor-only limitation.
 Prior-only held-out outcome or predictor states are excluded from outer error
 metrics instead of being evaluated as finite prior predictions, and missing
-model indicators are rejected before partition fitting begins.
+model indicators are rejected before partition fitting begins. Time partitions
+whose source column or vector is unavailable, non-finite, or inconsistent with
+the stored ordering fail preflight. A partition with no observed held-out
+outcomes is retained as `partial` with a `no_observed_outcome` status detail.
 
 Random and grouped outer evaluation should use at least three global folds so
 each training partition retains at least two measurement folds. With two folds,
