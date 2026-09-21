@@ -303,7 +303,10 @@ these diagnostics are returned reliably.
 observed-item counts, statuses, reasons, and per-construct effective counts for
 measurement. [associate()](../R/structure.R) accepts `missing_policy =
 "complete"` or `"error"` for locked scores, keeps the original row IDs, and
-reports per-outcome structural exclusions. Causal, mediation, and moderation
+reports per-outcome structural exclusions. Structural complete-case handling
+also propagates `prior_only` and excluded measurement states for every
+construct required by an outcome, so finite prior scores are not counted as
+observed structural evidence. Causal, mediation, and moderation
 results retain their source association, so the same ledger can be queried
 through derived effect objects and traced into the causal stage. Reasons
 distinguish measurement exclusion from missing structural scores; unsupported
