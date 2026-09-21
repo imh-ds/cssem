@@ -30,7 +30,8 @@ group = NULL, time = NULL, seed = 1L)` as the public constructor. It returns a
 - provenance describing the grouping or time column used.
 
 Random splits assign rows reproducibly. Group splits assign every group to one
-fold and reject missing or duplicated group labels. Time splits sort by the
+fold, allow repeated group labels by design, and reject missing labels or
+partitions that split a group. Time splits sort by the
 supplied time column, require finite/non-missing order values, and make each
 test interval later than its corresponding training interval. All constructors
 reject empty training/test partitions, overlap, and row IDs outside the input
