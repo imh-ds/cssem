@@ -3,10 +3,10 @@
 Audit date: **2026-09-20**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 is implemented below; the remaining unchecked entries are
-proposed work. Existing defect reproductions and fixes belong in [bugs.md](bugs.md);
-this document covers missing capabilities, incomplete user workflows, and
-methodological extensions.
+**Status:** G1 and G2 are implemented below; the remaining unchecked entries
+are proposed work. Existing defect reproductions and fixes belong in
+[bugs.md](bugs.md); this document covers missing capabilities, incomplete user
+workflows, and methodological extensions.
 
 ## Scope and evidence
 
@@ -59,7 +59,7 @@ correctness concerns.
 | ID | Priority | Status | Build target |
 | --- | --- | --- | --- |
 | G1 | P1 | Implemented | Standard summaries, parameter tables, and R extractors |
-| G2 | P1 | Partial | Measurement parameter and validity assessment |
+| G2 | P1 | Implemented | Measurement parameter and validity assessment |
 | G3 | P1 | Partial | Unified preflight and numerical diagnostics |
 | G4 | P1 | Partial | Explicit, validated inference and reusable resampling |
 | G5 | P1 | Partial | Missing-data policy and sample accounting |
@@ -115,7 +115,7 @@ contracts are covered by [test-summary-extractors.R](../tests/testthat/test-summ
 including real encoder parameters, ledger agreement, unavailable uncertainty,
 prediction labels, and reproducible updates.
 
-### [ ] G2. Measurement parameters and validity assessment
+### [x] G2. Measurement parameters and validity assessment
 
 **Evidence/gap:** [construct_card()](../R/fit.R#L319) reports diagnostics, but
 ordinal discriminations/thresholds and continuous slopes/intercepts/residual
@@ -139,6 +139,26 @@ and distinguish diagnostics from validated decision rules.
 **Acceptance:** parameter tables reconstruct encoder predictions; tests cover
 ordinal, continuous, mixed, reverse-keyed, and manifest blocks; any added metric
 agrees with an independent calculation under its stated assumptions.
+
+**Implemented (2026-09-20):** [measurement_parameters()](../R/measurement.R)
+now exposes ordinal graded-response discriminations and thresholds, continuous
+intercepts, slopes, and residual scales, and an explicit unavailable row for
+manifest passthroughs. Each row carries observed category support or numeric
+ranges, missingness, reverse-key metadata, held-out loss fields, and posterior
+state information. [item_response_curve()](../R/measurement.R) evaluates
+ordinal category probabilities or continuous expected responses on the fitted
+encoder scale, while rejecting manifest items that have no response curve.
+
+[measurement_assessment()](../R/measurement-assessment.R) reports EAP posterior
+reliability, posterior information, and descriptive item-to-state convergence
+for each construct. It also reports pairwise descriptive HTMT-like ratios,
+locked-score correlations, item-score correlations, and a locked-score OLS VIF
+diagnostic. The result records the calculation methods and limitations: AVE is
+explicitly unavailable because this encoder does not estimate CFA loadings or
+communalities; EAP reliability is not alpha or composite reliability; and the
+HTMT-like values are diagnostics without threshold verdicts. Reverse-keyed,
+ordinal, continuous, mixed, manifest, and sparse-support behavior is covered
+by focused tests and an installed-package smoke check.
 
 ### [ ] G3. Unified preflight and numerical diagnostics
 

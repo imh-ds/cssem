@@ -40,7 +40,8 @@
   posterior_sd_p90 <- if (length(sd_values) && any(is.finite(sd_values))) unname(stats::quantile(sd_values, .9, na.rm = TRUE)) else NA_real_
   posterior_information <- if (is.finite(posterior_sd_median)) 1 / (posterior_sd_median^2 + 1e-12) else NA_real_
   item_metrics <- fit$item_metrics
-  item_rows <- if (is.null(item_metrics) || !nrow(item_metrics)) item_metrics else item_metrics[item_metrics$construct == construct & item_metrics$item == item, , drop = FALSE]
+  item_rows <- if (is.null(item_metrics) || !is.data.frame(item_metrics) || !nrow(item_metrics))
+    data.frame() else item_metrics[item_metrics$construct == construct & item_metrics$item == item, , drop = FALSE]
   loss_metric <- if (nrow(item_rows)) paste(unique(item_rows$metric), collapse = "; ") else NA_character_
   held_out_loss <- if (nrow(item_rows) && any(is.finite(item_rows$value))) mean(item_rows$value, na.rm = TRUE) else NA_real_
   list(n = n, observed_n = observed, missing_n = missing, category_support = category_support,

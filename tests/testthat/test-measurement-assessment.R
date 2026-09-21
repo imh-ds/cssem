@@ -39,3 +39,32 @@ test_that("measurement parameters expose scale-aware support and response curves
   expect_equal(continuous_curve$expected_response, encoder$intercept + encoder$slope * c(-1, 0, 1))
   expect_error(item_response_curve(fit, "Manifest", "m"), "manifest")
 })
+
+test_that("measurement assessment reports scale-aware validity diagnostics", {
+  set.seed(33)
+  n <- 100
+  z <- rnorm(n)
+  data <- data.frame(
+    a1 = pmin(pmax(round(z + rnorm(n)) + 3, 1), 5),
+    a2 = pmin(pmax(round(z + rnorm(n)) + 3, 1), 5),
+    a3 = pmin(pmax(round(z + rnorm(n)) + 3, 1), 5),
+    b1 = pmin(pmax(round(.5 * z + rnorm(n)) + 3, 1), 5),
+    b2 = pmin(pmax(round(.5 * z + rnorm(n)) + 3, 1), 5),
+    b3 = pmin(pmax(round(.5 * z + rnorm(n)) + 3, 1), 5)
+  )
+  fit <- fit_states(specify_measurement(
+    A = ordinal("a1", "a2", "a3"), B = ordinal("b1", "b2", "b3"), folds = 3
+  ), data, seed = 5, iterations = 3, diagnostics = FALSE)
+  assessment <- measurement_assessment(fit)
+
+  expect_s3_class(assessment, "cssem_measurement_assessment")
+  expect_true(all(c("construct", "eap_reliability", "descriptive_convergent_r2",
+    "ave", "ave_reason") %in% names(assessment$constructs)))
+  expect_true(all(is.na(assessment$constructs$ave)))
+  expect_true(all(grepl("not defined", assessment$constructs$ave_reason, fixed = TRUE)))
+  expect_true(all(c("construct_a", "construct_b", "htmt", "method", "interpretation") %in% names(assessment$validity)))
+  expect_true(any(assessment$validity$method == "descriptive_spearman_item_correlations"))
+  expect_true(all(grepl("descriptive", assessment$validity$interpretation, fixed = TRUE)))
+  expect_true(is.data.frame(assessment$item_score_correlations))
+  expect_true(is.data.frame(assessment$collinearity))
+})
