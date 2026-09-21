@@ -66,7 +66,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
   if (length(seed) != 1L || !is.numeric(seed) || !is.finite(seed))
     stop("seed must be a finite numeric scalar.", call. = FALSE)
   .preserve_seed(); set.seed(seed)
-  source_group <- NULL; source_time <- NULL
+  source_group <- NULL; source_time <- NULL; group_values <- NULL
   if (method == "group") {
     if (is.null(group)) stop("group is required for method = \"group\".", call. = FALSE)
     group_values <- .split_values(data, group, "group")
@@ -75,6 +75,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
     group_assignment <- sample(rep(seq_len(folds), length.out = length(groups)))
     assignment <- group_assignment[match(group_values, groups)]
     source_group <- if (length(group) == 1L && is.character(group)) group else "<vector>"
+    group_values <- group_values
   } else if (method == "time") {
     if (is.null(time)) stop("time is required for method = \"time\".", call. = FALSE)
     time_values <- .split_values(data, time, "time")
@@ -98,7 +99,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
     stringsAsFactors = FALSE)
   structure(list(method = method, folds = folds, seed = seed,
     assignment = assignment, row_ids = seq_len(n), outer = outer,
-    provenance = provenance), class = c("cssem_splits", "list"))
+    provenance = provenance, group_values = group_values), class = c("cssem_splits", "list"))
 }
 
 .resolve_split_assignment <- function(split, data, default_folds) {
@@ -116,6 +117,7 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
       group = NA_character_, time = NA_character_, stringsAsFactors = FALSE))
   }
   if (!is.numeric(assignment) || length(assignment) != n || any(!is.finite(assignment)) ||
+      any(abs(assignment) > .Machine$integer.max) ||
       any(assignment != as.integer(assignment)) || any(assignment < 1L))
     stop("split must provide one positive integer assignment per row.", call. = FALSE)
   assignment <- as.integer(assignment)

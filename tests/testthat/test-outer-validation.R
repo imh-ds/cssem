@@ -25,6 +25,10 @@ test_that("group and time outer partitions preserve their constraints", {
   expect_true(all(vapply(seq_len(nrow(timed$outer)), function(i) {
     max(generated$data$time[timed$outer$train_ids[[i]]]) < min(generated$data$time[timed$outer$test_ids[[i]]])
   }, logical(1))))
+  vector_group <- make_splits(generated$data, method = "group", group = generated$data$entity,
+    folds = 3, seed = 4)
+  vector_group$group_values <- NULL
+  expect_error(validate_outer(generated$model, generated$structure, generated$data, vector_group), "cannot be verified")
 })
 
 test_that("failed outer partitions are retained", {
@@ -69,4 +73,27 @@ test_that("outer validation reports the G7 outcome-column limitation", {
   splits <- make_splits(generated$data, method = "random", folds = 3, seed = 8)
   incomplete <- generated$data[, setdiff(names(generated$data), "loyalty1"), drop = FALSE]
   expect_error(validate_outer(generated$model, generated$structure, incomplete, splits), "G7 limitation")
+})
+
+test_that("outer validation rejects missing predictor columns before fitting", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 28, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  splits <- make_splits(generated$data, method = "random", folds = 3, seed = 8)
+  incomplete <- generated$data[, setdiff(names(generated$data), "trust1"), drop = FALSE]
+  expect_error(validate_outer(generated$model, generated$structure, incomplete, splits), "before outer fitting")
+})
+
+test_that("outer metrics exclude prior-only held-out states", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 27, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  splits <- make_splits(generated$data, method = "random", folds = 3, seed = 9)
+  first_test <- splits$outer$test_ids[[1L]]
+  generated$data[first_test, c("loyalty1", "loyalty2", "loyalty3")] <- NA_integer_
+  result <- validate_outer(generated$model, generated$structure, generated$data, splits,
+    iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1L, shadow_scope = "temporal"))
+  loyalty_metric <- result$test_metrics[result$test_metrics$outer_id == 1L &
+    result$test_metrics$outcome == "Loyalty", , drop = FALSE]
+  expect_equal(loyalty_metric$n, 0L)
+  expect_false(any(result$predictions$outer_id == 1L & result$predictions$outcome == "Loyalty"))
 })

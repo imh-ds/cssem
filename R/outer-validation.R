@@ -80,7 +80,7 @@
 
 .outer_validate_ids <- function(value, label, n) {
   if (!is.numeric(value) || !length(value) || any(!is.finite(value)) ||
-      any(value != as.integer(value)))
+      any(abs(value) > .Machine$integer.max) || any(value != as.integer(value)))
     stop(sprintf("Outer %s IDs must be a non-empty integer vector.", label), call. = FALSE)
   value <- as.integer(value)
   if (any(value < 1L | value > n) || anyDuplicated(value))
@@ -102,8 +102,10 @@
   }
   provenance <- splits$provenance
   source_group <- if (nrow(provenance) && "group" %in% names(provenance)) as.character(provenance$group[[1L]]) else NA_character_
-  if (splits$method == "group" && !is.na(source_group) && source_group %in% names(data)) {
-    groups <- data[[source_group]]
+  groups <- if (splits$method == "group" && !is.na(source_group) && source_group %in% names(data)) data[[source_group]] else splits$group_values
+  if (splits$method == "group" && (is.null(groups) || length(groups) != n))
+    stop("Group outer partitions cannot be verified because their group labels are unavailable.", call. = FALSE)
+  if (splits$method == "group") {
     for (i in seq_along(partitions)) if (any(groups[partitions[[i]]$test_ids] %in% groups[partitions[[i]]$train_ids]))
       stop(sprintf("Outer group partition %s places one group in both training and test data.", splits$outer$outer_id[[i]]), call. = FALSE)
   }
@@ -168,12 +170,21 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
     stop("splits must include outer train/test partitions.", call. = FALSE)
   partition_ids <- .outer_validate_partitions(splits, data)
   indicator_order <- unlist(lapply(model$constructs, `[[`, "indicators"), use.names = FALSE)
+  structure_nodes <- unique(c(names(structure$effects), unlist(lapply(structure$effects,
+    function(edges) unlist(lapply(names(edges), .predictor_constructs), use.names = FALSE)), use.names = FALSE)))
+  missing_nodes <- setdiff(structure_nodes, names(model$constructs))
+  if (length(missing_nodes))
+    stop(sprintf("Structural declarations use undeclared model construct(s): %s.", paste(missing_nodes, collapse = ", ")), call. = FALSE)
   outcome_indicators <- unique(unlist(lapply(names(structure$effects), function(outcome)
     model$constructs[[outcome]]$indicators), use.names = FALSE))
   missing_outcome_columns <- setdiff(outcome_indicators, names(data))
   if (length(missing_outcome_columns))
     stop(paste0("G7 limitation: predictor-only prospective scoring is unsupported; held-out data are missing declared outcome indicator column(s): ",
       paste(missing_outcome_columns, collapse = ", "), "."), call. = FALSE)
+  missing_model_columns <- setdiff(indicator_order, names(data))
+  if (length(missing_model_columns))
+    stop(sprintf("Data is missing declared model indicator column(s) before outer fitting: %s.",
+      paste(missing_model_columns, collapse = ", ")), call. = FALSE)
   prediction_rows <- list(); test_metric_rows <- list(); selection_rows <- list()
   provenance_rows <- list(); failure_rows <- list()
   for (i in seq_len(nrow(splits$outer))) {
@@ -221,15 +232,21 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
         shape_model <- association$full_models[[outcome]]
         predicted <- .predict_shape_model(shape_model, test_scores)
         observed <- test_scores[[outcome]]
-        metric <- .outer_prediction_metrics(observed, predicted)
+        required_constructs <- unique(c(outcome, unlist(lapply(names(shape_model$shapes), .predictor_constructs), use.names = FALSE)))
+        observed_construct <- vapply(required_constructs, function(construct) {
+          indicators <- association$fit$model$constructs[[construct]]$indicators
+          rowSums(!is.na(held_out$data[, indicators, drop = FALSE])) > 0
+        }, logical(nrow(held_out$data)))
+        valid_rows <- if (is.matrix(observed_construct)) apply(observed_construct, 1L, all) else observed_construct
+        metric <- .outer_prediction_metrics(observed[valid_rows], predicted[valid_rows])
         metrics_for_partition[[length(metrics_for_partition) + 1L]] <- data.frame(
           outer_id = outer_id, outcome = outcome, n = as.integer(metric[["n"]]),
           rmse = unname(metric[["rmse"]]), mae = unname(metric[["mae"]]),
           r_squared = unname(metric[["r_squared"]]), metric_scope = "outer_test",
           stringsAsFactors = FALSE)
-        prediction_for_partition[[length(prediction_for_partition) + 1L]] <- data.frame(
-          outer_id = outer_id, row_id = held_out$ids, outcome = outcome,
-          observed = as.numeric(observed), predicted = as.numeric(predicted),
+        if (any(valid_rows)) prediction_for_partition[[length(prediction_for_partition) + 1L]] <- data.frame(
+          outer_id = outer_id, row_id = held_out$ids[valid_rows], outcome = outcome,
+          observed = as.numeric(observed[valid_rows]), predicted = as.numeric(predicted[valid_rows]),
           metric_scope = "outer_test", stringsAsFactors = FALSE)
       }
       if (length(metrics_for_partition)) test_metric_rows[[length(test_metric_rows) + 1L]] <- do.call(rbind, metrics_for_partition)

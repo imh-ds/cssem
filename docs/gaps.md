@@ -355,6 +355,9 @@ partition ID, stage, and message so one failure cannot erase the remaining
 evaluation evidence. Missing-data policies are explicit for both measurement
 and structural stages, and held-out data without declared indicator columns
 reports the existing G7 predictor-only limitation.
+Prior-only held-out outcome or predictor states are excluded from outer error
+metrics instead of being evaluated as finite prior predictions, and missing
+model indicators are rejected before partition fitting begins.
 
 Random and grouped outer evaluation should use at least three global folds so
 each training partition retains at least two measurement folds. With two folds,
