@@ -38,6 +38,7 @@ Thumbs.db
 # Local agent/runtime state
 .agents/
 .codex/
+.superpowers/
 
 # Additional files
 ideation.md
