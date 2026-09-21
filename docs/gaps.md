@@ -1,10 +1,10 @@
 # SEM capability audit and proposed build backlog
 
-Audit date: **2026-09-20**. Package: **cssem 0.5.0**, baseline commit
+Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 through G3 are implemented below; the remaining unchecked
-entries are proposed work. Existing defect reproductions and fixes belong in
+**Status:** G1 through G5 have implemented core workflows below; the remaining
+unchecked entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -62,7 +62,7 @@ correctness concerns.
 | G2 | P1 | Implemented | Measurement parameter and validity assessment |
 | G3 | P1 | Implemented | Unified preflight and numerical diagnostics |
 | G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling |
-| G5 | P1 | Partial | Missing-data policy and sample accounting |
+| G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting |
 | G6 | P1 | Partial | User-defined measurement splits and outer validation |
 | G7 | P1 | Partial | Structural prediction for new observations |
 | G8 | P2 | Missing | Group comparison and measurement invariance |
@@ -263,7 +263,7 @@ silently disappear; low/high reliability and shape-selection simulations report
 coverage, bias, and failure rates. Do not treat experimental plausible-value
 draws as calibrated confidence intervals. Fix relevant A1/A8 defects first.
 
-### [ ] G5. Missing-data policy and effective-sample accounting
+### [x] G5. Missing-data policy and effective-sample accounting
 
 **Evidence/gap:** [.eap_posterior()](../R/encoder.R#L118) omits missing item
 likelihood contributions, so measurement already handles partial responses.
@@ -288,6 +288,35 @@ solution without establishing that equivalence.
 **Acceptance:** trace every input row through all stages; cover partial/all-item
 missingness and missing manifest variables; simulate MCAR/MAR conditions and
 state what remains unsupported. Align comparator disclosures with historical H3.
+
+**Implemented (2026-09-21, core workflow):** [fit_states()](../R/fit.R) now
+accepts explicit `missing_policy = "partial"`, `"listwise"`, or `"error"`.
+The default preserves item-level partial-response likelihood contributions;
+listwise fitting records the original row IDs; and error mode reports the
+number of offending rows before fitting. Rows with no observed indicators are
+labelled `prior_only` and are excluded from the measurement effective-sample
+count rather than being presented as observed evidence. A preflight helper
+argument collision that previously crashed row-level warnings was corrected so
+these diagnostics are returned reliably.
+
+[sample_accounting()](../R/missing-data.R) now reports row IDs, row names,
+observed-item counts, statuses, reasons, and per-construct effective counts for
+measurement. [associate()](../R/structure.R) accepts `missing_policy =
+"complete"` or `"error"` for locked scores, keeps the original row IDs, and
+reports per-outcome structural exclusions. Causal, mediation, and moderation
+results retain their source association, so the same ledger can be queried
+through derived effect objects and traced into the causal stage. Reasons
+distinguish measurement exclusion from missing structural scores; unsupported
+rows are never silently treated as complete.
+
+The focused [missing-data tests](../tests/testthat/test-missing-data.R) cover
+partial and all-item indicator missingness, missing manifest covariates,
+listwise retention, explicit errors, structural complete-case accounting, and
+causal-stage propagation. The workflow remains **Partial** for methodology:
+there is no multiple-imputation adapter or MCAR/MAR simulation evidence yet,
+and independent item-block likelihoods are still not advertised as joint
+lavaan-style FIML. Prior-only rows remain explicitly identified rather than
+imputed or pooled into observed-information counts.
 
 ### [ ] G6. Measurement split control and honest outer validation
 
