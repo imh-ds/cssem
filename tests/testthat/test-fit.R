@@ -104,6 +104,26 @@ test_that("manifest() constructs pass through standardized (or raw) with asserte
   expect_equal(range(f_raw$locked_scores$Age), range(d$age))
 })
 
+test_that("continuous and manifest inputs preserve numeric labels", {
+  # Regression: as.numeric(factor(...)) used internal level positions, so
+  # numeric labels such as 10, 20, and 100 became 1, 2, and 3.
+  ordered_labels <- factor(c("10", "20", "100"), levels = c("10", "20", "100"))
+  reordered_labels <- factor(c("100", "10", "20"), levels = c("100", "10", "20"))
+  expect_equal(.prepare_item(ordered_labels, "continuous", 1)$y, c(10, 20, 100))
+  expect_equal(.prepare_item(reordered_labels, "continuous", 1)$y, c(100, 10, 20))
+  expect_equal(.prepare_item(c(10, 20, 100), "continuous", 1)$y, c(10, 20, 100))
+  expect_error(.prepare_item(factor(c("low", "high")), "continuous", 1), "numeric")
+  expect_error(.prepare_for_encoder(c("10", "bad"), "continuous", 1, NULL), "numeric")
+  expect_error(.prepare_item(c(10, Inf), "continuous", 1), "finite")
+
+  manifest_spec <- list(indicators = "age", scales = "manifest", keys = 1L,
+    manifest = TRUE, reliability = 1, standardize = FALSE)
+  encoder <- .fit_encoder(data.frame(age = ordered_labels), manifest_spec)
+  scored <- .predict_encoder(encoder,
+    data.frame(age = factor(c("100", "10"), levels = c("100", "10"))))
+  expect_equal(scored, c(100, 10))
+})
+
 test_that("score_states() returns scores on the locked_scores scale", {
   # Regression: score_states() returned raw posterior means (SD ~ sqrt(reliability))
   # while locked scores are standardized, so coefficients estimated on locked

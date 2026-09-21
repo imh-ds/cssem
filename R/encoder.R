@@ -32,9 +32,23 @@
   numeric_x
 }
 
+.as_numeric_values <- function(x, scale) {
+  if (is.factor(x)) x <- as.character(x)
+  numeric_x <- tryCatch(suppressWarnings(as.numeric(x)),
+    error = function(e) stop(sprintf("%s inputs must be numeric values.", scale), call. = FALSE))
+  unparsed <- if (is.character(x)) is.na(numeric_x) & !is.na(x) else rep(FALSE, length(numeric_x))
+  if (any(unparsed))
+    stop(sprintf("%s inputs must be numeric values; found \"%s\".", scale,
+      x[which(unparsed)[1L]]), call. = FALSE)
+  non_finite <- !is.na(numeric_x) & !is.finite(numeric_x)
+  if (any(non_finite))
+    stop(sprintf("%s inputs must be finite numeric values.", scale), call. = FALSE)
+  numeric_x
+}
+
 .prepare_item <- function(x, scale, key, levels = NULL) {
   if (scale %in% c("continuous", "manifest")) {
-    y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
+    y <- .as_numeric_values(x, scale); if (key < 0) y <- -y
     return(list(y = y, levels = NULL))
   }
   x <- .as_ordinal_codes(x)
@@ -58,7 +72,7 @@
 
 .prepare_for_encoder <- function(x, scale, key, levels) {
   if (scale %in% c("continuous", "manifest")) {
-    y <- suppressWarnings(as.numeric(x)); if (key < 0) y <- -y
+    y <- .as_numeric_values(x, scale); if (key < 0) y <- -y
     return(y)
   }
   x <- .as_ordinal_codes(x)
@@ -204,7 +218,7 @@
 
 .fit_encoder <- function(data, spec, iterations = 6L, category_levels = NULL) {
   if (identical(spec$scales[[1L]], "manifest")) {
-    y <- suppressWarnings(as.numeric(data[[spec$indicators]])); if (spec$keys[[1L]] < 0) y <- -y
+    y <- .as_numeric_values(data[[spec$indicators]], "manifest"); if (spec$keys[[1L]] < 0) y <- -y
     standardize <- isTRUE(spec$standardize)
     center <- if (standardize) mean(y, na.rm = TRUE) else 0
     sc <- if (standardize) .safe_scale(y) else 1
@@ -227,7 +241,7 @@
 .predict_encoder <- function(encoder, data) {
   if (!identical(names(data), encoder$indicators)) stop("Scoring data columns must exactly match the declared indicator order.", call. = FALSE)
   if (identical(encoder$type, "manifest")) {
-    y <- suppressWarnings(as.numeric(data[[encoder$indicators]])); if (encoder$key < 0) y <- -y
+    y <- .as_numeric_values(data[[encoder$indicators]], "manifest"); if (encoder$key < 0) y <- -y
     return((y - encoder$center) / encoder$scale)
   }
   Y <- do.call(cbind, Map(.prepare_for_encoder, data, encoder$scales, encoder$keys, encoder$levels))
