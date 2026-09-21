@@ -60,7 +60,8 @@ available.
 
 ### Outer validation
 
-Add `validate_outer(model, structure, data, splits, ..., missing_policy =
+Add `validate_outer(model, structure, data, splits, ..., 
+measurement_missing_policy = "partial", structural_missing_policy =
 "complete")`. The runner accepts a `cssem_splits` object with outer
 partitions and, for each partition:
 
