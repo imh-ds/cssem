@@ -235,7 +235,7 @@ print.cssem_measurement_invariance <- function(x, ...) {
   estimates <- .group_shape_effects(scores, labels, outcome, stats::setNames(shape, predictor), c(reference, target))
   left <- estimates[estimates$group == target, , drop = FALSE]; right <- estimates[estimates$group == reference, , drop = FALSE]
   available <- isTRUE(left$available[[1L]]) && isTRUE(right$available[[1L]])
-  c(estimate = if (available) left$estimate[[1L]] - right$estimate[[1L]] else NA_real_, available = available)
+  list(estimate = if (available) left$estimate[[1L]] - right$estimate[[1L]] else NA_real_, available = available)
 }
 
 #' Compare declared structural paths between groups

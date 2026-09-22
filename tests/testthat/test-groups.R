@@ -67,6 +67,8 @@ test_that("group structural comparison returns reproducible path contrasts", {
   expect_equal(first$contrasts, second$contrasts)
   expect_true(any(first$contrasts$outcome == "B" & first$contrasts$predictor == "A"))
   expect_true(all(first$contrasts$reference == "A"))
+  expect_true(any(first$contrasts$available))
+  expect_true(any(is.finite(first$contrasts$difference)))
   expect_true(all(c("null_low", "null_high", "n_group", "n_reference") %in% names(first$contrasts)))
   expect_true(all(first$permutation_settings$permutations == 9L))
 })
