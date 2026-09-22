@@ -61,7 +61,10 @@ structural_outcome <- function(family = c("gaussian", "binomial", "ordinal"),
                                link = NULL, levels = NULL) {
   if (!is.character(family) || length(family) != 1L || is.na(family))
     stop("family must be one of 'gaussian', 'binomial', or 'ordinal'.", call. = FALSE)
-  family <- match.arg(family, c("gaussian", "binomial", "ordinal"))
+  allowed <- c("gaussian", "binomial", "ordinal")
+  if (!family %in% allowed)
+    stop("family must be one of 'gaussian', 'binomial', or 'ordinal'.", call. = FALSE)
+  family <- match.arg(family, allowed)
   expected_link <- if (family == "gaussian") "identity" else "logit"
   if (is.null(link)) link <- expected_link
   if (!is.character(link) || length(link) != 1L || !identical(link, expected_link))
@@ -977,7 +980,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     if (!is.null(constraints) && isTRUE(constraints$active))
       stop("Constraints are not supported for categorical structural outcomes; use a Gaussian response or omit constraints.", call. = FALSE)
     if (respondent_weighting != "none" || eiv_bootstrap > 0L || !is.null(reliability))
-      stop("Categorical structural outcomes do not support reliability/EIV correction or information weighting.", call. = FALSE)
+      stop("categorical structural outcomes do not support reliability/EIV correction or information weighting.", call. = FALSE)
     for (outcome in categorical_outcomes) {
       declared_shapes <- if (is.null(fixed_shapes)) structure$effects[[outcome]] else fixed_shapes[[outcome]]
       if (any(vapply(declared_shapes, function(x) !identical(if (inherits(x, "cssem_effect")) x$shape else x, "linear"), logical(1))) ||

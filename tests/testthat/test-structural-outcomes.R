@@ -12,7 +12,7 @@ test_that("structural response families are explicit and validated", {
     families = list(Y = binary_outcome()),
     order = c("X", "Y"))
   expect_equal(specification$response_families$Y$family, "binomial")
-  expect_equal(specification$response_families$X$family, "gaussian")
+  expect_false("X" %in% names(specification$response_families))
   expect_error(structural_outcome("nominal"), "family")
   expect_error(structural_outcome("binomial", link = "probit"), "link")
   expect_error(specify_structure(Y ~ X, families = list(X = binary_outcome())), "outcome")
@@ -33,6 +33,9 @@ test_that("binary structural outcomes use probability-scale diagnostics", {
   expect_true(all(association$predictions$Y$theory >= 0 & association$predictions$Y$theory <= 1))
   expect_true(all(c("log_loss", "brier", "accuracy") %in% names(association$candidate_metrics)))
   expect_true(all(is.finite(association$candidate_metrics$log_loss)))
+  contrast <- marginal_contrast(association, "Y", "X", c(-1, 1))
+  expect_s3_class(contrast, "cssem_marginal_contrast")
+  expect_true(all(is.finite(contrast$contrast$probability_contrast)))
   expect_error(associate(fit, specification, reliability = c(X = .8)), "categorical")
 })
 
