@@ -113,6 +113,15 @@
 
 .contrast_evaluate_table <- function(table, spec) {
   lookup <- .contrast_lookup(table)
+  if ("naive_parameter_id" %in% names(table)) for (i in seq_len(nrow(table))) {
+    naive <- as.character(table$naive_parameter_id[[i]])
+    corrected <- as.character(table$corrected_parameter_id[[i]])
+    if (!is.na(naive) && nzchar(naive)) {
+      base <- sub(":naive$", "", naive)
+      selected <- if (spec$basis == "naive") naive else if (spec$basis == "corrected") corrected else as.character(table$parameter_id[[i]])
+      if (!is.na(selected) && nzchar(selected) && selected %in% names(lookup)) lookup[[base]] <- lookup[[selected]]
+    }
+  }
   referenced <- unique(unlist(lapply(spec$definitions, `[[`, "references"), use.names = FALSE))
   unknown <- setdiff(referenced, names(lookup))
   if (length(unknown)) stop(sprintf("Unknown parameter_id(s): %s.", paste(unknown, collapse = ", ")), call. = FALSE)

@@ -35,6 +35,8 @@ test_that("contrast specifications evaluate safe arithmetic over stable IDs", {
   expect_s3_class(result, "cssem_contrast")
   expect_equal(result$estimates[["double"]], 2 * estimate)
   expect_equal(result$estimates[["squared"]], estimate^2)
+  base <- contrast(association, contrast_spec(list(path = "edge:B~A"), basis = "naive"))
+  expect_equal(base$estimates[["path"]], estimate)
 })
 
 test_that("contrasts use one joint bootstrap draw for every referenced term", {
