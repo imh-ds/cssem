@@ -73,3 +73,46 @@ test_that("bootstrap refits remap explicit measurement splits", {
   updated <- update(listwise, iterations = 1, diagnostics = FALSE)
   expect_equal(nrow(updated$data), nrow(listwise$data))
 })
+
+test_that("cluster bootstrap samples complete unequal units and retains draw IDs", {
+  data <- simulate_states(n = 54, seed = 907, missing = 0)
+  data$subject <- rep(seq_len(12), times = c(1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 18))
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  fit <- fit_states(model, data, cluster = "subject", iterations = 1L, diagnostics = FALSE)
+  statistic <- function(context) c(rows = nrow(context$data), units = length(unique(context$cluster_ids)))
+
+  set.seed(9907)
+  before <- .Random.seed
+  boot <- bootstrap_model(fit, statistic, reps = 6L, seed = 37L,
+    resample = "cluster", cluster = "subject")
+  after <- .Random.seed
+
+  expect_identical(before, after)
+  expect_identical(boot$resample, "cluster")
+  expect_equal(boot$original_unit_n, 12L)
+  expect_true(all(boot$replicates$resampled_unit_n == 12L))
+  expect_true(all(boot$replicates$resampled_row_n == boot$draws[, "rows"]))
+  expect_true(all(vapply(boot$replicates$draw_unit_ids, function(x) length(x) == 12L, logical(1))))
+  expect_true(all(vapply(seq_len(nrow(boot$replicates)), function(i)
+    length(boot$replicates$row_draw_ids[[i]]) == boot$replicates$resampled_row_n[[i]], logical(1))))
+  expect_true(any(vapply(boot$replicates$source_unit_ids, function(x) anyDuplicated(x) > 0L, logical(1))))
+  expect_true(all(vapply(boot$replicates$source_unit_ids, function(x) length(x) == 12L, logical(1))))
+  expect_true(all(boot$draws[, "units"] <= boot$replicates$resampled_unit_n))
+})
+
+test_that("cluster bootstrap is deterministic and supports measurement refits", {
+  data <- simulate_states(n = 48, seed = 908, missing = 0)
+  data$subject <- rep(seq_len(16), each = 3)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  fit <- fit_states(model, data, cluster = data$subject, iterations = 1L, diagnostics = FALSE)
+  statistic <- function(context) c(mean_A = mean(context$scores$A),
+    cluster_mode = as.numeric(identical(context$refit, "measurement")))
+  first <- bootstrap_model(fit, statistic, reps = 4L, refit = "measurement",
+    resample = "cluster", seed = 38L)
+  second <- bootstrap_model(fit, statistic, reps = 4L, refit = "measurement",
+    resample = "cluster", seed = 38L)
+  expect_equal(first$draws, second$draws)
+  expect_equal(first$replicates, second$replicates)
+  expect_true(all(first$replicates$status == "success"))
+  expect_true(any(grepl("cluster_resampling_only", capture.output(print(first)), fixed = TRUE)))
+})
