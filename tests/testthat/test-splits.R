@@ -15,8 +15,22 @@ test_that("group splits keep every group in one partition", {
   splits <- make_splits(data, method = "group", group = "group", folds = 4, seed = 3)
   group_fold <- tapply(splits$assignment, data$group, function(x) length(unique(x)))
   expect_true(all(group_fold == 1L))
+  expect_equal(splits$unit_n, 8L)
+  expect_true(all(splits$outer$train_unit_n > 0L & splits$outer$test_unit_n > 0L))
   expect_error(make_splits(transform(data, group = NA_character_),
     method = "group", group = "group"), "missing")
+})
+
+test_that("cluster metadata creates grouped measurement folds", {
+  data <- simulate_states(n = 60, seed = 904, missing = 0)
+  data$subject <- rep(seq_len(20), each = 3)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  fit <- fit_states(model, data, cluster = data$subject, iterations = 1L,
+    diagnostics = FALSE)
+
+  fold_by_cluster <- tapply(fit$folds, data$subject, function(x) length(unique(x)))
+  expect_true(all(fold_by_cluster == 1L))
+  expect_identical(fit$measurement_split$method, "group")
 })
 
 test_that("time splits are forward-only", {
@@ -64,4 +78,16 @@ test_that("explicit assignments follow listwise row filtering", {
   expect_equal(length(fit$measurement_split$assignment), nrow(fit$data))
   expect_output(print(fit$measurement_split), "CS-SEM splits")
   expect_error(fit_states(model, data, split = rep(1:2, length.out = 10), iterations = 1, diagnostics = FALSE), "split")
+})
+
+test_that("explicit measurement assignments reject cluster leakage", {
+  data <- simulate_states(n = 60, seed = 905, missing = 0)
+  data$subject <- rep(seq_len(20), each = 3)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  leaking <- rep(1:3, length.out = nrow(data))
+  expect_error(
+    fit_states(model, data, cluster = data$subject, split = leaking,
+      iterations = 1L, diagnostics = FALSE),
+    "cluster"
+  )
 })

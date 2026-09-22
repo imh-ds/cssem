@@ -31,7 +31,7 @@
     r_squared = if (sst > 0) 1 - sum(residual^2) / sst else NA_real_)
 }
 
-.outer_training_split <- function(splits, assignment, train_ids) {
+.outer_training_split <- function(splits, assignment, train_ids, cluster_ids = NULL) {
   source_assignment <- as.integer(assignment[train_ids])
   levels <- sort(unique(source_assignment))
   if (length(levels) < 2L)
@@ -41,7 +41,10 @@
   provenance$folds <- length(levels)
   structure(list(method = splits$method, folds = length(levels), seed = splits$seed,
     assignment = as.integer(local_assignment), row_ids = seq_along(train_ids),
-    provenance = provenance), class = c("cssem_splits", "list"))
+    provenance = provenance, cluster_values = if (is.null(cluster_ids)) NULL else cluster_ids[train_ids],
+    unit_n = if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids[train_ids])),
+    unit_summary = if (is.null(cluster_ids)) data.frame() else .cluster_summary(cluster_ids[train_ids])),
+    class = c("cssem_splits", "list"))
 }
 
 .outer_measurement_missing <- function(data, model) {
@@ -70,9 +73,11 @@
 }
 
 .outer_provenance_row <- function(outer_id, splits, train_ids, test_ids, seed, status,
+                                  train_unit_n = NA_integer_, test_unit_n = NA_integer_,
                                   selected_shapes = NA_character_, status_detail = "") {
   row <- data.frame(outer_id = as.integer(outer_id), method = as.character(splits$method),
     seed = as.numeric(seed), train_n = length(train_ids), test_n = length(test_ids),
+    train_unit_n = as.integer(train_unit_n), test_unit_n = as.integer(test_unit_n),
     status = status, status_detail = status_detail, selected_shapes = selected_shapes,
     stringsAsFactors = FALSE)
   row$train_ids <- list(as.integer(train_ids)); row$test_ids <- list(as.integer(test_ids))
@@ -89,7 +94,7 @@
   value
 }
 
-.outer_validate_partitions <- function(splits, data) {
+.outer_validate_partitions <- function(splits, data, cluster_ids = NULL) {
   if (!nrow(splits$outer)) stop("splits must contain at least one outer partition.", call. = FALSE)
   n <- nrow(data); partitions <- vector("list", nrow(splits$outer))
   for (i in seq_len(nrow(splits$outer))) {
@@ -99,7 +104,18 @@
     if (any(train %in% test)) stop(sprintf("Outer partition %s has overlapping training and test IDs.", row$outer_id[[1L]]), call. = FALSE)
     if (splits$method %in% c("random", "group") && !identical(sort(c(train, test)), seq_len(n)))
       stop(sprintf("Outer partition %s must cover every row exactly once.", row$outer_id[[1L]]), call. = FALSE)
-    partitions[[i]] <- list(train_ids = train, test_ids = test)
+    partitions[[i]] <- list(train_ids = train, test_ids = test,
+      train_unit_n = if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids[train])),
+      test_unit_n = if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids[test])))
+  }
+  if (!is.null(cluster_ids)) {
+    .validate_cluster_labels(cluster_ids, n, "cluster")
+    for (i in seq_along(partitions)) {
+      train <- partitions[[i]]$train_ids; test <- partitions[[i]]$test_ids
+      if (any(cluster_ids[train] %in% cluster_ids[test]))
+        stop(sprintf("Outer partition %s places one cluster in both training and test data.",
+          splits$outer$outer_id[[i]]), call. = FALSE)
+    }
   }
   provenance <- splits$provenance
   source_group <- if (nrow(provenance) && "group" %in% names(provenance)) as.character(provenance$group[[1L]]) else NA_character_
@@ -158,7 +174,8 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
                            quadrature = seq(-4, 4, length.out = 31L),
                            diagnostics = FALSE, structural_args = list(),
                            measurement_missing_policy = c("partial", "listwise", "error"),
-                           structural_missing_policy = c("complete", "error")) {
+                           structural_missing_policy = c("complete", "error"),
+                           cluster = NULL, design = NULL) {
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -171,12 +188,16 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
   if (length(forbidden)) stop(sprintf("structural_args cannot override: %s.", paste(forbidden, collapse = ", ")), call. = FALSE)
   measurement_missing_policy <- match.arg(measurement_missing_policy)
   structural_missing_policy <- match.arg(structural_missing_policy)
+  .reject_unsupported_design_fields(design)
   if (length(seed) != 1L || !is.numeric(seed) || !is.finite(seed))
     stop("seed must be a finite numeric scalar.", call. = FALSE)
   resolved <- .resolve_split_assignment(splits, data, model$folds)
+  cluster_ids <- .resolve_cluster_ids(cluster, data)
+  if (is.null(cluster_ids) && identical(splits$method, "group")) cluster_ids <- splits$group_values
+  if (!is.null(cluster_ids)) .validate_cluster_labels(cluster_ids, nrow(data), "cluster")
   if (is.null(splits$outer) || !all(c("outer_id", "train_ids", "test_ids") %in% names(splits$outer)))
     stop("splits must include outer train/test partitions.", call. = FALSE)
-  partition_ids <- .outer_validate_partitions(splits, data)
+  partition_ids <- .outer_validate_partitions(splits, data, cluster_ids = cluster_ids)
   indicator_order <- unlist(lapply(model$constructs, `[[`, "indicators"), use.names = FALSE)
   structure_nodes <- unique(c(names(structure$effects), unlist(lapply(structure$effects,
     function(edges) unlist(lapply(names(edges), .predictor_constructs), use.names = FALSE)), use.names = FALSE)))
@@ -206,14 +227,16 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
     status_detail <- ""
     status <- "failed"
     tryCatch({
-      train_split <- .outer_training_split(splits, resolved$assignment, train_ids)
+      train_split <- .outer_training_split(splits, resolved$assignment, train_ids, cluster_ids = cluster_ids)
       training_model <- model
       training_model$folds <- train_split$folds
       train_data <- data[train_ids, , drop = FALSE]
       fit <- fit_states(training_model, train_data, seed = partition_seed,
         iterations = iterations, tolerance = tolerance, quadrature = quadrature,
         diagnostics = diagnostics, missing_policy = measurement_missing_policy,
-        split = train_split)
+        split = train_split,
+        cluster = if (is.null(cluster_ids)) NULL else cluster_ids[train_ids],
+        design = design)
 
       stage <- "structural_selection"
       association_args <- structural_args
@@ -269,7 +292,10 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
         stage = stage, message = conditionMessage(condition), stringsAsFactors = FALSE)
     })
     provenance_rows[[length(provenance_rows) + 1L]] <- .outer_provenance_row(
-      outer_id, splits, train_ids, test_ids, partition_seed, status, selected_shapes, status_detail)
+      outer_id, splits, train_ids, test_ids, partition_seed, status,
+      train_unit_n = partition_ids[[i]]$train_unit_n,
+      test_unit_n = partition_ids[[i]]$test_unit_n,
+      selected_shapes = selected_shapes, status_detail = status_detail)
   }
   failures <- if (length(failure_rows)) do.call(rbind, failure_rows) else .outer_empty_failures()
   predictions <- if (length(prediction_rows)) do.call(rbind, prediction_rows) else .outer_empty_predictions()
@@ -283,7 +309,8 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
     settings = list(seed = seed, iterations = iterations, tolerance = tolerance,
       quadrature = quadrature, diagnostics = diagnostics, structural_args = structural_args,
       measurement_missing_policy = measurement_missing_policy,
-      structural_missing_policy = structural_missing_policy, splits = splits),
+      structural_missing_policy = structural_missing_policy, splits = splits,
+      cluster = cluster, design = design),
     status = status), class = c("cssem_outer_validation", "list"))
 }
 

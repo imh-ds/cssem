@@ -21,7 +21,7 @@
   folds
 }
 
-.split_outer_table <- function(assignment, method) {
+.split_outer_table <- function(assignment, method, group_values = NULL) {
   levels <- sort(unique(assignment))
   if (method == "time") {
     outer_levels <- levels[-1L]
@@ -35,10 +35,13 @@
   if (!length(outer_levels) || any(!vapply(train_ids, length, integer(1))) ||
       any(!vapply(test_ids, length, integer(1))))
     stop("Every split must have non-empty training and test partitions.", call. = FALSE)
+  unit_values <- if (is.null(group_values)) seq_along(assignment) else group_values
   data.frame(outer_id = seq_along(outer_levels),
     train_ids = I(train_ids), test_ids = I(test_ids),
     train_n = vapply(train_ids, length, integer(1)),
     test_n = vapply(test_ids, length, integer(1)),
+    train_unit_n = vapply(train_ids, function(ids) length(unique(unit_values[ids])), integer(1)),
+    test_unit_n = vapply(test_ids, function(ids) length(unique(unit_values[ids])), integer(1)),
     stringsAsFactors = FALSE)
 }
 
@@ -93,14 +96,18 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
     assignment <- sample(rep(seq_len(folds), length.out = n))
   }
   assignment <- as.integer(assignment)
-  outer <- .split_outer_table(assignment, method)
+  outer <- .split_outer_table(assignment, method, group_values = group_values)
+  unit_values <- if (is.null(group_values)) seq_len(n) else group_values
   provenance <- data.frame(method = method, folds = folds, seed = seed,
     group = if (is.null(source_group)) NA_character_ else source_group,
     time = if (is.null(source_time)) NA_character_ else source_time,
+    unit_n = length(unique(unit_values)),
     stringsAsFactors = FALSE)
   structure(list(method = method, folds = folds, seed = seed,
     assignment = assignment, row_ids = seq_len(n), outer = outer,
-    provenance = provenance, group_values = group_values, time_values = time_values), class = c("cssem_splits", "list"))
+    provenance = provenance, group_values = group_values, time_values = time_values,
+    unit_values = unit_values, unit_n = length(unique(unit_values)),
+    unit_summary = .cluster_summary(unit_values)), class = c("cssem_splits", "list"))
 }
 
 .resolve_split_assignment <- function(split, data, default_folds) {
@@ -134,6 +141,6 @@ make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
 #' @export
 print.cssem_splits <- function(x, ...) {
   cat("CS-SEM splits: ", x$method, " (", x$folds, " folds)\n", sep = "")
-  if (!is.null(x$outer) && nrow(x$outer)) print(x$outer[, c("outer_id", "train_n", "test_n"), drop = FALSE], row.names = FALSE)
+  if (!is.null(x$outer) && nrow(x$outer)) print(x$outer[, c("outer_id", "train_n", "test_n", "train_unit_n", "test_unit_n"), drop = FALSE], row.names = FALSE)
   invisible(x)
 }

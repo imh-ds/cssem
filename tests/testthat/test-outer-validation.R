@@ -43,6 +43,20 @@ test_that("group and time outer partitions preserve their constraints", {
     generated$data[, setdiff(names(generated$data), "time"), drop = FALSE], named_time), "source column")
 })
 
+test_that("grouped outer validation reports independent-unit provenance", {
+  generated <- cssem:::.structural_validation_data("linear", n = 72, seed = 906, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  generated$data$entity <- rep(seq_len(18), each = 4)
+  grouped <- make_splits(generated$data, method = "group", group = "entity", folds = 3, seed = 4)
+  result <- validate_outer(generated$model, generated$structure, generated$data, grouped,
+    cluster = generated$data$entity, iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1L, shadow_scope = "temporal"))
+  expect_true(all(result$provenance$train_unit_n > 0L))
+  expect_true(all(result$provenance$test_unit_n > 0L))
+  expect_equal(result$provenance$train_unit_n + result$provenance$test_unit_n,
+    rep(length(unique(generated$data$entity)), nrow(result$provenance)))
+})
+
 test_that("failed outer partitions are retained", {
   generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 23, items = 3, missing = 0)
   generated$model$folds <- 2L
