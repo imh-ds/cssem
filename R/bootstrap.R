@@ -2,8 +2,10 @@
 
 .bootstrap_scalar_integer <- function(value, name, minimum = 1L) {
   if (length(value) != 1L || !is.numeric(value) || !is.finite(value) ||
-      value != as.integer(value) || value < minimum)
-    stop(sprintf("%s must be a positive whole-number.", name), call. = FALSE)
+      value != as.integer(value) || value < minimum) {
+    requirement <- if (minimum == 0L) "a non-negative whole-number" else "a positive whole-number"
+    stop(sprintf("%s must be %s.", name, requirement), call. = FALSE)
+  }
   as.integer(value)
 }
 

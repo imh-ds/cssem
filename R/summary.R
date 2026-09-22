@@ -96,11 +96,13 @@
 .cssem_effect_row <- function(component, estimate, basis, n, ci_low = NA_real_, ci_high = NA_real_,
                               path = NA_character_, outcome = NA_character_, predictor = NA_character_,
                               naive_estimate = NA_real_, corrected_estimate = NA_real_,
-                              reason = NULL, units = "locked-score effect units", se = NA_real_) {
+                              reason = NULL, units = "locked-score effect units", se = NA_real_,
+                              uncertainty_method = NULL) {
   available <- is.finite(estimate)
   if (is.null(reason)) reason <- if (available) "" else "No scalar estimate is available for this result."
-  uncertainty <- if (is.finite(ci_low) && is.finite(ci_high)) "percentile bootstrap" else
-    "unavailable (no joint standard error or interval retained)"
+  uncertainty <- if (!is.null(uncertainty_method)) uncertainty_method else
+    if (is.finite(ci_low) && is.finite(ci_high)) "percentile bootstrap" else
+      "unavailable (no joint standard error or interval retained)"
   .cssem_parameter_row(
     outcome = outcome, predictor = predictor, component = component, path = path,
     estimate = estimate, naive_estimate = naive_estimate, corrected_estimate = corrected_estimate,
@@ -115,7 +117,9 @@
 #' Returns a public, tabular view of estimates and their reporting basis.  The
 #' table always includes the estimate basis, units, sample size, uncertainty
 #' method, and an explicit reason when a scalar estimate or uncertainty is not
-#' available.  Use [effect_ledger()] and [construct_card()] for focused views.
+#' available. Categorical structural coefficients include likelihood-based
+#' standard errors and Wald intervals in family-appropriate units. Use
+#' [effect_ledger()] and [construct_card()] for focused views.
 #'
 #' @param x A fitted CS-SEM result object.
 #' @param ... Additional arguments reserved for methods.
@@ -201,21 +205,42 @@ parameter_table.cssem_association <- function(x, ...) {
     if (!is.finite(naive)) naive <- raw
     use_corrected <- is.finite(corrected)
     estimate <- if (use_corrected) corrected else raw
+    family <- .structural_family(x$response_families[[row$outcome[[1L]]]])
+    categorical <- family$family != "gaussian"
     shape <- as.character(row$shape[[1L]])
     smooth_reason <- if (is.na(estimate) && shape %in% c("smooth", "spline", "monotone_increasing", "monotone_decreasing"))
       "This selected nonlinear edge is represented by a fitted curve; no single scalar coefficient is defined." else NULL
-    reason <- if (!is.null(smooth_reason)) smooth_reason else if (is.finite(estimate) && !use_corrected && !is.finite(corrected))
+    reason <- if (categorical && is.finite(estimate))
+      "Categorical EIV correction is unsupported; the maximum-likelihood coefficient is reported." else if (!is.null(smooth_reason)) smooth_reason else if (is.finite(estimate) && !use_corrected && !is.finite(corrected))
       "Naive estimate reported; corrected estimate is unavailable because the required reliability is unavailable." else if (is.finite(estimate))
       "" else "No scalar estimate is available for this selected edge."
-    basis <- if (use_corrected) "corrected_eiv" else if (is.finite(estimate)) "naive" else "unavailable"
+    basis <- if (categorical && is.finite(estimate)) "maximum_likelihood" else if (use_corrected) "corrected_eiv" else if (is.finite(estimate)) "naive" else "unavailable"
     ci_low <- if ("corrected_ci_low" %in% names(row)) row$corrected_ci_low[[1L]] else NA_real_
     ci_high <- if ("corrected_ci_high" %in% names(row)) row$corrected_ci_high[[1L]] else NA_real_
-    units <- if (grepl(":", row$predictor[[1L]], fixed = TRUE))
+    se <- NA_real_; uncertainty_method <- NULL
+    if (categorical) {
+      model <- x$full_models[[row$outcome[[1L]]]]
+      coefficient_se <- model$coefficient_se
+      predictor <- row$predictor[[1L]]
+      se <- if (is.null(coefficient_se) || !predictor %in% names(coefficient_se)) NA_real_ else
+        unname(coefficient_se[[predictor]])
+      level <- if (is.null(x$level)) .95 else x$level
+      critical <- stats::qnorm(1 - (1 - level) / 2)
+      ci_low <- if (is.finite(se)) estimate - critical * se else NA_real_
+      ci_high <- if (is.finite(se)) estimate + critical * se else NA_real_
+      uncertainty_method <- if (is.finite(se))
+        "model-based Wald interval from the fitted likelihood" else
+          "unavailable (likelihood covariance could not be estimated)"
+    }
+    units <- if (categorical && family$family == "binomial")
+      "log-odds per predictor locked-score unit" else if (categorical && family$family == "ordinal")
+      "cumulative log-odds per predictor locked-score unit" else if (grepl(":", row$predictor[[1L]], fixed = TRUE))
       "outcome locked-score units per product of constituent locked-score units" else
       "outcome locked-score units per predictor locked-score unit"
     .cssem_effect_row("structural_edge", estimate, basis, n, ci_low, ci_high,
       outcome = row$outcome[[1L]], predictor = row$predictor[[1L]],
-      naive_estimate = naive, corrected_estimate = corrected, reason = reason, units = units)
+      naive_estimate = naive, corrected_estimate = corrected, reason = reason, units = units,
+      se = se, uncertainty_method = uncertainty_method)
   })
   out <- do.call(rbind, rows)
   for (name in setdiff(names(ledger), names(out))) out[[name]] <- ledger[[name]]

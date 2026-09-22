@@ -12,8 +12,10 @@ parameter_table(x, ...)
 Returns a data frame with estimates, their reporting basis and units, sample
 size, uncertainty method, and an explicit availability reason. Measurement
 fits expose encoder parameters; structural and effect objects expose the
-reported edge or effect table. Missing standard errors and intervals remain
-missing rather than being inferred from marginal intervals.
+reported edge or effect table. Categorical structural coefficients include
+likelihood-based standard errors and Wald intervals in family-appropriate
+units. Missing standard errors and intervals remain missing rather than being
+inferred from marginal intervals.
 }
 \value{
 A data frame with stable estimate and availability columns.

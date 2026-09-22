@@ -459,6 +459,34 @@ specify_structure <- function(..., order = NULL, families = NULL) {
   if (name %in% names(metrics)) unname(metrics[[name]]) else NA_real_
 }
 
+.binomial_glm_vcov <- function(fit) {
+  p <- length(fit$coefficients)
+  if (!isTRUE(fit$converged) || is.null(fit$qr) || fit$rank < p || any(!is.finite(fit$coefficients)))
+    return(matrix(NA_real_, p, p, dimnames = list(names(fit$coefficients), names(fit$coefficients))))
+  covariance <- tryCatch(chol2inv(qr.R(fit$qr)), error = function(e) NULL)
+  if (is.null(covariance) || any(!is.finite(covariance)))
+    return(matrix(NA_real_, p, p, dimnames = list(names(fit$coefficients), names(fit$coefficients))))
+  pivot <- fit$qr$pivot
+  restored <- matrix(NA_real_, p, p)
+  restored[pivot, pivot] <- covariance
+  dimnames(restored) <- list(names(fit$coefficients), names(fit$coefficients))
+  restored
+}
+
+.categorical_coefficient_se <- function(family, fitted, predictors) {
+  family <- .structural_family(family)
+  covariance <- if (family$family == "binomial") .binomial_glm_vcov(fitted) else
+    tryCatch(stats::vcov(fitted), error = function(e) NULL)
+  result <- stats::setNames(rep(NA_real_, length(predictors)), predictors)
+  if (is.null(covariance) || is.null(rownames(covariance))) return(result)
+  shared <- intersect(predictors, rownames(covariance))
+  variances <- diag(covariance)[shared]
+  valid <- is.finite(variances) & variances >= 0
+  if (length(shared)) result[shared[valid]] <- sqrt(variances[valid])
+  result[!is.finite(result)] <- NA_real_
+  result
+}
+
 .fit_shape_model <- function(data, outcome, shapes, family = NULL) {
   family <- .structural_family(family)
   if (family$family != "gaussian") {
@@ -474,6 +502,7 @@ specify_structure <- function(..., order = NULL, families = NULL) {
       return(list(outcome = outcome, shapes = shapes,
         infos = stats::setNames(lapply(predictors, function(x) list(shape = "linear")), predictors),
         coefficient = coefficient, maps = stats::setNames(as.list(seq.int(2L, ncol(design))), predictors),
+        coefficient_se = .categorical_coefficient_se(family, fitted, predictors),
         family = family, levels = response$levels, categorical_fit = fitted,
         predictor_names = predictors))
     }
@@ -485,6 +514,7 @@ specify_structure <- function(..., order = NULL, families = NULL) {
     return(list(outcome = outcome, shapes = shapes,
       infos = stats::setNames(lapply(predictors, function(x) list(shape = "linear")), predictors),
       coefficient = coefficient, maps = stats::setNames(as.list(seq_along(predictors)), predictors),
+      coefficient_se = .categorical_coefficient_se(family, fitted, predictors),
       family = family, levels = response$levels, categorical_fit = fitted,
       predictor_names = predictors))
   }
