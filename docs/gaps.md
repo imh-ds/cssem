@@ -434,7 +434,8 @@ cannot change predictions; valid inputs reproduce the selected shape model;
 recursive and observed-parent modes have distinct contracts; unavailable inputs
 and target-free assessments are explicit rather than silently omitted.
 
-**Tracking commits:** `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`.
+**Tracking commits:** `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`,
+`cf60de7`.
 
 ### [ ] G8. Group comparison and measurement invariance
 
