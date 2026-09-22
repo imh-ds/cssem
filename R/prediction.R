@@ -320,3 +320,105 @@ print.cssem_prediction <- function(x, ...) {
   if (length(counts)) print(counts)
   invisible(x)
 }
+
+.prediction_assessment_metrics <- function(observed, predicted, baseline_value = NA_real_) {
+  keep <- is.finite(observed) & is.finite(predicted)
+  n <- sum(keep)
+  result <- list(n = as.integer(n), rmse = NA_real_, mae = NA_real_, r_squared = NA_real_,
+    calibration_intercept = NA_real_, calibration_slope = NA_real_,
+    baseline_rmse = NA_real_, baseline_mae = NA_real_, baseline_r_squared = NA_real_)
+  if (!n) return(result)
+  y <- observed[keep]; p <- predicted[keep]
+  residual <- y - p; sst <- sum((y - mean(y))^2)
+  result$rmse <- sqrt(mean(residual^2)); result$mae <- mean(abs(residual))
+  result$r_squared <- if (sst > 0) 1 - sum(residual^2) / sst else NA_real_
+  if (n >= 2L && stats::var(p) > 0) {
+    slope <- stats::cov(y, p) / stats::var(p)
+    result$calibration_slope <- slope
+    result$calibration_intercept <- mean(y) - slope * mean(p)
+  }
+  if (is.finite(baseline_value)) {
+    baseline_residual <- y - baseline_value
+    result$baseline_rmse <- sqrt(mean(baseline_residual^2))
+    result$baseline_mae <- mean(abs(baseline_residual))
+    result$baseline_r_squared <- if (sst > 0) 1 - sum(baseline_residual^2) / sst else NA_real_
+  }
+  result
+}
+
+#' Assess structural predictions against observed target indicators
+#'
+#' Scores the requested structural outcomes on new observations and compares
+#' finite predictions with target construct states scored by the same fitted
+#' measurement encoders. Target indicators are used only for assessment; they
+#' are never used as predictors.
+#'
+#' @param association A cssem_association object from associate().
+#' @param newdata A data frame containing predictor and, when available, target
+#'   indicators.
+#' @param outcomes Optional character vector of structural outcomes. Defaults
+#'   to every declared outcome.
+#' @param mode Prediction mode passed to predict.cssem_association().
+#' @param missing_policy Missing-input policy passed to predict.cssem_association().
+#' @param baseline Whether to report a training target-mean baseline or omit it.
+#' @return An object of class cssem_prediction_assessment with metrics,
+#'   row-level predictions, and settings.
+#' @export
+prediction_assessment <- function(association, newdata, outcomes = NULL,
+                                  mode = c("observed", "recursive"),
+                                  missing_policy = c("error", "na"),
+                                  baseline = c("mean", "none")) {
+  if (!inherits(association, "cssem_association"))
+    stop("association must be a cssem_association.", call. = FALSE)
+  mode <- match.arg(mode); missing_policy <- match.arg(missing_policy); baseline <- match.arg(baseline)
+  .prediction_validate_data(newdata)
+  outcomes <- .prediction_outcomes(association, outcomes)
+  prediction <- predict(association, newdata, outcomes = outcomes, mode = mode,
+    missing_policy = missing_policy)
+  fit <- association$fit
+  metric_rows <- list(); prediction_rows <- list()
+  for (outcome in outcomes) {
+    target_indicators <- fit$model$constructs[[outcome]]$indicators
+    target_available <- all(target_indicators %in% names(newdata))
+    target <- if (target_available) .prediction_score_constructs(fit, newdata, outcome) else NULL
+    target_values <- if (target_available) target$states[[outcome]] else rep(NA_real_, nrow(newdata))
+    target_status <- if (target_available) target$status[[outcome]] else rep("target_unavailable", nrow(newdata))
+    rows <- prediction$predictions[prediction$predictions$outcome == outcome, , drop = FALSE]
+    rows <- rows[order(rows$row_id), , drop = FALSE]
+    rows$observed <- target_values[rows$row_id]
+    rows$target_status <- target_status[rows$row_id]
+    prediction_rows[[outcome]] <- rows
+    keep <- target_status[rows$row_id] %in% c("complete", "partial") &
+      is.finite(rows$observed) & is.finite(rows$prediction)
+    baseline_value <- if (identical(baseline, "mean")) mean(association$scores[[outcome]], na.rm = TRUE) else NA_real_
+    measures <- .prediction_assessment_metrics(rows$observed[keep], rows$prediction[keep], baseline_value)
+    status <- if (!target_available) "target_unavailable" else if (!measures$n) "no_complete_rows" else "ok"
+    metric_rows[[outcome]] <- data.frame(
+      outcome = outcome, status = status, target_available = target_available,
+      n = measures$n, rmse = measures$rmse, mae = measures$mae,
+      r_squared = measures$r_squared, calibration_intercept = measures$calibration_intercept,
+      calibration_slope = measures$calibration_slope, baseline = baseline,
+      baseline_mean = baseline_value, baseline_rmse = measures$baseline_rmse,
+      baseline_mae = measures$baseline_mae, baseline_r_squared = measures$baseline_r_squared,
+      stringsAsFactors = FALSE)
+  }
+  metrics <- do.call(rbind, metric_rows); row.names(metrics) <- NULL
+  predictions <- do.call(rbind, prediction_rows); row.names(predictions) <- NULL
+  structure(list(metrics = metrics, predictions = predictions,
+    settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
+      baseline = baseline)), class = c("cssem_prediction_assessment", "list"))
+}
+
+#' @export
+as.data.frame.cssem_prediction_assessment <- function(x, row.names = NULL, optional = FALSE, ...) {
+  x$metrics
+}
+
+#' @export
+print.cssem_prediction_assessment <- function(x, ...) {
+  cat("CS-SEM prediction assessment: ", nrow(x$metrics), " outcome(s)\n", sep = "")
+  print.data.frame(x$metrics[, intersect(c("outcome", "status", "n", "rmse", "mae",
+    "r_squared", "calibration_intercept", "calibration_slope", "baseline_rmse"),
+    names(x$metrics)), drop = FALSE], row.names = FALSE)
+  invisible(x)
+}

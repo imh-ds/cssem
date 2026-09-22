@@ -110,3 +110,41 @@ test_that("recursive prediction rejects structural cycles", {
     "cycle"
   )
 })
+
+test_that("prediction assessment reports errors, calibration, and a training baseline", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 37, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+
+  assessment <- prediction_assessment(association, generated$data, outcomes = "Loyalty")
+  expect_s3_class(assessment, "cssem_prediction_assessment")
+  expect_true(all(c("outcome", "status", "n", "rmse", "mae", "r_squared",
+    "calibration_intercept", "calibration_slope", "baseline_rmse") %in%
+    names(assessment$metrics)))
+  expect_identical(assessment$metrics$status, "ok")
+  expect_gt(assessment$metrics$n, 0)
+  expect_true(is.finite(assessment$metrics$rmse))
+  expect_true(is.finite(assessment$metrics$baseline_rmse))
+  expect_output(print(assessment), "CS-SEM prediction assessment")
+})
+
+test_that("prediction assessment makes unavailable targets explicit", {
+  generated <- cssem:::.structural_validation_data("linear", n = 36, seed = 38, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  target_items <- generated$model$constructs$Loyalty$indicators
+  predictor_only <- generated$data[, setdiff(names(generated$data), target_items), drop = FALSE]
+
+  assessment <- prediction_assessment(association, predictor_only, outcomes = "Loyalty")
+  expect_identical(assessment$metrics$status, "target_unavailable")
+  expect_identical(assessment$metrics$n, 0L)
+  expect_true(is.na(assessment$metrics$rmse))
+
+  no_baseline <- prediction_assessment(association, generated$data, outcomes = "Loyalty",
+    baseline = "none")
+  expect_true(is.na(no_baseline$metrics$baseline_rmse))
+})
