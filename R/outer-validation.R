@@ -21,6 +21,32 @@
   stringsAsFactors = FALSE
 )
 
+.outer_split_fingerprint <- function(splits) {
+  parts <- vapply(seq_len(nrow(splits$outer)), function(i) {
+    row <- splits$outer[i, , drop = FALSE]
+    paste0(row$outer_id[[1L]], ":", paste(row$train_ids[[1L]], collapse = ","),
+      "/", paste(row$test_ids[[1L]], collapse = ","))
+  }, character(1))
+  paste(c(as.character(splits$method), as.character(splits$folds), parts), collapse = "|")
+}
+
+.outer_observation_fingerprint <- function(data) {
+  row_ids <- row.names(data)
+  paste0("n=", nrow(data), ";rows=", paste(row_ids, collapse = ","))
+}
+
+.outer_target_fingerprint <- function(model, structure) {
+  outcomes <- names(structure$effects)
+  indicators <- unique(unlist(lapply(outcomes, function(outcome) model$constructs[[outcome]]$indicators), use.names = FALSE))
+  paste(c(outcomes, indicators), collapse = "|")
+}
+
+.outer_score_basis_fingerprint <- function(model, structure) {
+  nodes <- unique(c(names(structure$effects), unlist(lapply(structure$effects,
+    function(edges) unlist(lapply(names(edges), .predictor_constructs), use.names = FALSE)), use.names = FALSE)))
+  paste(vapply(nodes, function(node) paste(c(node, model$constructs[[node]]$indicators), collapse = ":"), character(1)), collapse = "|")
+}
+
 .outer_prediction_metrics <- function(observed, predicted) {
   keep <- is.finite(observed) & is.finite(predicted)
   n <- sum(keep)
@@ -317,7 +343,11 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
       quadrature = quadrature, diagnostics = diagnostics, structural_args = structural_args,
       measurement_missing_policy = measurement_missing_policy,
       structural_missing_policy = structural_missing_policy, splits = splits,
-      cluster = cluster, design = design),
+      cluster = cluster, design = design,
+      split_fingerprint = .outer_split_fingerprint(splits),
+      observation_fingerprint = .outer_observation_fingerprint(data),
+      target_fingerprint = .outer_target_fingerprint(model, structure),
+      score_basis_fingerprint = .outer_score_basis_fingerprint(model, structure)),
     status = status), class = c("cssem_outer_validation", "list"))
 }
 
