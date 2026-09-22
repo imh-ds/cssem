@@ -6,7 +6,8 @@
 # nonlinear edge has covariance information that it does not retain.
 
 .cssem_parameter_columns <- c(
-  "construct", "parameter", "item", "outcome", "predictor", "component", "path",
+  "parameter_id", "construct", "parameter", "item", "outcome", "predictor", "component", "path",
+  "shape", "status",
   "estimate", "naive_estimate", "corrected_estimate", "estimate_basis", "basis",
   "units", "se", "ci_low", "ci_high", "uncertainty_method", "n", "available",
   "availability_reason"
@@ -17,6 +18,70 @@
   out <- as.data.frame(values, stringsAsFactors = FALSE)
   for (name in setdiff(.cssem_parameter_columns, names(out))) out[[name]] <- NA
   out[.cssem_parameter_columns]
+}
+
+.cssem_parameter_key <- function(value) {
+  value <- as.character(value)
+  value[is.na(value) | !nzchar(value)] <- NA_character_
+  value
+}
+
+.cssem_finalize_parameter_table <- function(table) {
+  if (!is.data.frame(table) || !nrow(table)) return(table)
+  if (!"shape" %in% names(table)) table$shape <- NA_character_
+  if (!"status" %in% names(table)) table$status <- ifelse(isTRUE(table$available), "available", "unavailable")
+  status <- ifelse(!is.na(table$available) & table$available, "available", "unavailable")
+  table$status <- as.character(status)
+  ids <- rep(NA_character_, nrow(table))
+  naive_ids <- rep(NA_character_, nrow(table))
+  corrected_ids <- rep(NA_character_, nrow(table))
+  aliases <- list()
+  for (i in seq_len(nrow(table))) {
+    outcome <- .cssem_parameter_key(table$outcome[[i]])
+    predictor <- .cssem_parameter_key(table$predictor[[i]])
+    component <- .cssem_parameter_key(table$component[[i]])
+    path <- .cssem_parameter_key(table$path[[i]])
+    construct <- .cssem_parameter_key(table$construct[[i]])
+    parameter <- .cssem_parameter_key(table$parameter[[i]])
+    item <- .cssem_parameter_key(table$item[[i]])
+    basis <- as.character(table$estimate_basis[[i]])
+    if (!is.na(outcome) && !is.na(predictor) && identical(component, "structural_edge")) {
+      base <- paste0("edge:", outcome, "~", predictor)
+      naive_ids[[i]] <- paste0(base, ":naive")
+      corrected_ids[[i]] <- paste0(base, ":corrected")
+      ids[[i]] <- if (identical(basis, "corrected_eiv")) corrected_ids[[i]] else naive_ids[[i]]
+      aliases[[naive_ids[[i]]]] <- list(row = i, column = "naive_estimate",
+        basis = "naive", available = is.finite(table$naive_estimate[[i]]),
+        reason = if (is.finite(table$naive_estimate[[i]])) "" else table$availability_reason[[i]])
+      aliases[[corrected_ids[[i]]]] <- list(row = i, column = "corrected_estimate",
+        basis = "corrected_eiv", available = is.finite(table$corrected_estimate[[i]]),
+        reason = if (is.finite(table$corrected_estimate[[i]])) "" else
+          "Corrected estimate is unavailable because the required reliability or correction is unavailable.")
+    } else if (!is.na(construct) && !is.na(parameter)) {
+      item_key <- if (is.na(item)) "" else paste0(":", item)
+      ids[[i]] <- paste0("measurement:", construct, ":", parameter, item_key)
+    } else if (!is.na(component)) {
+      target <- if (!is.na(path)) path else if (!is.na(outcome) && !is.na(predictor))
+        paste0(outcome, "->", predictor) else component
+      suffix <- if (nzchar(basis) && !identical(basis, "unavailable")) paste0(":", basis) else ""
+      ids[[i]] <- paste0("effect:", component, ":", target, suffix)
+    } else {
+      ids[[i]] <- paste0("parameter:", i)
+    }
+  }
+  if (anyDuplicated(ids)) {
+    duplicates <- unique(ids[duplicated(ids)])
+    stop(sprintf("Parameter table contains duplicate stable identities: %s.",
+      paste(duplicates, collapse = ", ")), call. = FALSE)
+  }
+  table$parameter_id <- ids
+  table$naive_parameter_id <- naive_ids
+  table$corrected_parameter_id <- corrected_ids
+  for (i in seq_len(nrow(table))) aliases[[ids[[i]]]] <- list(row = i, column = "estimate",
+    basis = as.character(table$estimate_basis[[i]]), available = isTRUE(table$available[[i]]),
+    reason = as.character(table$availability_reason[[i]]))
+  attr(table, "parameter_aliases") <- aliases
+  table
 }
 
 .cssem_unavailable_vcov <- function(object, parameter_names) {
@@ -111,7 +176,7 @@ parameter_table.fit_states <- function(x, ...) {
       }
     }
   }
-  if (!length(rows)) data.frame() else do.call(rbind, rows)
+  if (!length(rows)) data.frame() else .cssem_finalize_parameter_table(do.call(rbind, rows))
 }
 
 .association_raw_estimate <- function(association, outcome, predictor) {
@@ -154,8 +219,7 @@ parameter_table.cssem_association <- function(x, ...) {
   })
   out <- do.call(rbind, rows)
   for (name in setdiff(names(ledger), names(out))) out[[name]] <- ledger[[name]]
-  out$status <- "associational"
-  out
+  .cssem_finalize_parameter_table(out)
 }
 
 .mediation_parameter_table <- function(x, causal = FALSE) {
@@ -180,7 +244,7 @@ parameter_table.cssem_association <- function(x, ...) {
         units = "outcome locked-score units per predictor contrast")
     }))
   }
-  do.call(rbind, rows)
+  .cssem_finalize_parameter_table(do.call(rbind, rows))
 }
 
 #' @export
@@ -199,7 +263,8 @@ parameter_table.causal_effect <- function(x, ...) {
       if (isTRUE(x$disattenuated)) "corrected_eiv" else if (x$estimand %in% c("adjusted_dml", "adjusted_ame")) "flexible_adjustment" else "naive",
       n, x$ci_low, x$ci_high, units = "outcome locked-score units per treatment locked-score unit")
   )
-  out <- do.call(rbind, rows); out$outcome <- x$outcome; out$predictor <- x$treatment; out
+  out <- do.call(rbind, rows); out$outcome <- x$outcome; out$predictor <- x$treatment
+  .cssem_finalize_parameter_table(out)
 }
 
 #' @export
@@ -211,38 +276,38 @@ parameter_table.conditional_slopes <- function(x, ...) {
       if ("ci_low" %in% names(row)) row$ci_low[[1L]] else NA_real_, if ("ci_high" %in% names(row)) row$ci_high[[1L]] else NA_real_,
       outcome = x$outcome, predictor = x$predictor, path = row$level[[1L]], units = "outcome locked-score units per predictor unit")
   }))
-  out
+  .cssem_finalize_parameter_table(out)
 }
 
 #' @export
 parameter_table.conditional_indirect_effect <- function(x, ...) {
   if (is.null(x$conditional) || !nrow(x$conditional)) return(data.frame())
-  do.call(rbind, lapply(seq_len(nrow(x$conditional)), function(i) {
+  .cssem_finalize_parameter_table(do.call(rbind, lapply(seq_len(nrow(x$conditional)), function(i) {
     row <- x$conditional[i, , drop = FALSE]
     .cssem_effect_row("conditional_indirect", row$indirect[[1L]], if (isTRUE(x$disattenuated)) "corrected_eiv" else "naive", x$n,
       if ("ci_low" %in% names(row)) row$ci_low[[1L]] else NA_real_, if ("ci_high" %in% names(row)) row$ci_high[[1L]] else NA_real_,
       outcome = x$y, predictor = x$x, path = row$level[[1L]], units = "outcome locked-score units per predictor contrast")
-  }))
+  })))
 }
 
 #' @export
 parameter_table.cssem_routing <- function(x, ...) {
   table <- x$table
   if (is.null(table) || !nrow(table)) return(data.frame())
-  do.call(rbind, lapply(seq_len(nrow(table)), function(i) {
+  .cssem_finalize_parameter_table(do.call(rbind, lapply(seq_len(nrow(table)), function(i) {
     row <- table[i, , drop = FALSE]
     .cssem_effect_row("routed_edge", row$effect[[1L]], row$status[[1L]], NA_integer_,
       row$ci_low[[1L]], row$ci_high[[1L]], path = row$path[[1L]],
       reason = if (is.finite(row$effect[[1L]])) "" else "Routed edge has no scalar estimate.",
       units = "outcome locked-score units per predictor locked-score unit")
-  }))
+  })))
 }
 
 #' @export
 parameter_table.evidence_report <- function(x, ...) {
   effects <- x$effects
   if (is.null(effects) || !nrow(effects)) return(data.frame())
-  do.call(rbind, lapply(seq_len(nrow(effects)), function(i) {
+  .cssem_finalize_parameter_table(do.call(rbind, lapply(seq_len(nrow(effects)), function(i) {
     row <- effects[i, , drop = FALSE]
     path <- strsplit(row$path[[1L]], .PATH_ARROW, fixed = TRUE)[[1L]]
     .cssem_effect_row("evidence_edge", row$estimate[[1L]], row$causal_status[[1L]], NA_integer_,
@@ -250,7 +315,7 @@ parameter_table.evidence_report <- function(x, ...) {
       predictor = if (length(path) > 1L) path[[1L]] else NA_character_, path = row$path[[1L]],
       reason = if (is.finite(row$estimate[[1L]])) "" else "Evidence report has no scalar estimate for this edge.",
       units = "outcome locked-score units per predictor locked-score unit")
-  }))
+  })))
 }
 
 #' @export
