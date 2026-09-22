@@ -3,7 +3,8 @@
 Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 through G5 have implemented core workflows below; the remaining
+**Status:** G1 through G3 have implemented workflows, and G4 through G7 have
+implemented core workflows with documented methodological limits. The remaining
 unchecked entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
@@ -64,7 +65,7 @@ correctness concerns.
 | G4 | P1 | Partial (core workflow implemented) | Explicit, validated inference and reusable resampling | `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370` |
 | G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting | `311ec2d`, `8cb4304`, `d9d370b`, `e5f4ff8` |
 | G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation | `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`, `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f` |
-| G7 | P1 | Partial | Structural prediction for new observations |
+| G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
 | G8 | P2 | Missing | Group comparison and measurement invariance |
 | G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
 | G10 | P2 | Missing | Defined contrasts and model-comparison workflows |
@@ -387,10 +388,9 @@ Focused [split tests](../tests/testthat/test-splits.R) cover deterministic,
 grouped, time-ordered, explicit, and listwise-aligned assignments. The
 [outer-validation tests](../tests/testthat/test-outer-validation.R) cover
 train-only selection, metric-scope separation, failure retention, and group/time
-partition constraints. The entry remains **Partial** for methodology: a
-predictor-only prospective workflow that can score outcomes without their
-indicators is still G7, and independent coverage studies for outer metrics have
-not yet been added.
+partition constraints. The entry remains **Partial** for methodology: G7 now
+provides the separate predictor-only prospective workflow, while independent
+coverage studies for outer metrics have not yet been added.
 
 **Tracking commits:** `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`,
 `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f`.
@@ -656,9 +656,9 @@ present manually reusing scores as a validated higher-order latent model.
 1. Resolve the relevant existing correctness defects in [bugs.md](bugs.md).
    Stabilize G5/G13: sample accounting and documentation. Use the result and
    scale-aware measurement contracts delivered in G1-G3.
-2. Build G6's split/evaluation infrastructure and G7's prediction contract;
-   use them to validate G4's inference choices. Develop G14's causal validation
-   before widening causal claims.
+2. Use the completed G6/G7 split, outer-validation, and prediction workflows to
+   validate G4's inference choices. Develop G14's causal validation before
+   widening causal claims.
 3. Add G12 plots and G10 contrasts on the stable result/uncertainty schema;
    extend to G8 groups, the cluster-aware portion of G9, and G15 study planning.
 4. Evaluate G11, multilevel/longitudinal G9, and G16 as separate research
