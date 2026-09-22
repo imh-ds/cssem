@@ -83,6 +83,13 @@
       for (g in groups$labels) {
         keep <- groups$values == g & is.finite(z) & !is.na(y)
         observed_n <- sum(keep)
+        if (identical(scale, "ordinal") && any(tabulate(y[keep], nbins = length(encoder$levels[[j]])) == 0L)) {
+          pars <- c(discrimination = NA_real_, stats::setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)),
+            paste0("threshold_", seq_along(encoder$encoders[[j]]$tau))))
+          for (parameter in names(pars)) add(nm, item, scale, g, parameter, pars[[parameter]], observed_n,
+            FALSE, "One or more pooled ordinal categories are absent in this group; item parameters are unavailable.")
+          next
+        }
         if (observed_n < 5L) {
           if (identical(scale, "ordinal")) {
             pars <- c(discrimination = NA_real_, stats::setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)),
@@ -166,10 +173,14 @@ measurement_invariance <- function(fit, group, reference = NULL, min_group_size 
   metadata <- .group_metadata(resolved$values, resolved$labels, as.integer(min_group_size))
   score_rows <- do.call(rbind, lapply(names(fit$locked_scores), function(construct) {
     score <- fit$locked_scores[[construct]]
+    reference_keep <- resolved$values == reference & is.finite(score)
+    reference_mean <- if (any(reference_keep)) mean(score[reference_keep]) else NA_real_
     do.call(rbind, lapply(resolved$labels, function(g) {
       keep <- resolved$values == g & is.finite(score)
+      group_mean <- if (any(keep)) mean(score[keep]) else NA_real_
       data.frame(construct = construct, group = g, n = sum(keep),
-        mean = if (any(keep)) mean(score[keep]) else NA_real_,
+        mean = group_mean, reference = reference, reference_mean = reference_mean,
+        difference = if (is.finite(group_mean) && is.finite(reference_mean)) group_mean - reference_mean else NA_real_,
         sd = if (sum(keep) > 1L) stats::sd(score[keep]) else NA_real_, stringsAsFactors = FALSE)
     }))
   }))
@@ -231,9 +242,10 @@ print.cssem_measurement_invariance <- function(x, ...) {
   do.call(rbind, rows)
 }
 
-.group_edge_difference <- function(scores, labels, outcome, predictor, shape, target, reference) {
-  estimates <- .group_shape_effects(scores, labels, outcome, stats::setNames(shape, predictor), c(reference, target))
-  left <- estimates[estimates$group == target, , drop = FALSE]; right <- estimates[estimates$group == reference, , drop = FALSE]
+.group_edge_difference <- function(scores, labels, outcome, predictor, shapes, target, reference) {
+  estimates <- .group_shape_effects(scores, labels, outcome, shapes, c(reference, target))
+  left <- estimates[estimates$group == target & estimates$predictor == predictor, , drop = FALSE]
+  right <- estimates[estimates$group == reference & estimates$predictor == predictor, , drop = FALSE]
   available <- isTRUE(left$available[[1L]]) && isTRUE(right$available[[1L]])
   list(estimate = if (available) left$estimate[[1L]] - right$estimate[[1L]] else NA_real_, available = available)
 }
@@ -261,6 +273,8 @@ group_comparison <- function(association, group, reference = NULL, permutations 
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association object.", call. = FALSE)
   if (length(permutations) != 1L || !is.numeric(permutations) || !is.finite(permutations) ||
       permutations < 0 || permutations != as.integer(permutations)) stop("permutations must be a non-negative whole number.", call. = FALSE)
+  if (length(seed) != 1L || !is.numeric(seed) || !is.finite(seed) || seed != as.integer(seed))
+    stop("seed must be one finite whole number.", call. = FALSE)
   .group_validate_controls(reference, min_group_size, level, 0)
   resolved <- .group_association_labels(association, group)
   if (is.null(reference)) reference <- resolved$labels[[1L]]
@@ -278,12 +292,12 @@ group_comparison <- function(association, group, reference = NULL, permutations 
     complete <- pair & apply(as.matrix(association$scores[, score_columns, drop = FALSE]), 1L,
       function(x) all(is.finite(x)))
     labels_pair <- resolved$values[complete]; scores_pair <- association$scores[complete, , drop = FALSE]
-    observed <- .group_edge_difference(scores_pair, labels_pair, outcome, predictor, shape, target, reference)
+    observed <- .group_edge_difference(scores_pair, labels_pair, outcome, predictor, shapes[[outcome]], target, reference)
     null <- numeric(as.integer(permutations))
     if (isTRUE(observed[["available"]]) && permutations > 0L && length(unique(labels_pair)) == 2L) {
       for (b in seq_len(as.integer(permutations))) {
         permuted <- sample(labels_pair, length(labels_pair), replace = FALSE)
-        null[[b]] <- .group_edge_difference(scores_pair, permuted, outcome, predictor, shape, target, reference)[["estimate"]]
+        null[[b]] <- .group_edge_difference(scores_pair, permuted, outcome, predictor, shapes[[outcome]], target, reference)[["estimate"]]
       }
     }
     p <- if (permutations > 0L && isTRUE(observed[["available"]]) && any(is.finite(null)))

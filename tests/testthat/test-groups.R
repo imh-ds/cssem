@@ -14,11 +14,24 @@ test_that("measurement invariance keeps groups on the pooled score scale", {
   expect_equal(out$status, "diagnostic_common_anchor")
   expect_equal(out$groups$n, c(60L, 60L))
   expect_true(all(c("construct", "group", "mean", "sd") %in% names(out$constructs)))
+  expect_true(all(c("reference_mean", "difference") %in% names(out$constructs)))
   expect_true(any(out$item_contrasts$item == "a1"))
   expect_true(any(out$item_contrasts$parameter == "threshold_1"))
   expect_true(any(out$item_contrasts$parameter == "discrimination"))
   expect_true(all(out$item_contrasts$reference == "control"))
   expect_match(paste(out$limitations, collapse = " "), "common-anchor")
+})
+
+test_that("missing pooled ordinal categories are unavailable rather than pseudocounted", {
+  d <- simulate_states(n = 80, missing = 0, seed = 106)
+  d$group <- rep(c("A", "B"), each = 40)
+  d$a1[d$group == "B"] <- 1L
+  fit <- fit_states(specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3),
+    d, seed = 14, iterations = 1, diagnostics = FALSE)
+  out <- measurement_invariance(fit, "group", reference = "A", min_group_size = 20)
+  rows <- out$item_parameters[out$item_parameters$item == "a1" & out$item_parameters$group == "B", , drop = FALSE]
+  expect_true(all(!rows$available))
+  expect_true(all(grepl("categor", rows$availability_reason, ignore.case = TRUE)))
 })
 
 test_that("measurement invariance resolves filtered rows and flags small groups", {
@@ -71,6 +84,27 @@ test_that("group structural comparison returns reproducible path contrasts", {
   expect_true(any(is.finite(first$contrasts$difference)))
   expect_true(all(c("null_low", "null_high", "n_group", "n_reference") %in% names(first$contrasts)))
   expect_true(all(first$permutation_settings$permutations == 9L))
+})
+
+test_that("multi-predictor group contrasts use the same adjusted estimator", {
+  d <- simulate_states(n = 120, missing = 0, seed = 107)
+  d$c1 <- pmin(pmax(d$b1 + sample(c(-1L, 0L, 1L), nrow(d), replace = TRUE), 1L), 4L)
+  d$c2 <- pmin(pmax(d$b2 + sample(c(-1L, 0L, 1L), nrow(d), replace = TRUE), 1L), 4L)
+  d$c3 <- pmin(pmax(d$b3 + sample(c(-1L, 0L, 1L), nrow(d), replace = TRUE), 1L), 4L)
+  d$c4 <- pmin(pmax(d$b4 + sample(c(-1L, 0L, 1L), nrow(d), replace = TRUE), 1L), 4L)
+  d$group <- rep(c("A", "B"), each = 60)
+  model <- specify_measurement(
+    A = ordinal(paste0("a", 1:4)), B = ordinal(paste0("b", 1:4)),
+    C = ordinal(paste0("c", 1:4)), folds = 3
+  )
+  fit <- fit_states(model, d, seed = 15, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(C ~ linear(A) + linear(B), order = c("A", "B", "C")),
+    structural_repeats = 1, shape_alpha = .001, shape_min_gain = 1, seed = 16)
+  out <- group_comparison(association, "group", reference = "A", permutations = 5,
+    seed = 17, min_group_size = 40)
+  rows <- out$contrasts[out$contrasts$outcome == "C" & out$contrasts$available, , drop = FALSE]
+  expect_true(nrow(rows) >= 1L)
+  expect_equal(rows$difference, rows$estimate - rows$reference_estimate, tolerance = 1e-10)
 })
 
 test_that("group comparison rejects invalid references and preserves the RNG stream", {
