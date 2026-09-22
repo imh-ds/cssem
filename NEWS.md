@@ -1,5 +1,20 @@
 # cssem (development version)
 
+## Cluster-aware analysis (2026-09-21)
+
+* Added cluster/subject-aware measurement and outer-validation partitions with
+  leakage checks, row-to-unit provenance, and independent-unit counts.
+* Added `bootstrap_model(resample = "cluster")` for complete-unit resampling,
+  duplicate-draw provenance, deterministic measurement refits, and explicit
+  `cluster_resampling_only` status text. Existing row bootstrap behavior remains
+  the default.
+* Extended `sample_accounting()` with independent-unit denominators and
+  unit-level ledgers, and added explicit rejection of unsupported survey
+  weights, strata, finite-population corrections, replicate weights, and
+  design-based standard errors. These changes do not implement multilevel,
+  longitudinal, growth, or survey-weighted SEM. Commits: `16d38f2`, `e0cbd83`,
+  `1bf4727`, `2118ff5`.
+
 ## Group comparison and invariance diagnostics (2026-09-21)
 
 * Added `measurement_invariance()` with a pooled common-anchor scale, group

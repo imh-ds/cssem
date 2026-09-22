@@ -53,3 +53,17 @@ test_that("cluster labels fail with actionable validation errors", {
     "survey design"
   )
 })
+
+test_that("cluster-aware status does not claim multilevel SEM", {
+  data <- simulate_states(n = 36, seed = 909, missing = 0)
+  data$subject <- rep(seq_len(12), each = 3)
+  fit <- fit_states(
+    specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L),
+    data, cluster = "subject", iterations = 1L, diagnostics = FALSE
+  )
+  boot <- bootstrap_model(fit, function(context) c(mean_A = mean(context$scores$A)),
+    reps = 1L, seed = 39L, resample = "cluster")
+  expect_match(boot$limitation, "cluster_resampling_only")
+  expect_match(boot$limitation, "does not estimate multilevel")
+  expect_true(any(grepl("cluster_resampling_only", capture.output(print(boot)), fixed = TRUE)))
+})

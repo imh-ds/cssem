@@ -3,9 +3,11 @@
 Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 through G3 have implemented workflows, and G4 through G8 have
-implemented core workflows with documented methodological limits. The remaining
-unchecked entries are proposed work. Existing defect reproductions and fixes belong in
+**Status:** G1 through G3 have implemented workflows, G4 through G8 have
+implemented core workflows with documented methodological limits, and G9 now
+has a partial P2 cluster-aware workflow. G9's P3 multilevel/longitudinal
+extension remains a separate unchecked research project; the other unchecked
+entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -67,7 +69,7 @@ correctness concerns.
 | G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation | `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`, `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f` |
 | G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
-| G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
+| G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
 | G10 | P2 | Missing | Defined contrasts and model-comparison workflows |
 | G11 | P3 | Missing | Binary/ordinal structural response families |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
@@ -487,7 +489,7 @@ structural contrasts, reproducible permutations, and invalid inputs.
 
 **Tracking commits:** `183cc0b`, `845e274`, `23551e2`, `27e84c1`.
 
-### [ ] G9. Cluster-aware analysis and repeated observations
+### [x] G9. Cluster-aware analysis and repeated observations (P2 workflow)
 
 **Evidence/gap:** fitting has no cluster/subject ID or sampling-weight contract;
 current bootstrap helpers resample rows. `respondent_weighting = "information"`
@@ -508,6 +510,49 @@ Cluster bootstrap support must not be described as multilevel SEM support.
 **Acceptance:** repeated observations never cross train/test boundaries;
 inference is calibrated under within-cluster dependence. Validate within/between
 effects separately before enabling any multilevel causal interpretation.
+
+**Implemented (2026-09-21, P2):** `fit_states()` resolves a cluster column or
+full-length vector before listwise filtering, retains row-to-unit provenance,
+and automatically uses grouped measurement folds. Explicit measurement splits
+and outer train/test partitions reject cluster leakage. `make_splits()` and
+outer-validation provenance report row and independent-unit counts.
+
+`bootstrap_model(resample = "cluster")` samples complete units with replacement,
+preserves source and draw-level IDs for duplicated units, supports measurement
+refits, preserves caller RNG state, and reports the distinct-unit denominator.
+`sample_accounting()` carries unit-level ledgers through measurement,
+association, and derived-effect results. Unsupported survey weights, strata,
+finite-population corrections, replicate weights, and design-based standard
+errors fail with an explicit message; `respondent_weighting = "information"`
+remains posterior-information weighting.
+
+This closes the P2 cluster-aware workflow only. The implementation does not
+estimate within/between latent states, longitudinal alignment, growth or random
+effects, multilevel likelihoods, or survey-design standard errors. Those P3
+estimands require the separate design listed below.
+
+**Tracking commits:** `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5`.
+
+**Plan:** [G9 cluster-aware analysis and repeated observations implementation plan](superpowers/plans/2026-09-21-g9-cluster-aware-analysis.md)
+and [design specification](superpowers/specs/2026-09-21-g9-cluster-aware-analysis-design.md).
+The plan deliberately ships the P2 unit-aware split, whole-cluster bootstrap,
+independent-unit accounting, and unsupported-survey-design guard first. It keeps
+P3 within/between, longitudinal, growth, random-effects, and design-weighted
+estimators as a separate methodological project; grouped folds and cluster
+bootstrap must not be reported as multilevel SEM.
+
+**Plan outline:**
+
+1. Resolve subject/cluster IDs before missing-data filtering, retain row-to-unit
+   provenance, and enforce whole-unit measurement and outer partitions.
+2. Add reproducible whole-cluster bootstrap resampling with unequal-cluster,
+   duplicate-draw, and independent-unit metadata.
+3. Extend sample accounting and validation reports with unit denominators, and
+   reject unsupported survey weights, strata, finite-population corrections, and
+   replicate-weight designs explicitly.
+4. Write a separate P3 design before attempting within/between latent states,
+   longitudinal alignment, growth/random-effects models, or design-based
+   inference.
 
 ### [ ] G10. Defined contrasts, constraints, and model comparison
 
