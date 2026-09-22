@@ -3,7 +3,7 @@
 Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
-**Status:** G1 through G3 have implemented workflows, and G4 through G7 have
+**Status:** G1 through G3 have implemented workflows, and G4 through G8 have
 implemented core workflows with documented methodological limits. The remaining
 unchecked entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
@@ -66,7 +66,7 @@ correctness concerns.
 | G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting | `311ec2d`, `8cb4304`, `d9d370b`, `e5f4ff8` |
 | G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation | `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`, `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f` |
 | G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
-| G8 | P2 | Missing | Group comparison and measurement invariance |
+| G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274` |
 | G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
 | G10 | P2 | Missing | Defined contrasts and model-comparison workflows |
 | G11 | P3 | Missing | Binary/ordinal structural response families |
@@ -437,7 +437,7 @@ and target-free assessments are explicit rather than silently omitted.
 **Tracking commits:** `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`,
 `cf60de7`.
 
-### [ ] G8. Group comparison and measurement invariance
+### [x] G8. Group comparison and measurement invariance
 
 **Evidence/gap:** neither measurement nor association fitting accepts a group
 specification, item-parameter equality constraints, or a group-difference test.
@@ -457,6 +457,35 @@ do not copy conventional metric/scalar labels without a corresponding model.
 **Acceptance:** invariant simulations recover aligned states and calibrated
 group contrasts; threshold shifts and loading differences are detected without
 being mistaken for structural effects; small groups produce clear limitations.
+
+**Implemented (2026-09-21):** [measurement_invariance()](../R/groups.R)
+resolves a group column or vector through the fit's retained row IDs, retains
+the pooled cross-fitted locked scores as the common scale, and reports group
+construct means/SDs, group-specific ordinal discrimination/threshold or
+continuous intercept/slope/residual parameters, and reference-group item
+contrasts with descriptive difference flags. Manifest constructs remain in the
+score summaries and receive explicit unavailable parameter rows. Groups below
+`min_group_size` remain visible with a warning and a `small_group` flag.
+
+[group_comparison()](../R/groups.R) reuses an association's selected structural
+shapes and pooled scores, reports per-group scalar estimates for linear/product
+edges, reference-directed path differences, and size-preserving permutation
+p-values with null intervals. Nonlinear edges are reported as unavailable when a
+single scalar contrast is not defined. Both results preserve the caller's random
+stream and expose a `diagnostic_common_anchor` or
+`associational_group_contrast` status.
+
+This closes the supported common-anchor comparison workflow. It remains
+**partial methodologically**: the package does not yet jointly estimate
+multi-group MML models with shared/free ordinal thresholds and discriminations,
+or provide calibrated likelihood-ratio/DIF tests. The item flags are conditional
+diagnostics and must not be relabeled as conventional lavaan metric/scalar
+invariance. Focused coverage is in
+[test-groups.R](../tests/testthat/test-groups.R), including listwise row
+alignment, threshold/loading shifts, manifest availability, small groups,
+structural contrasts, reproducible permutations, and invalid inputs.
+
+**Tracking commits:** `183cc0b`, `845e274`.
 
 ### [ ] G9. Cluster-aware analysis and repeated observations
 
@@ -660,7 +689,9 @@ present manually reusing scores as a validated higher-order latent model.
    validate G4's inference choices. Develop G14's causal validation before
    widening causal claims.
 3. Add G12 plots and G10 contrasts on the stable result/uncertainty schema;
-   extend to G8 groups, the cluster-aware portion of G9, and G15 study planning.
+   extend G8's core diagnostics to a joint constrained estimator only if the
+   methodological decision is approved, then address the cluster-aware portion
+   of G9 and G15 study planning.
 4. Evaluate G11, multilevel/longitudinal G9, and G16 as separate research
    proposals. They change the estimator's scope and need more than UI work.
 

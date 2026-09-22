@@ -1,5 +1,18 @@
 # cssem (development version)
 
+## Group comparison and invariance diagnostics (2026-09-21)
+
+* Added `measurement_invariance()` with a pooled common-anchor scale, group
+  construct summaries, conditional ordinal/continuous item parameters, and
+  reference-group discrimination/threshold or slope/intercept diagnostics.
+  Small groups, manifest constructs, sparse items, and the future need for a
+  joint constrained estimator are reported explicitly.
+* Added `group_comparison()` for reference-directed structural path contrasts
+  on pooled locked scores. Linear and product edges receive per-group estimates,
+  size-preserving permutation p-values, and null intervals; nonlinear edges are
+  explicitly unavailable when a scalar contrast is undefined. Core commits:
+  `183cc0b`, `845e274`.
+
 ## Structural prediction (2026-09-21)
 
 * Added `predict.cssem_association()` for predictor-only structural scoring.

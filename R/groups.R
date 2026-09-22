@@ -85,7 +85,7 @@
         observed_n <- sum(keep)
         if (observed_n < 5L) {
           if (identical(scale, "ordinal")) {
-            pars <- c(discrimination = NA_real_, setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)),
+            pars <- c(discrimination = NA_real_, stats::setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)),
               paste0("threshold_", seq_along(encoder$encoders[[j]]$tau))))
           } else pars <- c(intercept = NA_real_, slope = NA_real_, residual_sd = NA_real_)
           for (parameter in names(pars)) add(nm, item, scale, g, parameter, pars[[parameter]], observed_n,
@@ -96,12 +96,12 @@
           item_fit <- if (identical(scale, "ordinal")) .fit_ordinal(z[keep], y[keep], k = length(encoder$levels[[j]]))
             else .fit_continuous(z[keep], y[keep])
           if (identical(scale, "ordinal")) {
-            c(discrimination = item_fit$a, setNames(item_fit$tau, paste0("threshold_", seq_along(item_fit$tau))))
+            c(discrimination = item_fit$a, stats::setNames(item_fit$tau, paste0("threshold_", seq_along(item_fit$tau))))
           } else c(intercept = item_fit$intercept, slope = item_fit$slope, residual_sd = item_fit$sigma)
         }, error = function(e) structure(conditionMessage(e), class = "group_parameter_error"))
         if (inherits(estimate, "group_parameter_error")) {
           if (identical(scale, "ordinal")) pars <- c(discrimination = NA_real_,
-            setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)), paste0("threshold_", seq_along(encoder$encoders[[j]]$tau))))
+            stats::setNames(rep(NA_real_, length(encoder$encoders[[j]]$tau)), paste0("threshold_", seq_along(encoder$encoders[[j]]$tau))))
           else pars <- c(intercept = NA_real_, slope = NA_real_, residual_sd = NA_real_)
           for (parameter in names(pars)) add(nm, item, scale, g, parameter, pars[[parameter]], observed_n,
             FALSE, as.character(estimate))
