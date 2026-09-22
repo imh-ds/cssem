@@ -93,6 +93,51 @@ test_that("recursive prediction uses observed mediators without unused ancestors
   expect_true(all(result$predictions$source == "observed"))
 })
 
+test_that("recursive prediction follows row-specific upstream demand", {
+  set.seed(41)
+  n <- 30L
+  data <- data.frame(
+    a1 = rnorm(n), a2 = rnorm(n), b1 = rnorm(n), b2 = rnorm(n),
+    c1 = rnorm(n), c2 = rnorm(n), d1 = rnorm(n), d2 = rnorm(n),
+    check.names = FALSE)
+  model <- specify_measurement(
+    A = continuous("a1", "a2"), B = continuous("b1", "b2"),
+    C = continuous("c1", "c2"), D = continuous("d1", "d2"), folds = 3L)
+  fit <- fit_states(model, data, seed = 2, iterations = 1, diagnostics = FALSE)
+  chain <- specify_structure(
+    B ~ linear(A), C ~ linear(B), D ~ linear(C),
+    order = c("A", "B", "C", "D"))
+  association <- associate(fit, chain, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  newdata <- data.frame(b1 = c(NA_real_, data$b1[[2L]]),
+    b2 = c(NA_real_, data$b2[[2L]]),
+    c1 = c(data$c1[[1L]], NA_real_), c2 = c(data$c2[[1L]], NA_real_))
+
+  result <- predict(association, newdata, outcomes = "D", mode = "recursive")
+  expect_true(all(is.finite(result$predictions$prediction)))
+})
+
+test_that("recursive prediction ignores invalid unused ancestor columns", {
+  set.seed(42)
+  n <- 30L
+  data <- data.frame(
+    a1 = rnorm(n), a2 = rnorm(n), b1 = rnorm(n), b2 = rnorm(n),
+    c1 = rnorm(n), c2 = rnorm(n), d1 = rnorm(n), d2 = rnorm(n))
+  model <- specify_measurement(
+    A = continuous("a1", "a2"), B = continuous("b1", "b2"),
+    C = continuous("c1", "c2"), D = continuous("d1", "d2"), folds = 3L)
+  fit <- fit_states(model, data, seed = 2, iterations = 1, diagnostics = FALSE)
+  chain <- specify_structure(
+    B ~ linear(A), C ~ linear(B), D ~ linear(C),
+    order = c("A", "B", "C", "D"))
+  association <- associate(fit, chain, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  newdata <- data.frame(a1 = rep(Inf, n), a2 = rep(Inf, n),
+    b1 = data$b1, b2 = data$b2, c1 = data$c1, c2 = data$c2)
+
+  expect_no_error(predict(association, newdata, outcomes = "D", mode = "recursive"))
+})
+
 test_that("recursive prediction does not promote prior-only states to inputs", {
   generated <- cssem:::.structural_validation_data("linear", n = 42, seed = 40, items = 3, missing = 0)
   generated$model$folds <- 3L
