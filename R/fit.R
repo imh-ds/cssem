@@ -38,6 +38,14 @@
 #'   object from [make_splits()] or an integer fold assignment with one value
 #'   per input row. Explicit assignments are retained in the fitted object's
 #'   `measurement_split` metadata and are filtered alongside listwise exclusions.
+#' @param cluster Optional column name or one-value-per-input-row vector
+#'   identifying repeated observations from the same independent unit. When
+#'   supplied, omitted measurement splits are grouped by unit and explicit
+#'   assignments are checked for cluster leakage. This is a cluster-aware
+#'   resampling contract, not a multilevel SEM estimator.
+#' @param design Optional named design metadata. Survey weights, strata,
+#'   finite-population corrections, replicate weights, and design-based
+#'   standard errors are unsupported and fail explicitly.
 #' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -52,14 +60,17 @@
 fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       tolerance = 1e-3, quadrature = seq(-4, 4, length.out = 31L),
                       diagnostics = TRUE, preset = c("default", "exploratory"),
-                      missing_policy = c("partial", "listwise", "error"), split = NULL) {
+                      missing_policy = c("partial", "listwise", "error"), split = NULL,
+                      cluster = NULL, design = NULL) {
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
   preset <- match.arg(preset)
   missing_policy <- match.arg(missing_policy)
+  .reject_unsupported_design_fields(design)
   input_data <- data
   input_row_ids <- seq_len(nrow(input_data))
+  input_cluster_ids <- .resolve_cluster_ids(cluster, input_data)
   .preflight_stop(check_model(model), "Model preflight failed")
   .preflight_stop(check_data(data, model), "Data preflight failed")
   resolved_split <- .resolve_split_assignment(split, data, model$folds)
@@ -86,15 +97,24 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     keep <- !missing_rows
     data <- data[keep, , drop = FALSE]
     input_row_ids <- which(keep)
+    if (!is.null(input_cluster_ids)) input_cluster_ids <- input_cluster_ids[input_row_ids]
     if (!nrow(data)) stop("missing_policy = \"listwise\" removed every row; no observations remain.", call. = FALSE)
     .preflight_stop(check_data(data, model), "Preflight checks failed after listwise missing-data exclusion")
   }
   n <- nrow(data); if (n < model$folds * 4L) warning("Small folds may make construct states unstable.", call. = FALSE)
   if (is.null(resolved_split)) {
-    set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
-    measurement_method <- "random"
-    measurement_provenance <- data.frame(method = "random", folds = model$folds,
-      seed = seed, group = NA_character_, time = NA_character_, stringsAsFactors = FALSE)
+    if (is.null(input_cluster_ids)) {
+      set.seed(seed); fold <- sample(rep(seq_len(model$folds), length.out = n))
+      measurement_method <- "random"
+      measurement_provenance <- data.frame(method = "random", folds = model$folds,
+        seed = seed, group = NA_character_, time = NA_character_, stringsAsFactors = FALSE)
+    } else {
+      grouped <- make_splits(data, method = "group", folds = model$folds,
+        group = input_cluster_ids, seed = seed)
+      fold <- grouped$assignment
+      measurement_method <- grouped$method
+      measurement_provenance <- grouped$provenance
+    }
   } else {
     fold <- resolved_split$assignment
     if (missing_policy == "listwise" && length(input_row_ids) != length(fold))
@@ -104,10 +124,14 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     measurement_method <- resolved_split$method
     measurement_provenance <- resolved_split$metadata$provenance
   }
+  if (!is.null(input_cluster_ids)) .validate_cluster_assignment(input_cluster_ids, fold, "measurement split")
   .preflight_stop(check_data(data, model, folds = fold), "Data preflight failed for split assignment")
   measurement_split <- structure(list(method = measurement_method, folds = model$folds,
     assignment = as.integer(fold), row_ids = as.integer(input_row_ids),
-    provenance = measurement_provenance), class = c("cssem_splits", "list"))
+    provenance = measurement_provenance, cluster_values = input_cluster_ids,
+    unit_n = .cluster_unit_n(input_cluster_ids),
+    unit_summary = .cluster_summary(input_cluster_ids)),
+    class = c("cssem_splits", "list"))
   construct_names <- names(model$constructs)
   locked <- matrix(NA_real_, n, length(model$constructs), dimnames = list(NULL, construct_names))
   # Raw-scale out-of-fold posterior variance; NA for manifest constructs (no
@@ -209,6 +233,9 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
     input_data = input_data, row_ids = as.integer(input_row_ids),
+    cluster_ids = input_cluster_ids,
+    cluster_summary = .cluster_summary(input_cluster_ids),
+    independent_unit_n = .cluster_unit_n(input_cluster_ids),
     missing_policy = missing_policy, sample_ledger = sample_ledger,
     measurement_split = measurement_split,
     # Keep the inputs and resolved controls needed by update.fit_states().  A
@@ -217,7 +244,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     numerical_diagnostics = .measurement_numerical_diagnostics(full, model, n = n),
     fit_settings = list(seed = seed, draws = draws, iterations = iterations,
       tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
-      preset = preset, missing_policy = missing_policy, split = split),
+      preset = preset, missing_policy = missing_policy, split = split,
+      cluster = cluster, design = design),
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")
