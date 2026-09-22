@@ -179,6 +179,36 @@ specify_structure <- function(..., order = NULL) {
   order
 }
 
+.validate_fixed_shapes <- function(fixed_shapes, structure) {
+  if (!is.list(fixed_shapes) || is.null(names(fixed_shapes)) ||
+      any(!nzchar(names(fixed_shapes))) || anyDuplicated(names(fixed_shapes)))
+    stop("fixed_shapes must be a named list of selected structural shapes.", call. = FALSE)
+  missing <- setdiff(names(structure$effects), names(fixed_shapes))
+  extra <- setdiff(names(fixed_shapes), names(structure$effects))
+  if (length(missing) || length(extra))
+    stop(sprintf("fixed_shapes must name every structural outcome exactly once (missing: %s; extra: %s).",
+      if (length(missing)) paste(missing, collapse = ", ") else "none",
+      if (length(extra)) paste(extra, collapse = ", ") else "none"), call. = FALSE)
+  out <- lapply(names(structure$effects), function(outcome) {
+    shapes <- fixed_shapes[[outcome]]
+    predictors <- names(structure$effects[[outcome]])
+    if (!is.character(shapes) || is.null(names(shapes)) || !setequal(names(shapes), predictors))
+      stop(sprintf("fixed_shapes[[\"%s\"]] must be a named shape vector for predictors: %s.",
+        outcome, paste(predictors, collapse = ", ")), call. = FALSE)
+    shapes <- as.character(shapes[predictors])
+    valid <- shapes == "linear" | shapes == "product" |
+      grepl("^smooth_df[0-9]+$", shapes) |
+      shapes %in% c("monotone_increasing", "monotone_decreasing")
+    if (any(!valid)) stop(sprintf("Unsupported fixed structural shape(s): %s.",
+      paste(unique(shapes[!valid]), collapse = ", ")), call. = FALSE)
+    interaction <- vapply(predictors, .is_interaction, logical(1))
+    if (any(interaction & shapes != "product"))
+      stop("Interaction predictors require fixed shape = \"product\".", call. = FALSE)
+    stats::setNames(shapes, predictors)
+  })
+  names(out) <- names(structure$effects); out
+}
+
 .structural_fold_sets <- function(folds, repeats, seed) {
   repeats <- as.integer(repeats)
   if (is.na(repeats) || repeats < 1L) stop("structural_repeats must be at least 1.", call. = FALSE)
@@ -684,6 +714,8 @@ specify_structure <- function(..., order = NULL) {
 #'   `"complete"` excludes rows with any non-finite or prior-only score from
 #'   structural fitting and records them in [sample_accounting()]. `"error"`
 #'   rejects such rows before fitting.
+#' @param fixed_shapes Optional named list of selected shape vectors used to
+#'   refit an existing structural shape selection without searching again.
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
@@ -693,7 +725,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
                              preset = c("default", "exploratory"), level = .95,
-                             missing_policy = c("complete", "error")) {
+                             missing_policy = c("complete", "error"), fixed_shapes = NULL) {
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -722,6 +754,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
   declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
+  fixed_shapes <- if (is.null(fixed_shapes)) NULL else .validate_fixed_shapes(fixed_shapes, structure)
   score_row_ids <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(nrow(scores))
   measurement_status <- .measurement_status(fit, score_row_ids, declared)
   observed_status <- measurement_status == "complete" | measurement_status == "partial"
@@ -786,6 +819,15 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
   for (outcome in names(structure$effects)) {
     policies <- structure$effects[[outcome]]; predictors <- names(policies)
+    if (!is.null(fixed_shapes)) {
+      selected_shapes <- fixed_shapes[[outcome]]
+      baseline_shapes <- selected_shapes
+      baseline <- .cv_shape_candidate(scores, outcome, selected_shapes, fold_sets)
+      nonlinear <- list(); candidate_meta <- list(); candidate_keys <- character()
+      frequency <- improvement <- improvement_se <- shape_p <- adjusted <- numeric()
+      flagged <- winner <- NA_character_; relative_gain <- NA_real_; select_nonlinear <- FALSE
+      selected <- baseline
+    } else {
     # Declared interaction predictors enter as fixed linear-by-linear product
     # terms; only main-effect predictors are shape-searched.
     baseline_shapes <- stats::setNames(vapply(predictors, function(p) if (.is_interaction(p)) "product" else "linear", character(1)), predictors)
@@ -829,6 +871,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     select_nonlinear <- is.finite(relative_gain) && relative_gain > shape_min_gain
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
+    }
     full_model <- .fit_shape_model(scores, outcome, selected_shapes)
     corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
       weights = respondent_weights, posterior_var = posterior_var, level = level)
@@ -888,7 +931,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
       reliability = reliability, eiv_bootstrap = eiv_bootstrap,
       respondent_weighting = respondent_weighting, preset = preset, level = level,
-      missing_policy = missing_policy),
+      missing_policy = missing_policy, fixed_shapes = fixed_shapes),
     row_ids = score_row_ids, missing_policy = missing_policy,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")

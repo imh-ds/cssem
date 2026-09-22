@@ -111,6 +111,33 @@
     `*` = left * right, `/` = left / right)
 }
 
+.contrast_evaluate_table <- function(table, spec) {
+  lookup <- .contrast_lookup(table)
+  referenced <- unique(unlist(lapply(spec$definitions, `[[`, "references"), use.names = FALSE))
+  unknown <- setdiff(referenced, names(lookup))
+  if (length(unknown)) stop(sprintf("Unknown parameter_id(s): %s.", paste(unknown, collapse = ", ")), call. = FALSE)
+  values <- list(); availability <- list()
+  for (id in referenced) {
+    entry <- lookup[[id]]
+    values[[id]] <- if (isTRUE(entry$available)) as.numeric(table[[entry$column]][[entry$row]]) else NA_real_
+    availability[[id]] <- list(available = isTRUE(entry$available), reason = entry$reason,
+      basis = entry$basis, parameter_id = id)
+  }
+  estimates <- vapply(spec$definitions, function(definition) {
+    tryCatch(as.numeric(.contrast_eval_ast(definition$ast, values)), error = function(e) NA_real_)
+  }, numeric(1))
+  names(estimates) <- names(spec$definitions)
+  reasons <- vapply(spec$definitions, function(definition) {
+    missing <- definition$references[!vapply(definition$references, function(id) isTRUE(availability[[id]]$available), logical(1))]
+    if (length(missing)) return(paste0("Unavailable parameter_id(s): ", paste(missing, collapse = ", ")))
+    value <- tryCatch(.contrast_eval_ast(definition$ast, values), error = function(e) e)
+    if (inherits(value, "error")) conditionMessage(value) else ""
+  }, character(1))
+  list(estimates = estimates, availability = availability,
+    expression_status = data.frame(contrast = names(estimates), estimate = unname(estimates),
+      available = is.finite(estimates), availability_reason = reasons, stringsAsFactors = FALSE))
+}
+
 #' Declare safe arithmetic contrasts over CS-SEM parameter IDs
 #'
 #' @param definitions Named list of arithmetic expression strings.
@@ -137,8 +164,9 @@ contrast_spec <- function(definitions, basis = c("auto", "naive", "corrected")) 
 
 #' Evaluate a CS-SEM contrast specification
 #'
-#' Point evaluation is available in Task 1. Resampling arguments are accepted
-#' for the joint contrast implementation and are validated there.
+#' The point estimate is evaluated from the stable parameter table. When
+#' `reps` is positive, all referenced terms are refit and evaluated together in
+#' one resampling run so their covariance is preserved.
 #' @param object A supported CS-SEM result object.
 #' @param spec A `cssem_contrast_spec` object.
 #' @param reps Number of joint resampling replicates.
@@ -153,37 +181,55 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
                      resample = c("row", "cluster"), cluster = NULL,
                      selection = c("fixed", "repeat")) {
   if (!inherits(spec, "cssem_contrast_spec")) stop("spec must be a contrast_spec() object.", call. = FALSE)
+  reps <- .bootstrap_scalar_integer(reps, "reps", minimum = 0L)
+  if (length(level) != 1L || !is.numeric(level) || !is.finite(level) || level <= 0 || level >= 1)
+    stop("level must be a number strictly between zero and one.", call. = FALSE)
+  seed <- .bootstrap_scalar_integer(seed, "seed", minimum = 0L)
+  resample <- match.arg(resample); selection <- match.arg(selection)
   table <- parameter_table(object)
   if (!is.data.frame(table) || !nrow(table)) stop("object does not expose a parameter table.", call. = FALSE)
-  lookup <- .contrast_lookup(table)
-  referenced <- unique(unlist(lapply(spec$definitions, `[[`, "references"), use.names = FALSE))
-  unknown <- setdiff(referenced, names(lookup))
-  if (length(unknown)) stop(sprintf("Unknown parameter_id(s): %s.", paste(unknown, collapse = ", ")), call. = FALSE)
-  values <- list(); availability <- list()
-  for (id in referenced) {
-    entry <- lookup[[id]]
-    values[[id]] <- if (isTRUE(entry$available)) as.numeric(table[[entry$column]][[entry$row]]) else NA_real_
-    availability[[id]] <- list(available = isTRUE(entry$available), reason = entry$reason,
-      basis = entry$basis, parameter_id = id)
+  evaluated <- .contrast_evaluate_table(table, spec)
+  result <- list(spec = spec, parameter_table = table, estimates = evaluated$estimates,
+    availability = evaluated$availability, expression_status = evaluated$expression_status,
+    basis = spec$basis, selection = selection, reps = reps,
+    level = level, seed = seed, resample = resample, cluster = cluster,
+    status = if (all(is.finite(evaluated$estimates))) "complete" else "partial")
+  if (reps > 0L) {
+    if (!inherits(object, "cssem_association"))
+      stop("Bootstrap contrasts currently require a cssem_association object.", call. = FALSE)
+    if (!all(is.finite(evaluated$estimates))) {
+      result$draws <- matrix(NA_real_, nrow = reps, ncol = length(evaluated$estimates),
+        dimnames = list(as.character(seq_len(reps)), names(evaluated$estimates)))
+      result$replicates <- data.frame(replicate = seq_len(reps), status = "failed",
+        failure_reason = "The point contrast is unavailable; no valid bootstrap statistic exists.",
+        stringsAsFactors = FALSE)
+      result$successful_replicates <- 0L; result$failure_count <- reps
+      result$intervals <- data.frame(contrast = names(evaluated$estimates), estimate = unname(evaluated$estimates),
+        ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
+    } else {
+      boot_fit <- object$fit
+      if (is.null(boot_fit$data)) boot_fit$data <- as.data.frame(boot_fit$locked_scores)
+      statistic <- function(context) {
+        refit <- .bootstrap_association(context, object, selection)
+        values <- .contrast_evaluate_table(parameter_table(refit), spec)$estimates
+        if (any(!is.finite(values))) stop("A bootstrap contrast replicate produced an unavailable estimate.", call. = FALSE)
+        values
+      }
+      bootstrap <- bootstrap_model(boot_fit, statistic, reps = reps, level = level, seed = seed,
+        refit = "locked_scores", resample = resample, cluster = cluster)
+      result$draws <- bootstrap$draws; result$replicates <- bootstrap$replicates
+      result$successful_replicates <- bootstrap$successful_replicates
+      result$failure_count <- bootstrap$failure_count; result$bootstrap <- bootstrap
+      result$intervals <- bootstrap$summary
+      result$selection_changes <- if (selection == "fixed") 0L else NA_integer_
+    }
+  } else {
+    result$draws <- matrix(numeric(), nrow = 0L, ncol = length(evaluated$estimates),
+      dimnames = list(character(), names(evaluated$estimates)))
+    result$intervals <- data.frame(contrast = names(evaluated$estimates), estimate = unname(evaluated$estimates),
+      ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
   }
-  estimates <- vapply(spec$definitions, function(definition) {
-    tryCatch(as.numeric(.contrast_eval_ast(definition$ast, values)), error = function(e) NA_real_)
-  }, numeric(1))
-  names(estimates) <- names(spec$definitions)
-  reasons <- vapply(spec$definitions, function(definition) {
-    missing <- definition$references[!vapply(definition$references, function(id) isTRUE(availability[[id]]$available), logical(1))]
-    if (length(missing)) return(paste0("Unavailable parameter_id(s): ", paste(missing, collapse = ", ")))
-    value <- tryCatch(.contrast_eval_ast(definition$ast, values), error = function(e) e)
-    if (inherits(value, "error")) conditionMessage(value) else ""
-  }, character(1))
-  structure(list(spec = spec, parameter_table = table, estimates = estimates,
-    availability = availability, expression_status = data.frame(
-      contrast = names(estimates), estimate = unname(estimates), available = is.finite(estimates),
-      availability_reason = reasons, stringsAsFactors = FALSE),
-    basis = spec$basis, selection = match.arg(selection), reps = as.integer(reps),
-    level = level, seed = seed, resample = match.arg(resample), cluster = cluster,
-    status = if (all(is.finite(estimates))) "complete" else "partial"),
-    class = c("cssem_contrast", "list"))
+  structure(result, class = c("cssem_contrast", "list"))
 }
 
 #' @export
