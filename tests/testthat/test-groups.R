@@ -36,6 +36,16 @@ test_that("measurement invariance resolves filtered rows and flags small groups"
   expect_error(measurement_invariance(fit, "not_a_column"), "column")
 })
 
+test_that("manifest constructs remain score-comparable but have unavailable item parameters", {
+  d <- data.frame(m = seq_len(48) / 10, group = rep(c("A", "B"), each = 24))
+  fit <- fit_states(specify_measurement(M = manifest("m"), folds = 3), d,
+    seed = 9, iterations = 1, diagnostics = FALSE)
+  out <- measurement_invariance(fit, "group", min_group_size = 20)
+  expect_equal(unique(out$item_parameters$parameter), "manifest_scale")
+  expect_true(all(!out$item_parameters$available))
+  expect_true(all(is.na(out$item_contrasts$estimate)))
+})
+
 test_that("group structural comparison returns reproducible path contrasts", {
   d <- simulate_states(n = 96, missing = 0, seed = 103)
   d$group <- rep(c("A", "B"), each = 48)
@@ -57,6 +67,7 @@ test_that("group structural comparison returns reproducible path contrasts", {
   expect_equal(first$contrasts, second$contrasts)
   expect_true(any(first$contrasts$outcome == "B" & first$contrasts$predictor == "A"))
   expect_true(all(first$contrasts$reference == "A"))
+  expect_true(all(c("null_low", "null_high", "n_group", "n_reference") %in% names(first$contrasts)))
   expect_true(all(first$permutation_settings$permutations == 9L))
 })
 
@@ -69,4 +80,19 @@ test_that("group comparison rejects invalid references and preserves the RNG str
   expect_error(measurement_invariance(fit, "group", reference = "Z"), "reference")
   after <- { set.seed(88); .Random.seed }
   expect_equal(before, after)
+})
+
+test_that("permutation inference preserves the caller random stream", {
+  d <- simulate_states(n = 72, missing = 0, seed = 105)
+  d$group <- rep(c("A", "B"), each = 36)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)),
+    B = ordinal(paste0("b", 1:4)), folds = 3)
+  fit <- fit_states(model, d, seed = 10, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(B ~ linear(A), order = c("A", "B")),
+    structural_repeats = 1, seed = 12)
+  set.seed(77); first <- runif(1)
+  expected <- runif(1)
+  set.seed(77); expect_equal(runif(1), first)
+  group_comparison(association, "group", permutations = 5, seed = 13, min_group_size = 20)
+  expect_equal(runif(1), expected)
 })

@@ -203,10 +203,11 @@ print.cssem_measurement_invariance <- function(x, ...) {
 
 .group_selected_shapes <- function(association) {
   selected <- association$candidate_metrics[association$candidate_metrics$selected, , drop = FALSE]
-  lapply(names(association$full_models), function(outcome) {
+  shapes <- lapply(names(association$full_models), function(outcome) {
     rows <- selected[selected$outcome == outcome, , drop = FALSE]
     stats::setNames(as.character(rows$shape), rows$predictor)
-  }) |> stats::setNames(names(association$full_models))
+  })
+  stats::setNames(shapes, names(association$full_models))
 }
 
 .group_shape_effects <- function(scores, labels, outcome, shapes, target_labels) {
@@ -273,8 +274,8 @@ group_comparison <- function(association, group, reference = NULL, permutations 
   for (outcome in names(shapes)) for (predictor in names(shapes[[outcome]])) for (target in targets) {
     shape <- shapes[[outcome]][[predictor]]
     pair <- resolved$values %in% c(reference, target)
-    complete <- unique(c(outcome, unlist(lapply(.predictor_constructs(predictor), identity), use.names = FALSE)))
-    complete <- pair & apply(as.matrix(association$scores[, c(outcome, unique(unlist(lapply(names(shapes[[outcome]]), .predictor_constructs), use.names = FALSE))), drop = FALSE]), 1L,
+    score_columns <- unique(c(outcome, unlist(lapply(names(shapes[[outcome]]), .predictor_constructs), use.names = FALSE)))
+    complete <- pair & apply(as.matrix(association$scores[, score_columns, drop = FALSE]), 1L,
       function(x) all(is.finite(x)))
     labels_pair <- resolved$values[complete]; scores_pair <- association$scores[complete, , drop = FALSE]
     observed <- .group_edge_difference(scores_pair, labels_pair, outcome, predictor, shape, target, reference)
@@ -287,12 +288,19 @@ group_comparison <- function(association, group, reference = NULL, permutations 
     }
     p <- if (permutations > 0L && isTRUE(observed[["available"]]) && any(is.finite(null)))
       (1 + sum(abs(null) >= abs(observed[["estimate"]]), na.rm = TRUE)) / (sum(is.finite(null)) + 1) else NA_real_
+    null_interval <- if (any(is.finite(null)))
+      stats::quantile(null, c((1 - level) / 2, (1 + level) / 2), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    target_info <- group_effects[group_effects$outcome == outcome & group_effects$predictor == predictor & group_effects$group == target, , drop = FALSE]
+    reference_info <- group_effects[group_effects$outcome == outcome & group_effects$predictor == predictor & group_effects$group == reference, , drop = FALSE]
     index <- index + 1L
     rows[[index]] <- data.frame(outcome = outcome, predictor = predictor, shape = shape, group = target,
       reference = reference, estimate = if (isTRUE(observed[["available"]])) group_effects$estimate[group_effects$outcome == outcome & group_effects$predictor == predictor & group_effects$group == target][[1L]] else NA_real_,
       reference_estimate = if (isTRUE(observed[["available"]])) group_effects$estimate[group_effects$outcome == outcome & group_effects$predictor == predictor & group_effects$group == reference][[1L]] else NA_real_,
       difference = if (isTRUE(observed[["available"]])) observed[["estimate"]] else NA_real_,
-      p_value = p, permutations = as.integer(permutations), available = isTRUE(observed[["available"]]),
+      null_low = null_interval[[1L]], null_high = null_interval[[2L]], p_value = p,
+      n_group = if (nrow(target_info)) target_info$n[[1L]] else 0L,
+      n_reference = if (nrow(reference_info)) reference_info$n[[1L]] else 0L,
+      permutations = as.integer(permutations), available = isTRUE(observed[["available"]]),
       availability_reason = if (isTRUE(observed[["available"]])) "" else {
         info <- group_effects[group_effects$outcome == outcome & group_effects$predictor == predictor & group_effects$group %in% c(target, reference), , drop = FALSE]
         paste(unique(info$availability_reason), collapse = "; ")
