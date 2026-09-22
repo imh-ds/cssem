@@ -578,6 +578,141 @@ likelihood-ratio tests or global AIC/BIC from unrelated block/selection losses.
 uncertainty preserves covariance between paths; model comparisons use identical
 observations, targets, and evaluation splits and expose their assumptions.
 
+**Implementation plan (pending; no G10 code is shipped by this plan):**
+
+G10 should be delivered as a sequence of separately reviewable phases. The
+first release should make contrasts of already-estimated CS-SEM quantities
+reliable; it should not introduce a covariance-SEM parameter table or infer a
+global likelihood from block losses.
+
+**Task 1 — establish stable estimand identities and an expression contract.**
+
+* Modify `R/summary.R` and the existing `parameter_table()` methods so every
+  available structural edge and supported effect has a stable `parameter_id`,
+  `estimate_basis`, `shape`, `available`, and `status` field. The ID must be
+  independent of row order and must distinguish an edge coefficient, an
+  interaction coefficient, a corrected estimate, and a derived effect.
+* Create `R/contrasts.R` with `contrast_spec(definitions, basis =
+  c("auto", "naive", "corrected"))` and a `contrast(object, spec, reps =
+  0L, level = .95, seed = 1L, resample = c("row", "cluster"), cluster =
+  NULL, selection = c("fixed", "repeat"))` evaluator. A specification is a
+  named list of arithmetic expressions over `parameter_id` values; the
+  evaluator accepts only numeric literals, IDs, `+`, `-`, `*`, `/`, and
+  parentheses. Reject unknown IDs, unavailable estimates, division by a value
+  whose draw is zero, and arbitrary function calls. Store the parsed
+  expression, referenced IDs, basis, and unavailable reason in the result.
+* Add tests in `tests/testthat/test-contrasts.R` for order-independent IDs,
+  linear differences, products such as indirect effects, unknown/unavailable
+  references, malformed expressions, and explicit refusal of unsupported
+  nonlinear or causal interpretations.
+* Commit this schema and parser separately as `feat: add stable contrast estimands`.
+
+**Task 2 — evaluate joint contrasts with covariance-preserving draws.**
+
+* Create `R/contrast-bootstrap.R` with an internal
+  `.bootstrap_association(context, association, selection)` helper. It must
+  call the existing `bootstrap_model()` once per resample, refit the
+  association from that context, and return one complete vector of referenced
+  estimates. The same row or cluster draw must feed every term; independent
+  confidence intervals must never be subtracted after the fact.
+* Add an explicit `selection = c("fixed", "repeat")` control. `fixed` refits
+  the selected edge shapes from the original association; `repeat` reruns
+  shape selection in each resample and records selection changes. The default
+  must be `fixed` and the result must state that its uncertainty is conditional
+  on the selected shapes. Preserve cluster provenance and caller RNG state
+  through the existing G9 bootstrap contract.
+* Return a `cssem_contrast` object containing point estimates, joint draws,
+  percentile intervals, referenced parameter rows, selection mode, basis,
+  successful/failed replicate counts, and failure reasons. Use `NA` with a
+  reason for an unavailable term; do not coerce an unavailable nonlinear edge
+  or missing reliability into zero.
+* Add analytic tests in `tests/testthat/test-contrasts.R` showing that a linear
+  difference equals independently calculated coefficients and that the joint
+  interval changes when the covariance between two paths changes. Add tests
+  for deterministic seeds, row/cluster resampling, failed replicate
+  accounting, fixed-versus-repeated selection labels, and worker invariance.
+* Commit as `feat: add covariance-preserving defined contrasts`.
+
+**Task 3 — add paired theory comparison on identical outer partitions.**
+
+* Create `R/model-comparison.R` with
+  `compare_outer(first, second, metrics = c("rmse", "mae", "r_squared"),
+  reps = 999L, seed = 1L)` for two completed `cssem_outer_validation`
+  objects. Require identical outer IDs, train/test row IDs, target outcomes,
+  metric scope, and held-out availability before computing paired differences.
+  Report per-partition RMSE, MAE, and R-squared differences, the direction of
+  the improvement, the number of comparable rows, and a paired resampling
+  interval over partitions.
+* Add `compare_models(model_a, structure_a, model_b, structure_b, data,
+  splits, seed = 1L, args_a = list(), args_b = list(), ...)` as a wrapper
+  around `validate_outer()` for two theory specifications using one
+  caller-supplied `cssem_splits` object. It must retain both validation
+  objects, the split fingerprint, observation/target fingerprints, model
+  descriptors, and all mismatch or unavailable reasons. It must reject
+  different outer partitions, different held-out target sets, and silently
+  aligned latent scales.
+* Permit comparisons with different measurement declarations only when the
+  caller supplies an explicit named character `alignment` map from model-B
+  construct names to model-A names, and every mapped construct has a common
+  observed target and score basis. Without that map, reject comparisons whose
+  construct names, indicator sets, or score bases differ. Never expose AIC/BIC,
+  likelihood-ratio tests, or a global SEM fit statistic for these predictive
+  block models.
+* Add `tests/testthat/test-model-comparison.R` covering identical splits,
+  mismatched split fingerprints, missing held-out outcomes, target alignment,
+  different measurement specifications, paired metric arithmetic, and
+  reproducibility. Update `R/outer-validation.R` to store the stable split and
+  observation fingerprints; create `man/compare_outer.Rd` and
+  `man/compare_models.Rd` with the mismatch contract.
+* Commit as `feat: add paired outer model comparisons`.
+
+**Task 4 — design and implement a deliberately narrow constraint contract.**
+
+* Before changing fitting behavior, add
+  `docs/superpowers/specs/2026-09-22-g10-constraints-design.md` that fixes the
+  estimand and optimizer: initial
+  constraints apply only to selected linear structural coefficients on the
+  locked-score scale, use deterministic pooled constrained least squares, and
+  do not claim errors-in-variables correction, nonlinear equality, ordinal
+  structural outcomes, or measurement-parameter equality.
+* Create `R/constraints.R` with a validated `cssem_constraint(equal = list(
+  c("Y~X", "Z~X")), fixed = c("Y~X" = 0))` object for named edge equality
+  groups and fixed numeric values. Add a `constraints = NULL` argument to
+  `associate()` only after the design is accepted. Reject
+  smooth, monotone, interaction-shape, disattenuated, information-weighted,
+  and shape-search fits until each has a separately defined estimand.
+* Store constraint declarations, the constrained coefficient table, optimizer
+  status, rank/conditioning diagnostics, and an explicit limitation in
+  `cssem_association`; expose them through `parameter_table()`, `summary()`,
+  and `effect_card()` without relabeling the result as lavaan-style ML SEM.
+* Add deterministic recovery and failure tests in
+  `tests/testthat/test-constraints.R` for equal slopes, fixed zero paths,
+  rank deficiency, conflicting labels, non-linear rejection, and unavailable
+  EIV combinations. Commit this phase separately as
+  `feat: add constrained linear structural estimates`.
+
+**Task 5 — documentation, release gates, and methodological validation.**
+
+* Add man pages and examples for `contrast_spec()`, `contrast()`,
+  `compare_outer()`, `compare_models()`, and the constrained linear contract;
+  update `NEWS.md`, `README.md`, and `docs/associational-structure.md` with
+  the estimand basis, selection mode, alignment requirements, and explicit
+  non-goals.
+* Extend the validation manifests with independent analytic targets for path
+  differences, products, constrained slopes, and paired held-out loss. Check
+  coverage against the joint draw target and record selection changes and
+  comparison failures rather than filtering them out.
+* Add a release gate that fails if a contrast uses an unavailable term, if
+  paired models do not share observations/splits, or if a constraint is
+  reported outside its declared linear score-scale contract. Only then change
+  this entry to implemented; until all phases pass, keep G10 marked missing or
+  partial and list the tracking commits here.
+
+**Recommended order:** Tasks 1–2 establish the stable result and uncertainty
+schema that G12 plots and G15 planning can consume. Task 3 can proceed once
+G6 outer-validation provenance is stable. Task 4 is intentionally last because
+it changes the estimator; it must not block contrasts or paired comparisons.
+
 ### [ ] G11. Categorical structural outcomes
 
 **Evidence/gap:** ordinal/binary *measurement* is implemented, but
