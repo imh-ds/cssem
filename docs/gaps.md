@@ -71,7 +71,7 @@ correctness concerns.
 | G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
-| G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde` |
+| G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
 | G11 | P3 | Missing | Binary/ordinal structural response families |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
@@ -722,7 +722,12 @@ scales remain future work. The implementation does not add a covariance-SEM
 likelihood, global fit statistic, AIC/BIC, measurement equality, nonlinear
 constraint, or categorical structural estimator.
 
-**Tracking commits:** `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`.
+Constrained associations mark their cross-validated predictive diagnostics as
+unavailable until a fold-wise constrained estimator is added; their reported
+coefficients and in-sample fitted values remain explicitly locked-score
+associational quantities.
+
+**Tracking commits:** `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea`.
 
 **Recommended order:** Tasks 1–2 establish the stable result and uncertainty
 schema that G12 plots and G15 planning can consume. Task 3 can proceed once

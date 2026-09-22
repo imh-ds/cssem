@@ -7,7 +7,7 @@
   Joint row/cluster bootstrap draws evaluate every referenced term together,
   preserving covariance and recording fixed or repeated shape selection,
   replicate failures, and unavailable terms. Commits: `5082f19`, `4390942`,
-  `f1efc1f`, `b4b7cde`.
+  `f1efc1f`, `b4b7cde`, `99907ea`.
 * Added `compare_outer()` and `compare_models()` for paired held-out RMSE,
   MAE, and R-squared comparisons on identical outer partitions. Split,
   observation, target, and score-basis fingerprints are checked before metric
