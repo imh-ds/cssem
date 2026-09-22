@@ -59,6 +59,14 @@ test_that("binary structural outcomes use probability-scale diagnostics", {
   expect_true(all(contrast$contrast$estimate_ci_low <= contrast$contrast$estimate_ci_high))
   expect_true(all(contrast$contrast$probability_contrast_ci_low <= contrast$contrast$probability_contrast_ci_high))
   expect_equal(contrast$successful_replicates, 80L)
+  failed_bootstrap_association <- association
+  failed_bootstrap_association$scores$Y <- 2L
+  failed_contrast <- marginal_contrast(failed_bootstrap_association, "Y", "X", c(-1, 1),
+    reps = 8L, seed = 3102L)
+  expect_equal(failed_contrast$successful_replicates, 0L)
+  expect_equal(failed_contrast$failure_count, 8L)
+  expect_equal(failed_contrast$interval_status, "insufficient_successful_replicates")
+  expect_true(all(is.na(failed_contrast$contrast$estimate_ci_low)))
   expect_error(associate(fit, specification, reliability = c(X = .8)), "categorical")
 })
 
