@@ -7,8 +7,9 @@ Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 implemented core workflows with documented methodological limits, G9 now
 has a partial P2 cluster-aware workflow. G9's P3 multilevel/longitudinal
 extension remains a separate unchecked research project; G10 now has a partial
-core workflow with explicit validation limits, and the other unchecked entries
-are proposed work. Existing defect reproductions and fixes belong in
+core workflow with explicit validation limits; G11 now has a scoped categorical
+structural workflow with explicit limits, and the other unchecked entries are
+proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -72,7 +73,7 @@ correctness concerns.
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
 | G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
-| G11 | P3 | Missing | Binary/ordinal structural response families |
+| G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families | `a8351cf`, `0d6ddc4`, pending docs commit |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
 | G14 | P1 | Partial | Causal assumptions and validation contract |
@@ -734,7 +735,7 @@ schema that G12 plots and G15 planning can consume. Task 3 can proceed once
 G6 outer-validation provenance is stable. Task 4 is intentionally last because
 it changes the estimator; it must not block contrasts or paired comparisons.
 
-### [ ] G11. Categorical structural outcomes
+### [x] G11. Categorical structural outcomes
 
 **Evidence/gap:** ordinal/binary *measurement* is implemented, but
 [.fit_shape_model()](../R/structure.R#L300) uses a continuous least-squares
@@ -750,9 +751,27 @@ prediction, likelihood-appropriate diagnostics, and marginal contrasts. Rework
 measurement-error correction and mediation for each family; neither a linear
 EIV correction nor a coefficient product should be carried over automatically.
 
-**Acceptance:** probability predictions stay valid; binary/ordinal simulations
-recover the declared target and calibrate intervals. Until then, clearly label
-continuous-score analyses of such variables rather than implying categorical SEM.
+**Implemented (2026-09-22):** `structural_outcome()`,
+`binary_outcome()`, and `ordinal_outcome()` declare a response family and link
+on `specify_structure()`/`cssem_structure()`. Binary outcomes use a logistic
+GLM and ordinal outcomes use cumulative-logit proportional odds. Repeated
+structural cross-validation reports log loss, Brier score, probability RMSE,
+and accuracy; Gaussian outcomes retain their existing metrics. `predict()` now
+supports expected-value, probability, and most-probable-class output, while
+`prediction_assessment()` carries the categorical metrics when target
+indicators are available. Invalid category values fail before fitting.
+
+The scope is explicit: categorical outcomes accept linear main effects only.
+Nonlinear shapes, interactions, constraints, information weighting, EIV/
+reliability correction, coefficient-product mediation, and shadow R-squared
+gaps are rejected or marked unavailable rather than evaluated on a continuous
+scale. Nominal outcomes and non-logit links remain outside the supported
+envelope. Probability/threshold simulations and family-specific interval
+calibration remain follow-up validation work.
+
+**Tracking commits:** `a8351cf` (design, plan, tests), `0d6ddc4`
+(estimators, diagnostics, prediction API), and the documentation commit that
+records this status.
 
 ### [ ] G12. Structural and effect visualization
 

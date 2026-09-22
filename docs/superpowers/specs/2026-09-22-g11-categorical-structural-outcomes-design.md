@@ -59,6 +59,11 @@ Prediction returns expected category values by default and supports
 rows are finite, bounded, and sum to one. Prediction assessment reports the
 same categorical metrics where a target score is available.
 
+`marginal_contrast()` changes one locked-score predictor between two supplied
+settings and averages the expected-category and per-category probability
+contrasts over the supplied score rows. It is an associational predictive
+contrast, not a causal treatment effect.
+
 EIV/reliability correction, respondent information weighting, constraints,
 and structural mediation products are rejected for categorical outcomes until
 family-specific estimators and estimands are designed. Shadow-model R-squared
@@ -78,5 +83,7 @@ fail before fitting with an actionable error.
    CV reports finite log loss/Brier/accuracy metrics.
 2. Ordinal predictions return a complete probability matrix whose rows sum to
    one and expected category values remain within the declared levels.
-3. Invalid response values and unsupported corrections fail explicitly.
-4. Gaussian behavior and the existing test suite remain unchanged.
+3. `marginal_contrast()` returns finite expected and category-probability
+   contrasts for supported categorical outcomes.
+4. Invalid response values and unsupported corrections fail explicitly.
+5. Gaussian behavior and the existing test suite remain unchanged.
