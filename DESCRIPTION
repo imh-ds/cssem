@@ -20,6 +20,7 @@ Description: Research implementation of cross-fitted construct-state modeling fo
     effects by default; causal estimands are available only under explicitly
     declared adjustment sets and temporal order.
 Imports:
+    MASS,
     rpart,
     splines
 License: GPL (>= 3)

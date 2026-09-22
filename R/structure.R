@@ -44,11 +44,90 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
   lapply(value, .effect_policy)
 }
 
+#' Declare a structural response family
+#'
+#' Structural families are explicit because measurement scale declarations do
+#' not determine the likelihood used for an endogenous locked score.
+#'
+#' @param family One of `"gaussian"`, `"binomial"` (binary), or
+#'   `"ordinal"`.
+#' @param link The response link. Gaussian uses `"identity"`; binomial and
+#'   ordinal use the cumulative/logistic `"logit"` link.
+#' @param levels Optional numeric outcome levels. Binary levels must be `0, 1`;
+#'   ordinal levels must be unique integer values in increasing order.
+#' @return A validated `cssem_structural_outcome` declaration.
+#' @export
+structural_outcome <- function(family = c("gaussian", "binomial", "ordinal"),
+                               link = NULL, levels = NULL) {
+  if (!is.character(family) || length(family) != 1L || is.na(family))
+    stop("family must be one of 'gaussian', 'binomial', or 'ordinal'.", call. = FALSE)
+  family <- match.arg(family, c("gaussian", "binomial", "ordinal"))
+  expected_link <- if (family == "gaussian") "identity" else "logit"
+  if (is.null(link)) link <- expected_link
+  if (!is.character(link) || length(link) != 1L || !identical(link, expected_link))
+    stop(sprintf("family '%s' only supports link '%s'.", family, expected_link), call. = FALSE)
+  if (family == "gaussian") {
+    if (!is.null(levels)) stop("Gaussian structural outcomes cannot declare levels.", call. = FALSE)
+  } else if (family == "binomial") {
+    if (is.null(levels)) levels <- c(0, 1)
+    if (!is.numeric(levels) || length(levels) != 2L || !all(is.finite(levels)) ||
+        !identical(as.numeric(levels), c(0, 1)))
+      stop("Binomial structural levels must be exactly c(0, 1).", call. = FALSE)
+  } else {
+    if (!is.null(levels)) {
+      if (!is.numeric(levels) || length(levels) < 2L || any(!is.finite(levels)) ||
+          any(levels != as.integer(levels)) || anyDuplicated(levels) ||
+          !identical(as.numeric(levels), sort(as.numeric(levels))))
+        stop("Ordinal structural levels must be at least two increasing integer values.", call. = FALSE)
+      levels <- as.numeric(levels)
+    }
+  }
+  structure(list(family = family, link = link, levels = levels),
+    class = "cssem_structural_outcome")
+}
+
+#' @rdname structural_outcome
+#' @export
+binary_outcome <- function(levels = c(0, 1))
+  structural_outcome("binomial", levels = levels)
+
+#' @rdname structural_outcome
+#' @export
+ordinal_outcome <- function(levels = NULL)
+  structural_outcome("ordinal", levels = levels)
+
+.normalize_structural_outcome <- function(value) {
+  if (inherits(value, "cssem_structural_outcome")) return(value)
+  if (is.character(value) && length(value) == 1L)
+    return(structural_outcome(value))
+  if (is.list(value)) {
+    family <- if (is.null(value$family)) "gaussian" else value$family
+    link <- if (is.null(value$link)) NULL else value$link
+    levels <- if (is.null(value$levels)) NULL else value$levels
+    return(structural_outcome(family, link = link, levels = levels))
+  }
+  stop("Each structural family must be a structural_outcome() declaration or a supported family name.", call. = FALSE)
+}
+
+.normalize_response_families <- function(families, outcomes) {
+  result <- lapply(outcomes, function(outcome) structural_outcome("gaussian"))
+  names(result) <- outcomes
+  if (is.null(families)) return(result)
+  if (!is.list(families) || is.null(names(families)) || any(!nzchar(names(families))) ||
+      anyDuplicated(names(families)))
+    stop("families must be a named list keyed by structural outcome names.", call. = FALSE)
+  unknown <- setdiff(names(families), outcomes)
+  if (length(unknown))
+    stop(sprintf("families names must match declared outcomes (unknown: %s).", paste(unknown, collapse = ", ")), call. = FALSE)
+  for (outcome in names(families)) result[[outcome]] <- .normalize_structural_outcome(families[[outcome]])
+  result
+}
+
 # Shared validated construction for cssem_structure() and specify_structure().
 # Both front doors resolve to this identical internal representation, so every
 # downstream consumer of a `cssem_structure` object (associate() and
 # everything built on it) is unaffected by which front door built it.
-.build_structure <- function(effects, order) {
+.build_structure <- function(effects, order, families = NULL) {
   if (!is.list(effects) || is.null(names(effects)) || any(names(effects) == ""))
     stop("effects must be a named list of outcome-predictor declarations.", call. = FALSE)
   parsed <- lapply(effects, .parse_effects)
@@ -56,8 +135,9 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
     stop("An outcome cannot be its own predictor.", call. = FALSE)
   if (!is.null(order) && (anyDuplicated(order) || any(!nzchar(order))))
     stop("order must contain unique, non-empty construct names.", call. = FALSE)
+  response_families <- .normalize_response_families(families, names(parsed))
   structure(list(effects = parsed, order = if (is.null(order)) NULL else as.character(order),
-    status = "associational"), class = "cssem_structure")
+    response_families = response_families, status = "associational"), class = "cssem_structure")
 }
 
 #' Declare an associational CS-SEM structural model
@@ -72,12 +152,14 @@ cssem_effect <- function(shape = c("auto", "linear", "auto_monotone",
 #'   character vector of predictors or a named list of [cssem_effect()] objects.
 #' @param order Optional character vector giving the user-declared temporal
 #'   order of all constructs.
+#' @param families Optional named list of [structural_outcome()] declarations,
+#'   keyed by endogenous outcome. Omitted outcomes use Gaussian identity.
 #' @return An object of class `cssem_structure`.
 #' @export
-cssem_structure <- function(effects, order = NULL) {
+cssem_structure <- function(effects, order = NULL, families = NULL) {
   .Deprecated("specify_structure", package = "cssem",
     msg = "cssem_structure() is deprecated; use specify_structure() with formulas instead.")
-  .build_structure(effects, order)
+  .build_structure(effects, order, families)
 }
 
 # Shape-wrapper names recognized inside specify_structure() formulas. These are
@@ -126,6 +208,8 @@ cssem_structure <- function(effects, order = NULL) {
 #' @param ... One formula per declared outcome.
 #' @param order Optional character vector giving the user-declared temporal
 #'   order of all constructs.
+#' @param families Optional named list of [structural_outcome()] declarations,
+#'   keyed by endogenous outcome. Omitted outcomes use Gaussian identity.
 #' @return An object of class `cssem_structure`.
 #' @examples
 #' structure <- specify_structure(
@@ -135,7 +219,7 @@ cssem_structure <- function(effects, order = NULL) {
 #' )
 #' @family model specification functions
 #' @export
-specify_structure <- function(..., order = NULL) {
+specify_structure <- function(..., order = NULL, families = NULL) {
   formulas <- list(...)
   if (!length(formulas) || !all(vapply(formulas, inherits, logical(1), what = "formula")))
     stop("Every declaration must be a formula, e.g. specify_structure(Outcome ~ predictor1 + predictor2).", call. = FALSE)
@@ -143,7 +227,7 @@ specify_structure <- function(..., order = NULL) {
   if (anyDuplicated(outcomes)) stop("Each outcome may appear in only one formula.", call. = FALSE)
   effects <- lapply(formulas, .formula_effects)
   names(effects) <- outcomes
-  .build_structure(effects, order)
+  .build_structure(effects, order, families)
 }
 
 .effect_predictors <- function(effect_specs) names(effect_specs)
@@ -327,7 +411,80 @@ specify_structure <- function(..., order = NULL) {
   coefficient
 }
 
-.fit_shape_model <- function(data, outcome, shapes) {
+.structural_family <- function(family = NULL) {
+  if (is.null(family)) return(structural_outcome("gaussian"))
+  .normalize_structural_outcome(family)
+}
+
+.validate_structural_response <- function(data, outcome, family) {
+  family <- .structural_family(family)
+  values <- data[[outcome]]
+  if (family$family == "gaussian") return(list(values = values, levels = NULL))
+  if (any(!is.finite(values)))
+    stop(sprintf("Categorical structural outcome '%s' contains non-finite locked scores.", outcome), call. = FALSE)
+  if (family$family == "binomial") {
+    if (any(!values %in% family$levels))
+      stop(sprintf("Binomial structural outcome '%s' must contain only 0/1 locked scores.", outcome), call. = FALSE)
+    return(list(values = as.numeric(values), levels = family$levels))
+  }
+  if (any(values != as.integer(values)))
+    stop(sprintf("Ordinal structural outcome '%s' must contain integer locked-score categories.", outcome), call. = FALSE)
+  observed <- sort(unique(as.numeric(values)))
+  levels <- if (is.null(family$levels)) observed else family$levels
+  if (length(levels) < 2L || any(!values %in% levels))
+    stop(sprintf("Ordinal structural outcome '%s' must use at least two declared integer levels.", outcome), call. = FALSE)
+  list(values = as.numeric(values), levels = as.numeric(levels))
+}
+
+.categorical_metrics <- function(observed, probability, family, levels) {
+  keep <- is.finite(observed) & apply(probability, 1L, function(x) all(is.finite(x)))
+  if (!any(keep)) return(c(rmse = NA_real_, r_squared = NA_real_, log_loss = NA_real_, brier = NA_real_, accuracy = NA_real_))
+  y <- observed[keep]; p <- probability[keep, , drop = FALSE]
+  index <- match(y, levels)
+  if (anyNA(index)) return(c(rmse = NA_real_, r_squared = NA_real_, log_loss = NA_real_, brier = NA_real_, accuracy = NA_real_))
+  expected <- drop(p %*% as.numeric(levels))
+  truth <- matrix(0, nrow(p), ncol(p)); truth[cbind(seq_len(nrow(p)), index)] <- 1
+  selected <- p[cbind(seq_len(nrow(p)), index)]
+  selected <- pmax(pmin(selected, 1 - 1e-12), 1e-12)
+  sse <- sum((y - expected)^2); sst <- sum((y - mean(y))^2)
+  c(rmse = sqrt(mean((y - expected)^2)), r_squared = if (sst > 0) 1 - sse / sst else NA_real_,
+    log_loss = -mean(log(selected)), brier = mean(rowSums((p - truth)^2)),
+    accuracy = mean(max.col(p, ties.method = "first") == index))
+}
+
+.metric_or_na <- function(metrics, name) {
+  if (name %in% names(metrics)) unname(metrics[[name]]) else NA_real_
+}
+
+.fit_shape_model <- function(data, outcome, shapes, family = NULL) {
+  family <- .structural_family(family)
+  if (family$family != "gaussian") {
+    invalid <- names(shapes)[vapply(shapes, function(shape) !identical(shape, "linear"), logical(1))]
+    if (length(invalid) || any(vapply(names(shapes), .is_interaction, logical(1))))
+      stop("Categorical structural outcomes only support linear main-effect shapes.", call. = FALSE)
+    response <- .validate_structural_response(data, outcome, family)
+    predictors <- names(shapes)
+    design <- cbind(`(Intercept)` = 1, as.matrix(data[, predictors, drop = FALSE]))
+    if (family$family == "binomial") {
+      fitted <- stats::glm.fit(design, response$values, family = stats::binomial(link = family$link))
+      coefficient <- fitted$coefficients; names(coefficient) <- colnames(design)
+      return(list(outcome = outcome, shapes = shapes,
+        infos = stats::setNames(lapply(predictors, function(x) list(shape = "linear")), predictors),
+        coefficient = coefficient, maps = stats::setNames(as.list(seq.int(2L, ncol(design))), predictors),
+        family = family, levels = response$levels, categorical_fit = fitted,
+        predictor_names = predictors))
+    }
+    frame <- data.frame(.cssem_response = ordered(response$values, levels = response$levels),
+      data[, predictors, drop = FALSE], check.names = FALSE)
+    formula <- stats::reformulate(predictors, response = ".cssem_response")
+    fitted <- MASS::polr(formula, data = frame, Hess = TRUE, method = "logistic", model = TRUE)
+    coefficient <- fitted$coefficients; names(coefficient) <- predictors
+    return(list(outcome = outcome, shapes = shapes,
+      infos = stats::setNames(lapply(predictors, function(x) list(shape = "linear")), predictors),
+      coefficient = coefficient, maps = stats::setNames(as.list(seq_along(predictors)), predictors),
+      family = family, levels = response$levels, categorical_fit = fitted,
+      predictor_names = predictors))
+  }
   predictors <- names(shapes); blocks <- list(); infos <- list(); constrained <- integer(); directions <- integer()
   for (predictor in predictors) {
     built <- if (.is_interaction(predictor)) {
@@ -352,10 +509,29 @@ specify_structure <- function(..., order = NULL) {
   for (predictor in predictors) {
     width <- ncol(blocks[[predictor]]); maps[[predictor]] <- start:(start + width - 1L); start <- start + width
   }
-  list(outcome = outcome, shapes = shapes, infos = infos, coefficient = coefficient, maps = maps)
+  list(outcome = outcome, shapes = shapes, infos = infos, coefficient = coefficient, maps = maps,
+    family = family, levels = NULL, predictor_names = predictors)
 }
 
-.predict_shape_model <- function(model, data) {
+.predict_shape_model <- function(model, data, type = c("expected", "probability", "class")) {
+  type <- match.arg(type)
+  family <- .structural_family(model$family)
+  if (family$family != "gaussian") {
+    design <- cbind(`(Intercept)` = 1, as.matrix(data[, model$predictor_names, drop = FALSE]))
+    if (family$family == "binomial") {
+      coefficient <- model$categorical_fit$coefficients
+      eta <- drop(design %*% coefficient)
+      probability <- cbind(`0` = 1 - stats::plogis(eta), `1` = stats::plogis(eta))
+    } else {
+      probability <- as.matrix(stats::predict(model$categorical_fit,
+        newdata = data, type = "probs"))
+      probability <- probability[, as.character(model$levels), drop = FALSE]
+    }
+    expected <- drop(probability %*% as.numeric(model$levels))
+    if (type == "probability") return(probability)
+    if (type == "class") return(model$levels[max.col(probability, ties.method = "first")])
+    return(expected)
+  }
   blocks <- lapply(names(model$shapes), function(predictor) {
     info <- model$infos[[predictor]]
     if (identical(info$shape, "product")) matrix(data[[info$terms[[1L]]]] * data[[info$terms[[2L]]]], ncol = 1L)
@@ -375,20 +551,35 @@ specify_structure <- function(..., order = NULL) {
   c(rmse = sqrt(mean((observed[keep] - predicted[keep])^2)), r_squared = 1 - sse / sst)
 }
 
-.cv_shape_candidate <- function(scores, outcome, shapes, fold_sets) {
+.cv_shape_candidate <- function(scores, outcome, shapes, fold_sets, family = NULL) {
+  family <- .structural_family(family)
   predictions <- vector("list", length(fold_sets)); losses <- numeric()
+  probabilities <- if (family$family == "gaussian") NULL else vector("list", length(fold_sets))
+  levels <- if (family$family == "gaussian") NULL else .validate_structural_response(scores, outcome, family)$levels
   for (repeat_index in seq_along(fold_sets)) {
     folds <- fold_sets[[repeat_index]]; prediction <- rep(NA_real_, nrow(scores))
+    probability <- if (family$family == "gaussian") NULL else matrix(NA_real_, nrow(scores), length(levels),
+      dimnames = list(NULL, as.character(levels)))
     for (fold in sort(unique(folds))) {
       train <- scores[folds != fold, , drop = FALSE]; test <- scores[folds == fold, , drop = FALSE]
-      model <- .fit_shape_model(train, outcome, shapes)
+      model <- .fit_shape_model(train, outcome, shapes, family)
       prediction[folds == fold] <- .predict_shape_model(model, test)
+      if (family$family != "gaussian") probability[folds == fold, ] <- .predict_shape_model(model, test, "probability")
     }
     predictions[[repeat_index]] <- prediction
-    losses <- c(losses, .foldwise_mse(scores[[outcome]], prediction, folds))
+    if (family$family == "gaussian") losses <- c(losses, .foldwise_mse(scores[[outcome]], prediction, folds)) else {
+      index <- match(scores[[outcome]], levels)
+      losses <- c(losses, vapply(sort(unique(folds)), function(fold) {
+        rows <- which(folds == fold); p <- pmax(pmin(probability[cbind(rows, index[rows])], 1 - 1e-12), 1e-12)
+        -mean(log(p))
+      }, numeric(1)))
+      probabilities[[repeat_index]] <- probability
+    }
   }
-  list(prediction = predictions[[1L]], fold_mse = losses,
-    metrics = .prediction_metrics(scores[[outcome]], predictions[[1L]]))
+  metrics <- if (family$family == "gaussian") .prediction_metrics(scores[[outcome]], predictions[[1L]]) else
+    .categorical_metrics(scores[[outcome]], probabilities[[1L]], family, levels)
+  list(prediction = predictions[[1L]], probability = if (family$family == "gaussian") NULL else probabilities[[1L]],
+    fold_mse = losses, metrics = metrics)
 }
 
 # Heteroskedasticity-robust (HC3) Wald test for curvature on one edge, holding
@@ -603,8 +794,19 @@ specify_structure <- function(..., order = NULL) {
 # linear, monotone, or product are disattenuated; smooth edges are reported but
 # not yet corrected (closed-form errors-in-variables for splines is out of scope).
 .corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed,
-                               weights = NULL, posterior_var = NULL, level = .95) {
+                               weights = NULL, posterior_var = NULL, level = .95, family = NULL) {
   predictors <- names(selected_shapes)
+  family <- .structural_family(family)
+  if (family$family != "gaussian") {
+    return(do.call(rbind, lapply(predictors, function(p) data.frame(
+      outcome = outcome, predictor = p, naive_estimate = NA_real_, corrected_estimate = NA_real_,
+      predictor_reliability = NA_real_, corrected_ci_low = NA_real_, corrected_ci_high = NA_real_,
+      eiv_applicable = FALSE, eiv_stable = NA, eiv_n = nrow(scores), eiv_rank = NA_integer_,
+      eiv_condition_number = NA_real_, eiv_corrected_condition_number = NA_real_, eiv_singular = NA,
+      correction_shrink = NA_real_, correction_strength = NA_real_, reliability_floor_applied = NA,
+      eiv_diagnostic = "Categorical structural outcomes do not support linear EIV correction.",
+      stringsAsFactors = FALSE))))
+  }
   applicable <- vapply(predictors, function(p) selected_shapes[[p]] %in%
     c("linear", "monotone_increasing", "monotone_decreasing", "product"), logical(1))
   fit <- .eiv_coefficients(scores, outcome, predictors, reliability, weights, posterior_var)
@@ -761,10 +963,28 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   spline_df <- unique(as.integer(spline_df))
   if (!length(spline_df) || any(is.na(spline_df)) || any(spline_df < 2L)) stop("spline_df must contain values of at least 2.", call. = FALSE)
   scores <- fit$locked_scores; all_names <- names(scores)
+  response_families <- structure$response_families
+  if (is.null(response_families)) {
+    response_families <- lapply(names(structure$effects), function(x) structural_outcome("gaussian"))
+    names(response_families) <- names(structure$effects)
+  }
   predictor_names <- unlist(lapply(structure$effects, names), use.names = FALSE)
   declared <- unique(c(names(structure$effects), unlist(lapply(predictor_names, .predictor_constructs), use.names = FALSE)))
   if (!all(declared %in% all_names)) stop("Structural declarations must use locked construct names.", call. = FALSE)
   fixed_shapes <- if (is.null(fixed_shapes)) NULL else .validate_fixed_shapes(fixed_shapes, structure)
+  categorical_outcomes <- names(response_families)[vapply(response_families, function(x) .structural_family(x)$family != "gaussian", logical(1))]
+  if (length(categorical_outcomes)) {
+    if (!is.null(constraints) && isTRUE(constraints$active))
+      stop("Constraints are not supported for categorical structural outcomes; use a Gaussian response or omit constraints.", call. = FALSE)
+    if (respondent_weighting != "none" || eiv_bootstrap > 0L || !is.null(reliability))
+      stop("Categorical structural outcomes do not support reliability/EIV correction or information weighting.", call. = FALSE)
+    for (outcome in categorical_outcomes) {
+      declared_shapes <- if (is.null(fixed_shapes)) structure$effects[[outcome]] else fixed_shapes[[outcome]]
+      if (any(vapply(declared_shapes, function(x) !identical(if (inherits(x, "cssem_effect")) x$shape else x, "linear"), logical(1))) ||
+          any(vapply(names(declared_shapes), .is_interaction, logical(1))))
+        stop("Categorical structural outcomes only support linear main-effect shapes.", call. = FALSE)
+    }
+  }
   score_row_ids <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(nrow(scores))
   measurement_status <- .measurement_status(fit, score_row_ids, declared)
   observed_status <- measurement_status == "complete" | measurement_status == "partial"
@@ -778,6 +998,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     score_row_ids <- score_row_ids[score_complete]
   }
   if (nrow(scores) < 2L) stop("Missing-score handling left fewer than two rows for structural fitting.", call. = FALSE)
+  for (outcome in categorical_outcomes)
+    .validate_structural_response(scores, outcome, response_families[[outcome]])
   # Per-construct reliability used by the errors-in-variables correction: the
   # posterior reliability carried on the fit, overridden construct by construct
   # by any user-supplied values. NA where unavailable so the corrected estimate is
@@ -829,10 +1051,12 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
   for (outcome in names(structure$effects)) {
     policies <- structure$effects[[outcome]]; predictors <- names(policies)
+    family <- .structural_family(response_families[[outcome]])
+    categorical <- family$family != "gaussian"
     if (!is.null(fixed_shapes)) {
       selected_shapes <- fixed_shapes[[outcome]]
       baseline_shapes <- selected_shapes
-      baseline <- .cv_shape_candidate(scores, outcome, selected_shapes, fold_sets)
+      baseline <- .cv_shape_candidate(scores, outcome, selected_shapes, fold_sets, family)
       nonlinear <- list(); candidate_meta <- list(); candidate_keys <- character()
       frequency <- improvement <- improvement_se <- shape_p <- adjusted <- numeric()
       flagged <- winner <- NA_character_; relative_gain <- NA_real_; select_nonlinear <- FALSE
@@ -841,11 +1065,12 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     # Declared interaction predictors enter as fixed linear-by-linear product
     # terms; only main-effect predictors are shape-searched.
     baseline_shapes <- stats::setNames(vapply(predictors, function(p) if (.is_interaction(p)) "product" else "linear", character(1)), predictors)
-    baseline <- .cv_shape_candidate(scores, outcome, baseline_shapes, fold_sets)
+    if (categorical) baseline_shapes[] <- "linear"
+    baseline <- .cv_shape_candidate(scores, outcome, baseline_shapes, fold_sets, family)
     nonlinear <- list(); candidate_meta <- list()
-    for (predictor in predictors) if (!.is_interaction(predictor)) for (shape in setdiff(.shape_candidates(policies[[predictor]]$shape, spline_df), "linear")) {
+    for (predictor in predictors) if (!categorical && !.is_interaction(predictor)) for (shape in setdiff(.shape_candidates(policies[[predictor]]$shape, spline_df), "linear")) {
       shapes <- baseline_shapes; shapes[[predictor]] <- shape; key <- paste(predictor, shape, sep = "::")
-      nonlinear[[key]] <- .cv_shape_candidate(scores, outcome, shapes, fold_sets)
+      nonlinear[[key]] <- .cv_shape_candidate(scores, outcome, shapes, fold_sets, family)
       candidate_meta[[key]] <- list(predictor = predictor, shape = shape, shapes = shapes)
     }
     candidate_keys <- names(nonlinear)
@@ -882,9 +1107,9 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     selected_shapes <- if (select_nonlinear) candidate_meta[[winner]]$shapes else baseline_shapes
     selected <- if (select_nonlinear) nonlinear[[winner]] else baseline
     }
-    full_model <- .fit_shape_model(scores, outcome, selected_shapes)
+    full_model <- .fit_shape_model(scores, outcome, selected_shapes, family)
     corrected[[outcome]] <- .corrected_effects(scores, outcome, selected_shapes, reliability_vec, eiv_bootstrap, seed,
-      weights = respondent_weights, posterior_var = posterior_var, level = level)
+      weights = respondent_weights, posterior_var = posterior_var, level = level, family = family)
     edge_p <- function(predictor) if (predictor %in% names(adjusted)) unname(adjusted[[predictor]]) else NA_real_
     # The baseline shape of an interaction predictor is "product", not "linear":
     # effect_card() has always said so, and the ledger reading "linear" made the
@@ -892,12 +1117,18 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     candidate_rows <- lapply(predictors, function(predictor) data.frame(outcome = outcome, predictor = predictor,
       candidate = baseline_shapes[[predictor]], shape = baseline_shapes[[predictor]],
       rmse = baseline$metrics[["rmse"]], r_squared = baseline$metrics[["r_squared"]],
+      log_loss = .metric_or_na(baseline$metrics, "log_loss"),
+      brier = .metric_or_na(baseline$metrics, "brier"),
+      accuracy = .metric_or_na(baseline$metrics, "accuracy"),
       mean_mse_improvement = 0, mse_improvement_se = NA_real_, selection_frequency = if (select_nonlinear && candidate_meta[[winner]]$predictor == predictor) 0 else 1,
       nonlinearity_p = edge_p(predictor),
       selected = !select_nonlinear || candidate_meta[[winner]]$predictor != predictor, stringsAsFactors = FALSE))
     if (length(nonlinear)) for (key in names(nonlinear)) {
       meta <- candidate_meta[[key]]; candidate_rows[[length(candidate_rows) + 1L]] <- data.frame(outcome = outcome, predictor = meta$predictor,
         candidate = meta$shape, shape = meta$shape, rmse = nonlinear[[key]]$metrics[["rmse"]], r_squared = nonlinear[[key]]$metrics[["r_squared"]],
+        log_loss = .metric_or_na(nonlinear[[key]]$metrics, "log_loss"),
+        brier = .metric_or_na(nonlinear[[key]]$metrics, "brier"),
+        accuracy = .metric_or_na(nonlinear[[key]]$metrics, "accuracy"),
         mean_mse_improvement = improvement[[key]], mse_improvement_se = improvement_se[[key]], selection_frequency = frequency[[key]],
         nonlinearity_p = edge_p(meta$predictor),
         selected = isTRUE(select_nonlinear) && identical(key, winner), stringsAsFactors = FALSE)
@@ -905,7 +1136,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     candidates[[outcome]] <- do.call(rbind, candidate_rows)
     for (predictor in predictors) {
       dropped_shapes <- selected_shapes[setdiff(names(selected_shapes), predictor)]
-      dropped <- .cv_shape_candidate(scores, outcome, dropped_shapes, fold_sets)
+      dropped <- .cv_shape_candidate(scores, outcome, dropped_shapes, fold_sets, family)
       difference <- dropped$fold_mse - selected$fold_mse
       contributions[[paste(outcome, predictor, sep = "::")]] <- data.frame(outcome = outcome, predictor = predictor,
         edge_drop_mse_increase = mean(difference), edge_drop_mse_se = stats::sd(difference) / sqrt(length(difference)), stringsAsFactors = FALSE)
@@ -913,11 +1144,16 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     shadow_predictions <- list(); shadow_rows <- list()
     for (scope in scopes) {
       shadow_predictors <- if (scope == "temporal") temporal_order[match(temporal_order, temporal_order) < match(outcome, temporal_order)] else setdiff(all_names, outcome)
-      shadow_prediction <- .shadow_predictions(scores, outcome, shadow_predictors, folds); shadow_metrics <- .prediction_metrics(scores[[outcome]], shadow_prediction)
+      shadow_prediction <- if (categorical) rep(NA_real_, nrow(scores)) else
+        .shadow_predictions(scores, outcome, shadow_predictors, folds)
+      shadow_metrics <- if (categorical) c(r_squared = NA_real_) else
+        .prediction_metrics(scores[[outcome]], shadow_prediction)
       shadow_predictions[[scope]] <- shadow_prediction
       shadow_rows[[scope]] <- data.frame(outcome = outcome, shadow_scope = scope, eligible_predictors = paste(shadow_predictors, collapse = " + "),
-        theory_r_squared = selected$metrics[["r_squared"]], shadow_r_squared = shadow_metrics[["r_squared"]],
-        specification_gap = selected$metrics[["r_squared"]] - shadow_metrics[["r_squared"]], stringsAsFactors = FALSE)
+        theory_r_squared = if (categorical) NA_real_ else selected$metrics[["r_squared"]],
+        shadow_r_squared = shadow_metrics[["r_squared"]],
+        specification_gap = if (categorical) NA_real_ else selected$metrics[["r_squared"]] - shadow_metrics[["r_squared"]],
+        diagnostic_status = if (categorical) "unavailable_categorical_shadow" else "available", stringsAsFactors = FALSE)
     }
     effect_data <- .effect_rows(full_model, scores, outcome)
     effect_data$selection_stability <- vapply(effect_data$predictor, function(predictor) {
@@ -955,7 +1191,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     constraint_diagnostics$predictive_status <- "unavailable: cross-validated constrained diagnostics are not retained; shape selection metrics describe the unconstrained selection stage"
   }
   corrected_table <- do.call(rbind, corrected)
-  structure(list(structure = structure, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
+  structure(list(structure = structure, response_families = response_families, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = corrected_table, numerical_diagnostics = .structural_numerical_diagnostics(corrected_table),
     reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,

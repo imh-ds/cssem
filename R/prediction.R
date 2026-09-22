@@ -288,6 +288,10 @@
 #'   to every declared outcome.
 #' @param mode Prediction mode: "observed" uses direct observed parents;
 #'   "recursive" predicts unavailable endogenous upstream parents when needed.
+#' @param type Output scale: `"expected"` returns expected category values
+#'   (the unchanged Gaussian behavior), `"probability"` returns expected
+#'   values while also retaining per-category probabilities, and `"class"`
+#'   returns the most-probable declared category.
 #' @param missing_policy Whether missing required columns stop with an error or
 #'   return unavailable rows with NA predictions.
 #' @param ... Unused.
@@ -295,9 +299,11 @@
 #' @export
 predict.cssem_association <- function(object, newdata, outcomes = NULL,
                                       mode = c("observed", "recursive"),
-                                      missing_policy = c("error", "na"), ...) {
+                                      missing_policy = c("error", "na"),
+                                      type = c("expected", "probability", "class"), ...) {
   mode <- match.arg(mode)
   missing_policy <- match.arg(missing_policy)
+  type <- match.arg(type)
   .prediction_validate_data(newdata)
   outcomes <- .prediction_outcomes(object, outcomes)
   fit <- object$fit
@@ -308,7 +314,7 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
       .prediction_constructs(object$full_models[[outcome]])
   }), use.names = FALSE))
   support <- .prediction_support(object, support_constructs)
-  prediction_rows <- list(); availability_rows <- list()
+  prediction_rows <- list(); availability_rows <- list(); probability_rows <- list(); class_rows <- list()
   for (outcome in outcomes) {
     model <- object$full_models[[outcome]]
     constructs <- .prediction_constructs(model)
@@ -324,7 +330,20 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
     valid <- row_status %in% c("ok", "partial") &
       apply(as.matrix(states), 1L, function(x) all(is.finite(x)))
     values <- rep(NA_real_, nrow(newdata))
-    if (any(valid)) values[valid] <- .predict_shape_model(model, states[valid, , drop = FALSE])
+    family <- .structural_family(model$family)
+    probabilities <- NULL; classes <- rep(NA_real_, nrow(newdata))
+    if (family$family != "gaussian") {
+      probabilities <- matrix(NA_real_, nrow(newdata), length(model$levels),
+        dimnames = list(NULL, as.character(model$levels)))
+      if (any(valid)) {
+        probabilities[valid, ] <- .predict_shape_model(model, states[valid, , drop = FALSE], "probability")
+        classes[valid] <- .predict_shape_model(model, states[valid, , drop = FALSE], "class")
+      }
+    }
+    if (any(valid)) {
+      values[valid] <- if (identical(type, "class") && family$family != "gaussian") classes[valid] else
+        .predict_shape_model(model, states[valid, , drop = FALSE])
+    }
     resolved_constructs <- if (identical(mode, "recursive")) scored$constructs else constructs
     extrapolated <- .prediction_support_flags(scored$states[, resolved_constructs, drop = FALSE],
       resolved_constructs, support, used = if (identical(mode, "recursive")) scored$used else NULL)
@@ -332,8 +351,12 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
       scored$status, constructs) else rep("observed", nrow(newdata))
     source[row_status %in% c("unavailable", "missing_input")] <- "unavailable"
     prediction_rows[[outcome]] <- data.frame(row_id = seq_len(nrow(newdata)),
-      outcome = outcome, prediction = values, mode = mode, status = row_status,
+      outcome = outcome, prediction = values, prediction_type = type, mode = mode, status = row_status,
       source = source, extrapolated = extrapolated, stringsAsFactors = FALSE)
+    if (family$family != "gaussian") {
+      probability_rows[[outcome]] <- probabilities
+      class_rows[[outcome]] <- classes
+    }
     availability_rows[[outcome]] <- .prediction_required_table(outcome, constructs, fit,
       scored$missing_columns)
   }
@@ -341,9 +364,10 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
   row.names(predictions) <- NULL
   availability <- do.call(rbind, availability_rows)
   row.names(availability) <- NULL
-  structure(list(predictions = predictions, availability = availability,
+  structure(list(predictions = predictions, probabilities = probability_rows,
+    classes = class_rows, availability = availability,
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
-      support = support)), class = c("cssem_prediction", "list"))
+      type = type, support = support)), class = c("cssem_prediction", "list"))
 }
 
 #' @export
@@ -361,12 +385,14 @@ print.cssem_prediction <- function(x, ...) {
   invisible(x)
 }
 
-.prediction_assessment_metrics <- function(observed, predicted, baseline_value = NA_real_) {
+.prediction_assessment_metrics <- function(observed, predicted, baseline_value = NA_real_,
+                                           probability = NULL, family = NULL, levels = NULL) {
   keep <- is.finite(observed) & is.finite(predicted)
   n <- sum(keep)
   result <- list(n = as.integer(n), rmse = NA_real_, mae = NA_real_, r_squared = NA_real_,
     calibration_intercept = NA_real_, calibration_slope = NA_real_,
-    baseline_rmse = NA_real_, baseline_mae = NA_real_, baseline_r_squared = NA_real_)
+    baseline_rmse = NA_real_, baseline_mae = NA_real_, baseline_r_squared = NA_real_,
+    log_loss = NA_real_, brier = NA_real_, accuracy = NA_real_)
   if (!n) return(result)
   y <- observed[keep]; p <- predicted[keep]
   residual <- y - p; sst <- sum((y - mean(y))^2)
@@ -382,6 +408,16 @@ print.cssem_prediction <- function(x, ...) {
     result$baseline_rmse <- sqrt(mean(baseline_residual^2))
     result$baseline_mae <- mean(abs(baseline_residual))
     result$baseline_r_squared <- if (sst > 0) 1 - sum(baseline_residual^2) / sst else NA_real_
+  }
+  if (!is.null(probability) && !is.null(family) && family$family != "gaussian" && !is.null(levels)) {
+    p <- probability[keep, , drop = FALSE]; index <- match(y, levels)
+    if (nrow(p) == n && !anyNA(index) && all(apply(p, 1L, function(x) all(is.finite(x))))) {
+      p <- pmax(pmin(p, 1 - 1e-12), 1e-12)
+      selected <- p[cbind(seq_len(n), index)]
+      truth <- matrix(0, n, ncol(p)); truth[cbind(seq_len(n), index)] <- 1
+      result$log_loss <- -mean(log(selected)); result$brier <- mean(rowSums((p - truth)^2))
+      result$accuracy <- mean(max.col(p, ties.method = "first") == index)
+    }
   }
   result
 }
@@ -431,7 +467,12 @@ prediction_assessment <- function(association, newdata, outcomes = NULL,
     keep <- target_status[rows$row_id] %in% c("complete", "partial") &
       is.finite(rows$observed) & is.finite(rows$prediction)
     baseline_value <- if (identical(baseline, "mean")) mean(association$scores[[outcome]], na.rm = TRUE) else NA_real_
-    measures <- .prediction_assessment_metrics(rows$observed[keep], rows$prediction[keep], baseline_value)
+    family <- .structural_family(association$response_families[[outcome]])
+    levels <- if (family$family == "gaussian") NULL else family$levels
+    probability <- if (family$family == "gaussian") NULL else prediction$probabilities[[outcome]][rows$row_id, , drop = FALSE]
+    measures <- .prediction_assessment_metrics(rows$observed[keep], rows$prediction[keep], baseline_value,
+      probability = if (is.null(probability)) NULL else probability[keep, , drop = FALSE],
+      family = family, levels = levels)
     status <- if (!target_available) "target_unavailable" else if (!measures$n) "no_complete_rows" else "ok"
     metric_rows[[outcome]] <- data.frame(
       outcome = outcome, status = status, target_available = target_available,
@@ -440,6 +481,7 @@ prediction_assessment <- function(association, newdata, outcomes = NULL,
       calibration_slope = measures$calibration_slope, baseline = baseline,
       baseline_mean = baseline_value, baseline_rmse = measures$baseline_rmse,
       baseline_mae = measures$baseline_mae, baseline_r_squared = measures$baseline_r_squared,
+      log_loss = measures$log_loss, brier = measures$brier, accuracy = measures$accuracy,
       stringsAsFactors = FALSE)
   }
   metrics <- do.call(rbind, metric_rows); row.names(metrics) <- NULL
