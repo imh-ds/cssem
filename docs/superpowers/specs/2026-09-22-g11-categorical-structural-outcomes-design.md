@@ -62,7 +62,22 @@ same categorical metrics where a target score is available.
 `marginal_contrast()` changes one locked-score predictor between two supplied
 settings and averages the expected-category and per-category probability
 contrasts over the supplied score rows. It is an associational predictive
-contrast, not a causal treatment effect.
+contrast, not a causal treatment effect. Optional `reps`, `level`, and `seed`
+arguments produce percentile pairs-bootstrap intervals by resampling locked
+score rows and refitting the declared categorical estimator. The result retains
+draws and successful/failed replicate counts; insufficient successful fits
+make intervals unavailable with an explicit status. The default `reps = 0`
+preserves point-only behavior.
+
+Categorical structural coefficients are reported in family-appropriate units
+(log-odds for binomial and cumulative log-odds for ordinal outcomes), with
+likelihood-based standard errors and normal-Wald intervals in the parameter
+table. The table labels the estimate as maximum likelihood and explains that
+EIV correction is unavailable for these response families.
+
+These intervals are conditional on the locked scores and fixed linear
+predictor. They do not refit measurement encoders or represent uncertainty from
+shape selection.
 
 EIV/reliability correction, respondent information weighting, constraints,
 and structural mediation products are rejected for categorical outcomes until
@@ -84,6 +99,11 @@ fail before fitting with an actionable error.
 2. Ordinal predictions return a complete probability matrix whose rows sum to
    one and expected category values remain within the declared levels.
 3. `marginal_contrast()` returns finite expected and category-probability
-   contrasts for supported categorical outcomes.
+   contrasts for supported categorical outcomes and optional, configurable
+   percentile intervals.
 4. Invalid response values and unsupported corrections fail explicitly.
 5. Gaussian behavior and the existing test suite remain unchanged.
+6. Fixed-seed simulations check 95% Wald coefficient-interval coverage for
+   both categorical families and 90% pairs-bootstrap expected- and
+   category-probability-contrast coverage under correctly specified
+   data-generating models.

@@ -19,6 +19,12 @@ Spec: `docs/superpowers/specs/2026-09-22-g11-categorical-structural-outcomes-des
    tests. Commit.
 5. **Documentation and verification** — update `docs/gaps.md` with status and
    commit IDs, run focused and package checks, and commit documentation.
+6. **Categorical inference and calibration** — report binomial/ordinal
+   coefficients in likelihood units with model-based standard errors and Wald
+   intervals; add optional seeded pairs-bootstrap intervals for marginal
+   contrasts; test RNG restoration, reproducibility, failure reporting, and
+   fixed-seed coefficient/contrast coverage before updating G11's scope and
+   validation record. Commit the implementation and documentation separately.
 
 ## Constraints
 

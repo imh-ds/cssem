@@ -73,7 +73,7 @@ correctness concerns.
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
 | G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
-| G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d` |
+| G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families and calibrated uncertainty | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d`, `b05c8bf`, `a956cf3` |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
 | G14 | P1 | Partial | Causal assumptions and validation contract |
@@ -761,17 +761,38 @@ supports expected-value, probability, and most-probable-class output, while
 `prediction_assessment()` carries the categorical metrics when target
 indicators are available. Invalid category values fail before fitting.
 
-The scope is explicit: categorical outcomes accept linear main effects only.
-Nonlinear shapes, interactions, constraints, information weighting, EIV/
-reliability correction, coefficient-product mediation, and shadow R-squared
-gaps are rejected or marked unavailable rather than evaluated on a continuous
-scale. Nominal outcomes and non-logit links remain outside the supported
-envelope. Probability/threshold simulations and family-specific interval
-calibration remain follow-up validation work.
+Categorical coefficients are reported in their estimator's units: binomial
+log-odds or ordinal cumulative log-odds per locked-score unit. The parameter
+table now includes likelihood-based standard errors and Wald intervals, and
+states explicitly that EIV correction is unavailable. `marginal_contrast()`
+accepts optional `reps`, `level`, and `seed` controls for percentile pairs-
+bootstrap intervals on expected-category and per-category probability
+contrasts. It retains draws and successful/failed counts, labels insufficient
+replicates, and restores the caller's random stream. With `reps = 0`, it
+continues to return point contrasts without intervals.
+
+Fixed-seed calibration checks cover simple correctly specified models: 80
+replications per family for 95% coefficient Wald intervals (n = 500; each
+family must cover at least 84%) and 40 per family for 90% expected and
+per-category contrast pairs-bootstrap intervals (n = 240; 120 resamples per
+interval; each estimand must cover at least 70%). The checks pass under these
+controlled binomial-logit and proportional-odds models. They do not establish
+full-pipeline coverage after measurement refitting, shape selection, or
+reliability correction.
+
+The scope remains explicit: categorical outcomes accept linear main effects
+only. Nonlinear shapes, interactions, constraints, information weighting,
+EIV/reliability correction, coefficient-product mediation, and shadow
+R-squared gaps are rejected or marked unavailable rather than evaluated on a
+continuous scale. Nominal outcomes and non-logit links remain outside the
+supported envelope.
 
 **Tracking commits:** `a8351cf` (design, plan, tests), `0d6ddc4`
-(estimators, diagnostics, prediction API), `7eb29fb` (marginal contrasts), and
-`499973d` (this status documentation).
+(estimators, diagnostics, prediction API), `7eb29fb` (marginal contrasts),
+`499973d` (initial status documentation), and `b05c8bf` (categorical
+coefficient inference, calibrated marginal-contrast intervals, tests, and
+help pages), followed by `a956cf3` (explicit insufficient-bootstrap
+replicate accounting test).
 
 ### [ ] G12. Structural and effect visualization
 
