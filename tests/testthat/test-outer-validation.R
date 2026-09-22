@@ -10,6 +10,11 @@ test_that("outer validation separates training selection from test metrics", {
   expect_true(all(result$selection_metrics$metric_scope == "internal_selection"))
   expect_true(all(result$provenance$train_n > 0 & result$provenance$test_n > 0))
   expect_true(all(vapply(result$provenance$train_ids, function(x) length(x) > 0, logical(1))))
+  analysis_provenance <- cssem_provenance(result)
+  expect_identical(analysis_provenance$operation, "validate_outer")
+  expect_identical(analysis_provenance$settings$split_fingerprint,
+    result$settings$split_fingerprint)
+  expect_length(analysis_provenance$input$split_ids, 2L * nrow(result$provenance))
 })
 
 test_that("group and time outer partitions preserve their constraints", {

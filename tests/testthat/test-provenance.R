@@ -28,3 +28,30 @@ test_that("cssem_provenance distinguishes supported legacy and unsupported objec
     "supported")
 })
 
+test_that("fit and association provenance record resolved settings and parents", {
+  data <- simulate_states(n = 48, seed = 401, missing = 0)
+  rownames(data) <- paste0("respondent-id-", seq_len(nrow(data)))
+  data$private_note <- "SECRET-CSSEM-ROW-VALUE"
+  data$a1[[1L]] <- NA_integer_
+  model <- specify_measurement(
+    A = ordinal(paste0("a", 1:4)),
+    B = ordinal(paste0("b", 1:4)), folds = 3
+  )
+  split <- make_splits(data, method = "random", folds = 3, seed = 18)
+  fit <- withCallingHandlers(
+    fit_states(model, data, seed = 17, iterations = 2, diagnostics = FALSE,
+      missing_policy = "listwise", split = split),
+    cssem_nonconvergence = function(w) invokeRestart("muffleWarning")
+  )
+  structure <- specify_structure(B ~ linear(A))
+  provenance <- cssem_provenance(fit)
+  expect_equal(provenance$settings$seed, 17)
+  expect_equal(provenance$input$n_input, 48L)
+  expect_equal(provenance$input$n_retained, 47L)
+  expect_identical(provenance$input$row_positions, 2:48)
+  expect_identical(provenance$settings$model$constructs$A$indicators, paste0("a", 1:4))
+  expect_false(any(c("respondent-id-1", "SECRET-CSSEM-ROW-VALUE") %in%
+    unlist(provenance, recursive = TRUE, use.names = FALSE)))
+  association <- associate(fit, structure, structural_repeats = 1)
+  expect_identical(cssem_provenance(association)$parent$fit$operation, "fit_states")
+})

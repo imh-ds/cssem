@@ -209,6 +209,7 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
                            measurement_missing_policy = c("partial", "listwise", "error"),
                            structural_missing_policy = c("complete", "error"),
                            cluster = NULL, design = NULL) {
+  outer_call <- match.call()
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -337,6 +338,32 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
   provenance <- if (length(provenance_rows)) do.call(rbind, provenance_rows) else data.frame()
   successful <- sum(provenance$status == "success")
   status <- if (!successful) "failed" else if (successful < nrow(provenance)) "partial" else "complete"
+  split_ids <- list()
+  if (nrow(splits$outer)) for (i in seq_len(nrow(splits$outer))) {
+    outer_id <- as.integer(splits$outer$outer_id[[i]])
+    split_ids[[paste0("outer_", outer_id, "_train")]] <-
+      as.integer(splits$outer$train_ids[[i]])
+    split_ids[[paste0("outer_", outer_id, "_test")]] <-
+      as.integer(splits$outer$test_ids[[i]])
+  }
+  cluster_column <- if (length(cluster) == 1L && is.character(cluster) &&
+      cluster %in% names(data)) cluster else NULL
+  outer_provenance <- .cssem_provenance_record("validate_outer", outer_call,
+    settings = list(model = .cssem_provenance_model_specification(model),
+      structure = .cssem_provenance_structure_specification(structure),
+      split = list(method = splits$method, folds = splits$folds, seed = splits$seed,
+        fingerprint = .outer_split_fingerprint(splits)),
+      split_fingerprint = .outer_split_fingerprint(splits),
+      seed = seed, iterations = iterations, tolerance = tolerance,
+      quadrature = quadrature, diagnostics = diagnostics,
+      measurement_missing_policy = measurement_missing_policy,
+      structural_missing_policy = structural_missing_policy,
+      structural_args = .cssem_provenance_association_settings(structural_args),
+      cluster = list(supplied = !is.null(cluster_ids), column = cluster_column,
+        unit_n = .cluster_unit_n(cluster_ids)),
+      design_fields = if (is.null(design)) character() else names(design)),
+    input = .cssem_provenance_input_summary(data, retained_rows = seq_len(nrow(data)),
+      split_ids = split_ids), packages = c("MASS", "rpart", "splines"))
   structure(list(predictions = predictions, selection_metrics = selection_metrics,
     test_metrics = test_metrics, provenance = provenance, failures = failures,
     settings = list(seed = seed, iterations = iterations, tolerance = tolerance,
@@ -348,7 +375,8 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
       observation_fingerprint = .outer_observation_fingerprint(data),
       target_fingerprint = .outer_target_fingerprint(model, structure),
       score_basis_fingerprint = .outer_score_basis_fingerprint(model, structure)),
-    status = status), class = c("cssem_outer_validation", "list"))
+    status = status, provenance_record = outer_provenance),
+    class = c("cssem_outer_validation", "list"))
 }
 
 #' @export

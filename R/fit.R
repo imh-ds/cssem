@@ -62,6 +62,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       diagnostics = TRUE, preset = c("default", "exploratory"),
                       missing_policy = c("partial", "listwise", "error"), split = NULL,
                       cluster = NULL, design = NULL) {
+  fit_call <- match.call()
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
@@ -225,6 +226,19 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   }
   sample_ledger <- .measurement_sample_ledger(model, input_data, input_row_ids,
     as.data.frame(locked), missing_policy, cluster_ids = all_cluster_ids)
+  cluster_column <- if (length(cluster) == 1L && is.character(cluster) &&
+      cluster %in% names(input_data)) cluster else NULL
+  fit_provenance <- .cssem_provenance_record("fit_states", fit_call,
+    settings = list(model = .cssem_provenance_model_specification(model), seed = seed,
+      draws = draws, iterations = iterations, tolerance = tolerance, quadrature = quadrature,
+      diagnostics = diagnostics, preset = preset, missing_policy = missing_policy,
+      split = list(method = measurement_method, folds = model$folds,
+        provenance = unclass(measurement_provenance)),
+      cluster = list(supplied = !is.null(all_cluster_ids), column = cluster_column,
+        unit_n = .cluster_unit_n(all_cluster_ids)),
+      design_fields = if (is.null(design)) character() else names(design)),
+    input = .cssem_provenance_input_summary(input_data, retained_rows = input_row_ids,
+      split_ids = list(measurement_fold = as.integer(fold))), packages = "MASS")
   structure(list(model = model, data = data, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
@@ -248,6 +262,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
       tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
       preset = preset, missing_policy = missing_policy, split = split,
       cluster = cluster, design = design),
+    provenance_record = fit_provenance,
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,
       folds_converged = unname(fold_converged[[nm]]), folds = model$folds)), construct_names)), class = "fit_states")

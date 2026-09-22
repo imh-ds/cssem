@@ -966,6 +966,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              preset = c("default", "exploratory"), level = .95,
                              missing_policy = c("complete", "error"), fixed_shapes = NULL,
                              constraints = NULL) {
+  associate_call <- match.call()
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -1224,6 +1225,37 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     constraint_diagnostics$predictive_status <- "unavailable: cross-validated constrained diagnostics are not retained; shape selection metrics describe the unconstrained selection stage"
   }
   corrected_table <- do.call(rbind, corrected)
+  association_settings <- list(folds = folds, spline_df = spline_df,
+    smooth_uncertainty = smooth_uncertainty, shape_stability_min = shape_stability_min,
+    shape_alpha = shape_alpha, shape_min_gain = shape_min_gain,
+    structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
+    reliability = reliability, eiv_bootstrap = eiv_bootstrap,
+    respondent_weighting = respondent_weighting, preset = preset, level = level,
+    missing_policy = missing_policy, fixed_shapes = fixed_shapes, constraints = constraints)
+  fit_provenance <- fit$provenance_record
+  parent <- if (is.null(fit_provenance)) list() else list(fit = fit_provenance)
+  if (!is.null(fit_provenance)) {
+    association_input <- fit_provenance$input
+  } else {
+    source_data <- if (!is.null(fit$input_data)) fit$input_data else fit$data
+    source_rows <- if (is.data.frame(source_data) && nrow(source_data) >= max(score_row_ids))
+      score_row_ids else seq_len(nrow(scores))
+    association_input <- .cssem_provenance_input_summary(source_data, retained_rows = source_rows)
+  }
+  association_input$n_retained <- as.integer(length(score_row_ids))
+  association_input$row_positions <- as.integer(score_row_ids)
+  association_input$split_ids <- list(structural_fold = as.integer(folds))
+  if (!is.null(fit$measurement_split$assignment) && !is.null(fit$measurement_split$row_ids)) {
+    measurement_rows <- match(score_row_ids, fit$measurement_split$row_ids)
+    if (!anyNA(measurement_rows))
+      association_input$split_ids$measurement_fold <-
+        as.integer(fit$measurement_split$assignment[measurement_rows])
+  }
+  association_provenance <- .cssem_provenance_record("associate", associate_call,
+    settings = list(model = .cssem_provenance_model_specification(fit$model),
+      structure = .cssem_provenance_structure_specification(structure),
+      options = .cssem_provenance_association_settings(association_settings)),
+    input = association_input, parent = parent, packages = c("MASS", "rpart", "splines"))
   structure(list(structure = structure, response_families = response_families, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = corrected_table, numerical_diagnostics = .structural_numerical_diagnostics(corrected_table),
@@ -1232,15 +1264,10 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     constraints = constraints, constraint_diagnostics = constraint_diagnostics,
     # Retain the resolved declaration and controls so update.cssem_association()
     # can rebuild the association through the public associate() contract.
-    association_settings = list(folds = folds, spline_df = spline_df,
-      smooth_uncertainty = smooth_uncertainty, shape_stability_min = shape_stability_min,
-      shape_alpha = shape_alpha, shape_min_gain = shape_min_gain,
-      structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
-      reliability = reliability, eiv_bootstrap = eiv_bootstrap,
-      respondent_weighting = respondent_weighting, preset = preset, level = level,
-      missing_policy = missing_policy, fixed_shapes = fixed_shapes, constraints = constraints),
+    association_settings = association_settings,
     row_ids = score_row_ids, missing_policy = missing_policy,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
+    provenance_record = association_provenance,
     status = "associational"), class = "cssem_association")
 }
 
