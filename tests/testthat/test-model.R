@@ -68,3 +68,26 @@ test_that("manifest() rejects an out-of-range reliability and a multi-indicator 
   expect_error(specify_measurement(Age = manifest("age", reliability = 1.5)))
   expect_error(cssem_model(list(Age = list(indicators = c("age", "weight"), scales = "manifest"))))
 })
+
+test_that("mixed_items preserves declaration order, scales, and keys", {
+  mixed <- mixed_items(
+    ordinal("o1", "o2", keys = c(1, -1)),
+    continuous("c1"),
+    ordinal("o3")
+  )
+  expect_identical(mixed$indicators, c("o1", "o2", "c1", "o3"))
+  expect_identical(mixed$scales, c("ordinal", "ordinal", "continuous", "ordinal"))
+  expect_identical(mixed$keys, c(1L, -1L, 1L, 1L))
+  model <- specify_measurement(A = mixed)
+  expect_identical(model$constructs$A$indicators, mixed$indicators)
+  expect_identical(model$constructs$A$scales, mixed$scales)
+  expect_identical(model$constructs$A$keys, mixed$keys)
+})
+
+test_that("mixed_items rejects invalid or repeated indicator specifications", {
+  expect_error(mixed_items(), "at least one")
+  expect_error(mixed_items(manifest("age")), "ordinal|continuous")
+  expect_error(mixed_items(list(indicators = c("x", "y"), scales = "ordinal")), "ordinal|continuous")
+  expect_error(mixed_items(ordinal("x"), continuous("x")), "unique")
+  expect_error(mixed_items(ordinal("x", "x")), "unique")
+})

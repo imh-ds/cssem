@@ -73,7 +73,8 @@ cssem_model <- function(constructs, folds = 5L, preset = c("default", "explorato
   indicators <- c(...)
   if (!length(indicators) || !is.character(indicators))
     stop("Declare at least one character indicator column name.", call. = FALSE)
-  list(indicators = indicators, scales = scale, keys = keys)
+  structure(list(indicators = indicators, scales = scale, keys = keys),
+    class = "cssem_indicator_spec")
 }
 
 #' Declare ordinal indicators for a construct
@@ -98,6 +99,45 @@ ordinal <- function(..., keys = NULL) .indicator_spec("ordinal", ..., keys = key
 #' @family model specification functions
 #' @export
 continuous <- function(..., keys = NULL) .indicator_spec("continuous", ..., keys = keys)
+
+#' Combine ordinal and continuous indicators in one construct
+#'
+#' Combines one or more declarations returned by [ordinal()] and
+#' [continuous()] while preserving component order, item scales, and key
+#' directions. Missing keys default to `1` for each item in that component.
+#' This helper does not infer scales or accept [manifest()] declarations.
+#'
+#' @param ... One or more indicator specifications returned by [ordinal()] or
+#'   [continuous()]. Every item name must be unique across the components.
+#' @return A mixed indicator specification consumed by
+#'   [specify_measurement()].
+#' @family model specification functions
+#' @export
+mixed_items <- function(...) {
+  specs <- list(...)
+  if (!length(specs))
+    stop("Supply at least one ordinal() or continuous() specification.", call. = FALSE)
+  valid <- vapply(specs, function(x) {
+    inherits(x, "cssem_indicator_spec") && is.list(x) &&
+      is.character(x$indicators) && length(x$indicators) > 0L &&
+      !anyNA(x$indicators) && all(nzchar(x$indicators)) &&
+      is.character(x$scales) && length(x$scales) == 1L &&
+      !is.na(x$scales) && x$scales %in% c("ordinal", "continuous")
+  }, logical(1))
+  if (!all(valid))
+    stop("mixed_items() accepts only ordinal() and continuous() specifications.", call. = FALSE)
+  indicators <- unlist(lapply(specs, `[[`, "indicators"), use.names = FALSE)
+  if (anyDuplicated(indicators))
+    stop("Indicator names in mixed_items() must be unique.", call. = FALSE)
+  scales <- unlist(lapply(specs, function(x) rep(x$scales, length(x$indicators))),
+    use.names = FALSE)
+  keys <- unlist(lapply(specs, function(x) {
+    if (is.null(x$keys)) rep(1L, length(x$indicators)) else
+      rep(as.integer(x$keys), length.out = length(x$indicators))
+  }), use.names = FALSE)
+  structure(list(indicators = indicators, scales = scales, keys = keys),
+    class = "cssem_indicator_spec")
+}
 
 #' Declare a manifest (single-item, non-construct) covariate
 #'
@@ -141,7 +181,7 @@ manifest <- function(indicator, reliability = 1, standardize = TRUE, keys = NULL
 #' model directly rather than through a fitted measurement model.
 #'
 #' @param ... Named construct declarations, each an [ordinal()],
-#'   [continuous()], or [manifest()] call.
+#'   [continuous()], [mixed_items()], or [manifest()] call.
 #' @param folds Number of cross-fitting folds. Must be at least two.
 #' @param preset Runtime preset. Use `"exploratory"` for lighter-weight model
 #'   defaults while iterating locally.

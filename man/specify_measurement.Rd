@@ -8,7 +8,8 @@ specify_measurement(..., folds = 5L, preset = c("default", "exploratory"))
 }
 \arguments{
 \item{...}{Named construct declarations, each an \code{\link[=ordinal]{ordinal()}},
-\code{\link[=continuous]{continuous()}}, or \code{\link[=manifest]{manifest()}} call.}
+\code{\link[=continuous]{continuous()}}, \code{\link[=mixed_items]{mixed_items()}},
+or \code{\link[=manifest]{manifest()}} call.}
 
 \item{folds}{Number of cross-fitting folds. Must be at least two.}
 

@@ -4,7 +4,7 @@
 
 **Goal:** Let one construct declare ordinal and continuous indicators through the existing `specify_measurement()` front door.
 
-**Architecture:** Add `mixed_items(...)` as a composition helper over `ordinal()` and `continuous()`. It returns the existing indicator-list shape, so `.build_measurement()` remains the single normalizer and estimator behavior does not change.
+**Architecture:** Add `mixed_items(...)` as a composition helper over `ordinal()` and `continuous()`. Tag helper-generated specifications with a lightweight internal class so `mixed_items()` can reject arbitrary lists while `.build_measurement()` remains the single normalizer and estimator behavior does not change.
 
 **Tech Stack:** Base R, package roxygen/manual Rd conventions, testthat edition 3.
 
@@ -83,15 +83,16 @@ test_that("a mixed construct fits through the existing measurement pipeline", {
 Run: `Rscript -e "testthat::test_file('tests/testthat/test-model.R'); testthat::test_file('tests/testthat/test-fit.R')"`
 Expected: the new tests fail on the missing helper; existing tests continue to run.
 
-- [ ] **Step 3: Implement the minimal helper and public documentation.** Validate that every input is an ordinal/continuous specification, materialize one scale and default key per indicator, concatenate in argument order, reject duplicate indicator names, add `@export`, add `export(mixed_items)` to `NAMESPACE`, and document its order-preserving composition in `man/mixed_items.Rd`.
+- [ ] **Step 3: Implement the helper and public documentation.** Have `.indicator_spec()` tag the lists returned by `ordinal()`/`continuous()` with an internal `cssem_indicator_spec` class, require that class in `mixed_items()`, materialize one scale and default key per indicator, concatenate in argument order, reject duplicate indicator names, add `@export`, and document its order-preserving composition in `man/mixed_items.Rd`. The normalized `cssem_model` representation and low-level `cssem_model()` list interface remain unchanged.
 
 ```r
 mixed_items <- function(...) {
   specs <- list(...)
   if (!length(specs)) stop("Supply at least one ordinal() or continuous() specification.", call. = FALSE)
   valid <- vapply(specs, function(x) {
-    is.list(x) && !is.null(x$indicators) && length(x$scales) == 1L &&
-      x$scales %in% c("ordinal", "continuous")
+    inherits(x, "cssem_indicator_spec") && is.list(x) &&
+      is.character(x$indicators) && length(x$indicators) > 0L &&
+      length(x$scales) == 1L && x$scales %in% c("ordinal", "continuous")
   }, logical(1))
   if (!all(valid)) stop("mixed_items() accepts only ordinal() and continuous() specifications.", call. = FALSE)
   indicators <- unlist(lapply(specs, `[[`, "indicators"), use.names = FALSE)
@@ -101,7 +102,8 @@ mixed_items <- function(...) {
       rep(as.integer(x$keys), length.out = length(x$indicators))
   }, specs), use.names = FALSE)
   if (anyDuplicated(indicators)) stop("Indicator names in mixed_items() must be unique.", call. = FALSE)
-  list(indicators = indicators, scales = scales, keys = keys)
+  structure(list(indicators = indicators, scales = scales, keys = keys),
+    class = "cssem_indicator_spec")
 }
 ```
 

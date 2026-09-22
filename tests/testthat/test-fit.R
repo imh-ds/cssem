@@ -104,6 +104,21 @@ test_that("manifest() constructs pass through standardized (or raw) with asserte
   expect_equal(range(f_raw$locked_scores$Age), range(d$age))
 })
 
+test_that("a mixed construct fits through the existing measurement pipeline", {
+  data <- simulate_states(n = 60, seed = 402, missing = 0)
+  data$duration <- seq_len(nrow(data)) / 10
+  model <- specify_measurement(
+    Mixed = mixed_items(ordinal("a1", "a2"), continuous("duration")),
+    Other = ordinal("b1", "b2"), folds = 3
+  )
+  fit <- withCallingHandlers(
+    fit_states(model, data, seed = 12, iterations = 2, diagnostics = FALSE),
+    cssem_nonconvergence = function(w) invokeRestart("muffleWarning")
+  )
+  expect_true(all(is.finite(fit$locked_scores$Mixed)))
+  expect_true(all(is.finite(fit$reliability)))
+})
+
 test_that("continuous and manifest inputs preserve numeric labels", {
   # Regression: as.numeric(factor(...)) used internal level positions, so
   # numeric labels such as 10, 20, and 100 became 1, 2, and 3.
