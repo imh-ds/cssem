@@ -160,15 +160,25 @@
   .prediction_check_cycles(association, outcome)
   constructs <- .prediction_required_constructs(association, outcome)
   models <- association$full_models
-  n <- nrow(newdata); memo <- list(); resolving <- character(); used <- list()
-  score_direct <- function(construct) {
-    if (!is.null(memo[[paste0("direct::", construct)]]))
-      return(memo[[paste0("direct::", construct)]])
-    scored <- .prediction_score_constructs(fit, newdata, construct)
-    result <- list(state = scored$states[[construct]], status = scored$status[[construct]],
-      missing_columns = scored$missing_columns[[construct]])
-    memo[[paste0("direct::", construct)]] <<- result
-    result
+  n <- nrow(newdata); direct_cache <- list(); memo <- list(); resolving <- character(); used <- list()
+  score_direct <- function(construct, needed = rep(TRUE, n)) {
+    needed <- as.logical(needed)
+    cached <- direct_cache[[construct]]
+    if (is.null(cached)) {
+      indicators <- fit$model$constructs[[construct]]$indicators
+      cached <- list(state = rep(NA_real_, n), status = rep("unavailable", n),
+        missing_columns = setdiff(indicators, names(newdata)), scored_rows = integer())
+    }
+    rows <- which(needed & !(seq_len(n) %in% cached$scored_rows))
+    if (length(rows)) {
+      scored <- .prediction_score_constructs(fit, newdata[rows, , drop = FALSE], construct)
+      cached$state[rows] <- scored$states[[construct]]
+      cached$status[rows] <- scored$status[[construct]]
+      cached$missing_columns <- scored$missing_columns[[construct]]
+      cached$scored_rows <- sort(unique(c(cached$scored_rows, rows)))
+    }
+    direct_cache[[construct]] <<- cached
+    cached
   }
   resolve <- function(construct, needed = rep(TRUE, n)) {
     needed <- as.logical(needed)
@@ -181,7 +191,7 @@
       stop(sprintf("Cannot recursively predict '%s': structural cycle detected (%s).", outcome, path), call. = FALSE)
     }
     resolving <<- c(resolving, construct)
-    direct <- score_direct(construct)
+    direct <- score_direct(construct, needed)
     state <- direct$state
     direct_status <- direct$status
     observed <- is.finite(state) & direct_status %in% c("complete", "partial")
@@ -229,7 +239,7 @@
   immediate <- .prediction_constructs(association$full_models[[outcome]])
   for (construct in immediate) resolve(construct)
   missing_columns <- stats::setNames(lapply(constructs, function(construct) {
-    cached <- memo[[paste0("direct::", construct)]]
+    cached <- direct_cache[[construct]]
     if (!is.null(cached)) cached$missing_columns else
       setdiff(fit$model$constructs[[construct]]$indicators, names(newdata))
   }), constructs)

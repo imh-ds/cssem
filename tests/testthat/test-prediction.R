@@ -97,11 +97,12 @@ test_that("recursive prediction follows row-specific upstream demand", {
   set.seed(41)
   n <- 30L
   data <- data.frame(
-    a1 = rnorm(n), a2 = rnorm(n), b1 = rnorm(n), b2 = rnorm(n),
+    a1 = sample(1:3, n, replace = TRUE), a2 = sample(1:3, n, replace = TRUE),
+    b1 = rnorm(n), b2 = rnorm(n),
     c1 = rnorm(n), c2 = rnorm(n), d1 = rnorm(n), d2 = rnorm(n),
     check.names = FALSE)
   model <- specify_measurement(
-    A = continuous("a1", "a2"), B = continuous("b1", "b2"),
+    A = ordinal("a1", "a2"), B = continuous("b1", "b2"),
     C = continuous("c1", "c2"), D = continuous("d1", "d2"), folds = 3L)
   fit <- fit_states(model, data, seed = 2, iterations = 1, diagnostics = FALSE)
   chain <- specify_structure(
@@ -109,7 +110,9 @@ test_that("recursive prediction follows row-specific upstream demand", {
     order = c("A", "B", "C", "D"))
   association <- associate(fit, chain, structural_repeats = 1L,
     shadow_scope = "temporal", seed = 3)
-  newdata <- data.frame(b1 = c(NA_real_, data$b1[[2L]]),
+  newdata <- data.frame(a1 = c("irrelevant", "1"),
+    a2 = c("irrelevant", "1"),
+    b1 = c(NA_real_, data$b1[[2L]]),
     b2 = c(NA_real_, data$b2[[2L]]),
     c1 = c(data$c1[[1L]], NA_real_), c2 = c(data$c2[[1L]], NA_real_))
 
