@@ -12,7 +12,7 @@
 * Added `prediction_assessment()` with RMSE, MAE, R-squared, calibration
   intercept/slope, target-availability status, and an optional training
   target-mean baseline. Core implementation commits: `e7a0e4f`, `97a722d`,
-  `f7a4cd1`.
+  `f7a4cd1`, `566543f`.
 
 ## Bug fixes (2026-09-20 audit)
 
