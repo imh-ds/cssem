@@ -4,10 +4,11 @@ Audit date: **2026-09-21**. Package: **cssem 0.5.0**, baseline commit
 `f5a6e1b`, with the working-tree changes present during review.
 
 **Status:** G1 through G3 have implemented workflows, G4 through G8 have
-implemented core workflows with documented methodological limits, and G9 now
+implemented core workflows with documented methodological limits, G9 now
 has a partial P2 cluster-aware workflow. G9's P3 multilevel/longitudinal
-extension remains a separate unchecked research project; the other unchecked
-entries are proposed work. Existing defect reproductions and fixes belong in
+extension remains a separate unchecked research project; G10 now has a partial
+core workflow with explicit validation limits, and the other unchecked entries
+are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -70,7 +71,7 @@ correctness concerns.
 | G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
-| G10 | P2 | Missing | Defined contrasts and model-comparison workflows |
+| G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde` |
 | G11 | P3 | Missing | Binary/ordinal structural response families |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
@@ -557,7 +558,7 @@ bootstrap must not be reported as multilevel SEM.
    longitudinal alignment, growth/random-effects models, or design-based
    inference.
 
-### [ ] G10. Defined contrasts, constraints, and model comparison
+### [x] G10. Defined contrasts, constraints, and model comparison
 
 **Evidence/gap:** formulas describe predictors and shape policies; there is no
 public parameter-label/equality/fixed-value system, arbitrary defined-effect
@@ -578,7 +579,7 @@ likelihood-ratio tests or global AIC/BIC from unrelated block/selection losses.
 uncertainty preserves covariance between paths; model comparisons use identical
 observations, targets, and evaluation splits and expose their assumptions.
 
-**Implementation plan (pending; no G10 code is shipped by this plan):**
+**Implementation record:**
 
 G10 should be delivered as a sequence of separately reviewable phases. The
 first release should make contrasts of already-estimated CS-SEM quantities
@@ -605,7 +606,7 @@ global likelihood from block losses.
   linear differences, products such as indirect effects, unknown/unavailable
   references, malformed expressions, and explicit refusal of unsupported
   nonlinear or causal interpretations.
-* Commit this schema and parser separately as `feat: add stable contrast estimands`.
+* Stable IDs and the restricted parser were committed as `5082f19`.
 
 **Task 2 — evaluate joint contrasts with covariance-preserving draws.**
 
@@ -631,7 +632,7 @@ global likelihood from block losses.
   interval changes when the covariance between two paths changes. Add tests
   for deterministic seeds, row/cluster resampling, failed replicate
   accounting, fixed-versus-repeated selection labels, and worker invariance.
-* Commit as `feat: add covariance-preserving defined contrasts`.
+* Joint contrast bootstrap support was committed as `4390942`.
 
 **Task 3 — add paired theory comparison on identical outer partitions.**
 
@@ -664,7 +665,7 @@ global likelihood from block losses.
   reproducibility. Update `R/outer-validation.R` to store the stable split and
   observation fingerprints; create `man/compare_outer.Rd` and
   `man/compare_models.Rd` with the mismatch contract.
-* Commit as `feat: add paired outer model comparisons`.
+* Paired model comparison and outer fingerprints were committed as `90ce50f`.
 
 **Task 4 — design and implement a deliberately narrow constraint contract.**
 
@@ -690,6 +691,7 @@ global likelihood from block losses.
   rank deficiency, conflicting labels, non-linear rejection, and unavailable
   EIV combinations. Commit this phase separately as
   `feat: add constrained linear structural estimates`.
+* The constraint contract and diagnostics were committed as `8603b88`.
 
 **Task 5 — documentation, release gates, and methodological validation.**
 
@@ -702,11 +704,25 @@ global likelihood from block losses.
   differences, products, constrained slopes, and paired held-out loss. Check
   coverage against the joint draw target and record selection changes and
   comparison failures rather than filtering them out.
-* Add a release gate that fails if a contrast uses an unavailable term, if
-  paired models do not share observations/splits, or if a constraint is
-  reported outside its declared linear score-scale contract. Only then change
-  this entry to implemented; until all phases pass, keep G10 marked missing or
-  partial and list the tracking commits here.
+* Focused tests now fail if a contrast uses an unavailable term, if paired
+  models do not share observations/splits or held-out metric scope, or if a
+  constraint is outside its declared linear score-scale contract. The entry is
+  recorded as partial because broader coverage and scale-alignment simulation
+  evidence remain outstanding.
+
+The shipped core workflow now provides stable parameter identities, safe
+defined arithmetic, covariance-preserving row/cluster contrast draws,
+fixed/repeated shape-selection metadata, strict paired outer comparisons, and
+deterministic pooled linear locked-score constraints. The result objects retain
+the assumptions and failure reasons needed to audit an estimate. It remains
+**Partial** for methodological scope: full coverage simulations for contrast
+intervals and constrained estimators, broad worker-invariance checks for every
+result type, and alignment validation across genuinely different measurement
+scales remain future work. The implementation does not add a covariance-SEM
+likelihood, global fit statistic, AIC/BIC, measurement equality, nonlinear
+constraint, or categorical structural estimator.
+
+**Tracking commits:** `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`.
 
 **Recommended order:** Tasks 1–2 establish the stable result and uncertainty
 schema that G12 plots and G15 planning can consume. Task 3 can proceed once

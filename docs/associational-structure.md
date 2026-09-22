@@ -79,3 +79,39 @@ longitudinal or dynamic designs before assigning directional meaning.
 selection stability, predictive contribution when the edge is removed, and
 both shadow gaps. It is an evidence profile, not a causal verdict or a
 confirmatory confidence interval.
+
+## Defined contrasts and constrained paths
+
+`parameter_table()` assigns stable IDs to structural edges and derived effects,
+including separate `:naive` and `:corrected` edge aliases. Use
+`contrast_spec()` for safe arithmetic over those IDs:
+
+```r
+spec <- contrast_spec(list(
+  difference = "edge:Loyalty~Trust:naive - edge:Loyalty~Quality:naive",
+  product = "edge:Quality~Trust:naive * edge:Loyalty~Quality:naive"
+))
+contrast(association, spec, reps = 999, seed = 42)
+```
+
+All referenced terms share each row or cluster bootstrap draw. Fixed-selection
+intervals condition on the selected shapes. `selection = "repeat"` reruns the
+shape decision and retains per-replicate shape signatures. Unavailable
+corrected terms and invalid ratios remain `NA` with an availability reason.
+
+For a prespecified linear locked-score restriction, declare equality groups or
+fixed coefficients with `cssem_constraint()` and pass the object to
+`associate()`. The estimator is deterministic pooled constrained least squares
+and reports its KKT rank and conditioning. Constraints reject EIV correction,
+information weighting, interactions, and nonlinear selected edges; they do not
+turn this associational layer into a likelihood SEM.
+
+Use `compare_outer()` for paired held-out comparison of two completed
+`validate_outer()` results. Both results must retain identical partitions,
+observation rows, score bases, target availability, and `outer_test` metric
+scope. `compare_models()` reuses one `cssem_splits` object for two theories.
+When construct names differ, pass an explicit named model-B-to-model-A
+alignment map only when indicators and observed target bases are genuinely
+common. The comparison reports predictive metric deltas and partition
+bootstrap intervals; it does not expose AIC/BIC, likelihood-ratio tests, or
+global SEM fit statistics.

@@ -1,5 +1,25 @@
 # cssem (development version)
 
+## Defined contrasts, paired comparisons, and linear constraints (2026-09-22)
+
+* Added stable `parameter_id` and availability/status fields to public
+  parameter tables, plus `contrast_spec()` and `contrast()` safe arithmetic.
+  Joint row/cluster bootstrap draws evaluate every referenced term together,
+  preserving covariance and recording fixed or repeated shape selection,
+  replicate failures, and unavailable terms. Commits: `5082f19`, `4390942`,
+  `f1efc1f`, `b4b7cde`.
+* Added `compare_outer()` and `compare_models()` for paired held-out RMSE,
+  MAE, and R-squared comparisons on identical outer partitions. Split,
+  observation, target, and score-basis fingerprints are checked before metric
+  arithmetic; explicit model-B-to-model-A construct maps or observed-row
+  alignments are retained when supplied. Commit: `90ce50f`.
+* Added `cssem_constraint()` and constrained `associate()` support for
+  deterministic pooled least-squares equality and fixed-value restrictions on
+  selected linear locked-score edges. Rank/conditioning diagnostics are
+  exposed; EIV correction, information weighting, nonlinear/interactions,
+  measurement equality, and ordinal structural constraints are rejected.
+  Commit: `8603b88`.
+
 ## Cluster-aware analysis (2026-09-21)
 
 * Added cluster/subject-aware measurement and outer-validation partitions with

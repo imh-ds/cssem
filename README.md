@@ -30,6 +30,32 @@ association <- associate(fit, structure)
 specification_gap(association)
 ```
 
+Defined contrasts use stable parameter IDs and one joint resample for every
+referenced term. The default fixed-selection interval is conditional on the
+selected structural shapes; `selection = "repeat"` reruns shape selection and
+records changed shape signatures.
+
+```r
+spec <- contrast_spec(list(
+  path_difference = "edge:loyalty~trust:naive - edge:loyalty~quality:naive"
+))
+contrast(association, spec, reps = 999, seed = 42)
+```
+
+Competing theories can be compared only on identical outer partitions and
+held-out targets. `compare_outer()` checks row IDs, target availability, score
+bases, and metric scope before reporting paired RMSE/MAE/R-squared deltas.
+`compare_models()` runs both specifications on one caller-supplied split object.
+An explicit named construct alignment map is required for renamed measurement
+declarations; no latent scale is inferred from names.
+
+The optional `cssem_constraint()` contract is limited to selected linear
+locked-score edges and deterministic pooled least squares. It reports rank and
+conditioning diagnostics and rejects EIV correction, information weighting,
+nonlinear or interaction edges, measurement equality, and ordinal structural
+outcomes. These workflows do not add covariance-SEM likelihood, AIC/BIC,
+likelihood-ratio tests, or global fit statistics.
+
 `specify_measurement()`/`specify_structure()` are friendlier front doors for
 [`cssem_model()`](man/cssem_model.Rd)/[`cssem_structure()`](man/cssem_structure.Rd)
 and resolve to the identical internal specification; both forms remain
