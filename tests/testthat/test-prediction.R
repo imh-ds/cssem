@@ -56,3 +56,57 @@ test_that("prediction reports support extrapolation and converts to a data frame
   expect_equal(as.data.frame(result), result$predictions)
   expect_output(print(result), "CS-SEM structural prediction")
 })
+
+test_that("recursive prediction resolves an unavailable endogenous mediator", {
+  generated <- cssem:::.structural_validation_data("linear", n = 48, seed = 34, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  unavailable <- generated$model$constructs$Quality$indicators
+  target <- generated$model$constructs$Loyalty$indicators
+  predictor_only <- generated$data[, setdiff(names(generated$data), c(unavailable, target)), drop = FALSE]
+
+  result <- predict(association, predictor_only, outcomes = "Loyalty", mode = "recursive")
+  expect_s3_class(result, "cssem_prediction")
+  expect_true(all(is.finite(result$predictions$prediction)))
+  expect_true(any(result$predictions$source == "recursive"))
+  expect_true(any(grepl("Quality", result$availability$required_constructs)))
+})
+
+test_that("recursive prediction reports unavailable exogenous inputs", {
+  generated <- cssem:::.structural_validation_data("linear", n = 36, seed = 35, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  missing <- generated$data[, setdiff(names(generated$data), c(
+    generated$model$constructs$Trust$indicators,
+    generated$model$constructs$Quality$indicators,
+    generated$model$constructs$Loyalty$indicators)), drop = FALSE]
+
+  expect_error(
+    predict(association, missing, outcomes = "Loyalty", mode = "recursive"),
+    "unavailable exogenous|requires indicator"
+  )
+})
+
+test_that("recursive prediction rejects structural cycles", {
+  generated <- cssem:::.structural_validation_data("linear", n = 30, seed = 36, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, generated$structure, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  linear_model <- function(parent, outcome) list(
+    outcome = outcome,
+    shapes = stats::setNames("linear", parent),
+    infos = stats::setNames(list(list(shape = "linear")), parent),
+    coefficient = c(0, 1),
+    maps = stats::setNames(list(2L), parent)
+  )
+  association$full_models <- list(A = linear_model("B", "A"), B = linear_model("A", "B"))
+  expect_error(
+    predict(association, generated$data, outcomes = "A", mode = "recursive"),
+    "cycle"
+  )
+})

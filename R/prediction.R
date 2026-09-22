@@ -118,6 +118,116 @@
     stringsAsFactors = FALSE)
 }
 
+.prediction_required_constructs <- function(association, outcome) {
+  models <- association$full_models
+  required <- character()
+  visit <- function(construct) {
+    if (construct %in% required) return(invisible(NULL))
+    required <<- c(required, construct)
+    model <- models[[construct]]
+    if (!is.null(model)) for (parent in .prediction_constructs(model)) visit(parent)
+    invisible(NULL)
+  }
+  for (parent in .prediction_constructs(models[[outcome]])) visit(parent)
+  required
+}
+
+.prediction_check_cycles <- function(association, outcome) {
+  models <- association$full_models
+  visiting <- character(); visited <- character()
+  visit <- function(construct) {
+    if (construct %in% visited) return(invisible(NULL))
+    if (construct %in% visiting) {
+      path <- paste(c(visiting[match(construct, visiting):length(visiting)], construct), collapse = " -> ")
+      stop(sprintf("Cannot recursively predict '%s': structural cycle detected (%s).", outcome, path), call. = FALSE)
+    }
+    visiting <<- c(visiting, construct)
+    model <- models[[construct]]
+    if (!is.null(model)) for (parent in .prediction_constructs(model)) visit(parent)
+    visiting <<- setdiff(visiting, construct)
+    visited <<- c(visited, construct)
+    invisible(NULL)
+  }
+  visit(outcome)
+  invisible(NULL)
+}
+
+.prediction_recursive_states <- function(association, fit, newdata, outcome, missing_policy) {
+  .prediction_check_cycles(association, outcome)
+  constructs <- .prediction_required_constructs(association, outcome)
+  direct <- .prediction_score_constructs(fit, newdata, constructs)
+  models <- association$full_models
+  exogenous_missing <- vapply(constructs, function(construct) {
+    is.null(models[[construct]]) && length(direct$missing_columns[[construct]]) > 0L
+  }, logical(1))
+  if (any(exogenous_missing) && identical(missing_policy, "error")) {
+    missing <- unique(unlist(direct$missing_columns[names(exogenous_missing)[exogenous_missing]], use.names = FALSE))
+    stop(sprintf("Prediction has unavailable exogenous construct(s): %s; required indicator column(s): %s.",
+      paste(names(exogenous_missing)[exogenous_missing], collapse = ", "), paste(missing, collapse = ", ")), call. = FALSE)
+  }
+  n <- nrow(newdata); memo <- list(); resolving <- character()
+  resolve <- function(construct) {
+    if (!is.null(memo[[construct]])) return(memo[[construct]])
+    if (construct %in% resolving) {
+      path <- paste(c(resolving[match(construct, resolving):length(resolving)], construct), collapse = " -> ")
+      stop(sprintf("Cannot recursively predict '%s': structural cycle detected (%s).", outcome, path), call. = FALSE)
+    }
+    resolving <<- c(resolving, construct)
+    state <- direct$states[[construct]]
+    direct_status <- direct$status[[construct]]
+    observed <- is.finite(state) & direct_status %in% c("complete", "partial")
+    status <- ifelse(observed, direct_status, ifelse(direct_status == "missing_input", "missing_input", "unavailable"))
+    source <- ifelse(observed, "observed", "unavailable")
+    model <- models[[construct]]
+    if (!is.null(model) && any(!observed)) {
+      parents <- .prediction_constructs(model)
+      parent_results <- lapply(parents, resolve)
+      parent_states <- as.data.frame(lapply(parent_results, `[[`, "state"),
+        check.names = FALSE, stringsAsFactors = FALSE)
+      names(parent_states) <- parents
+      parent_status <- as.data.frame(lapply(parent_results, `[[`, "status"),
+        check.names = FALSE, stringsAsFactors = FALSE)
+      names(parent_status) <- parents
+      parent_source <- as.data.frame(lapply(parent_results, `[[`, "source"),
+        check.names = FALSE, stringsAsFactors = FALSE)
+      names(parent_source) <- parents
+      parent_valid <- apply(as.matrix(parent_states), 1L, function(row) all(is.finite(row)))
+      predicted <- rep(NA_real_, n)
+      if (any(parent_valid)) predicted[parent_valid] <- .predict_shape_model(model,
+        parent_states[parent_valid, , drop = FALSE])
+      use_recursive <- !observed & parent_valid & is.finite(predicted)
+      state[use_recursive] <- predicted[use_recursive]
+      inherited_partial <- apply(as.matrix(parent_status), 1L, function(row)
+        any(row %in% c("partial", "prior_only")))
+      status[use_recursive] <- ifelse(inherited_partial[use_recursive], "partial", "ok")
+      source[use_recursive] <- "recursive"
+    }
+    resolving <<- setdiff(resolving, construct)
+    result <- list(state = state, status = status, source = source,
+      missing_columns = direct$missing_columns[[construct]])
+    memo[[construct]] <<- result
+    result
+  }
+  resolved <- lapply(constructs, resolve); names(resolved) <- constructs
+  list(states = data.frame(row_id = seq_len(n),
+      as.data.frame(lapply(resolved, `[[`, "state"), check.names = FALSE,
+        stringsAsFactors = FALSE), check.names = FALSE),
+    status = stats::setNames(lapply(resolved, `[[`, "status"), constructs),
+    source = stats::setNames(lapply(resolved, `[[`, "source"), constructs),
+    missing_columns = direct$missing_columns, constructs = constructs)
+}
+
+.prediction_source <- function(source, status, constructs) {
+  n <- length(status[[constructs[[1L]]]])
+  out <- rep("observed", n)
+  for (construct in constructs) {
+    one_source <- source[[construct]]; one_status <- status[[construct]]
+    out[one_source == "recursive"] <- "recursive"
+    out[one_source == "unavailable" | one_status %in% c("missing_input", "unavailable")] <- "unavailable"
+  }
+  out
+}
+
 .prediction_validate_data <- function(newdata) {
   if (!is.data.frame(newdata)) stop("newdata must be a data frame.", call. = FALSE)
   if (!nrow(newdata)) stop("newdata must contain at least one row.", call. = FALSE)
@@ -150,21 +260,23 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
   missing_policy <- match.arg(missing_policy)
   .prediction_validate_data(newdata)
   outcomes <- .prediction_outcomes(object, outcomes)
-  if (identical(mode, "recursive"))
-    stop('mode = "recursive" is not implemented yet.', call. = FALSE)
   fit <- object$fit
   if (!inherits(fit, "fit_states"))
     stop("association does not retain a fit_states object.", call. = FALSE)
-  support <- .prediction_support(object, unique(unlist(lapply(outcomes,
-    function(outcome) .prediction_constructs(object$full_models[[outcome]])),
-    use.names = FALSE)))
+  support_constructs <- unique(unlist(lapply(outcomes, function(outcome) {
+    if (identical(mode, "recursive")) .prediction_required_constructs(object, outcome) else
+      .prediction_constructs(object$full_models[[outcome]])
+  }), use.names = FALSE))
+  support <- .prediction_support(object, support_constructs)
   prediction_rows <- list(); availability_rows <- list()
   for (outcome in outcomes) {
     model <- object$full_models[[outcome]]
     constructs <- .prediction_constructs(model)
-    scored <- .prediction_score_constructs(fit, newdata, constructs)
+    scored <- if (identical(mode, "recursive"))
+      .prediction_recursive_states(object, fit, newdata, outcome, missing_policy) else
+      .prediction_score_constructs(fit, newdata, constructs)
     missing <- unique(unlist(scored$missing_columns, use.names = FALSE))
-    if (length(missing) && identical(missing_policy, "error"))
+    if (length(missing) && identical(missing_policy, "error") && identical(mode, "observed"))
       stop(sprintf("Prediction requires indicator column(s) for the direct parent constructs: %s.",
         paste(missing, collapse = ", ")), call. = FALSE)
     states <- scored$states[, constructs, drop = FALSE]
@@ -173,10 +285,15 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
       apply(as.matrix(states), 1L, function(x) all(is.finite(x)))
     values <- rep(NA_real_, nrow(newdata))
     if (any(valid)) values[valid] <- .predict_shape_model(model, states[valid, , drop = FALSE])
-    extrapolated <- .prediction_support_flags(states, constructs, support)
+    resolved_constructs <- if (identical(mode, "recursive")) scored$constructs else constructs
+    extrapolated <- .prediction_support_flags(scored$states[, resolved_constructs, drop = FALSE],
+      resolved_constructs, support)
+    source <- if (identical(mode, "recursive")) .prediction_source(scored$source,
+      scored$status, constructs) else rep("observed", nrow(newdata))
+    source[row_status %in% c("unavailable", "missing_input")] <- "unavailable"
     prediction_rows[[outcome]] <- data.frame(row_id = seq_len(nrow(newdata)),
       outcome = outcome, prediction = values, mode = mode, status = row_status,
-      extrapolated = extrapolated, stringsAsFactors = FALSE)
+      source = source, extrapolated = extrapolated, stringsAsFactors = FALSE)
     availability_rows[[outcome]] <- .prediction_required_table(outcome, constructs, fit,
       scored$missing_columns)
   }
