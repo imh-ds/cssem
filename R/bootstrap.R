@@ -160,11 +160,12 @@
       cluster_ids = cluster_ids, row_draw_ids = row_draw_ids,
       source_unit_ids = source_unit_ids, row_source_ids = row_source_ids,
       resample = resample)
+    raw_value <- statistic(context)
     list(replicate = job$replicate, seed = job$seed, status = "success",
-      failure_reason = "", values = .bootstrap_statistic_vector(statistic(context)),
-      unit_metadata = context$unit_metadata)
+      failure_reason = "", values = .bootstrap_statistic_vector(raw_value),
+      metadata = attr(raw_value, "bootstrap_metadata"), unit_metadata = context$unit_metadata)
   }, error = function(e) list(replicate = job$replicate, seed = job$seed,
-    status = "failed", failure_reason = conditionMessage(e), values = NULL,
+    status = "failed", failure_reason = conditionMessage(e), values = NULL, metadata = NULL,
     unit_metadata = .bootstrap_unit_metadata(cluster_ids, indices,
       draw_unit_ids = row_draw_ids, source_unit_ids = source_unit_ids)))
   result
@@ -297,6 +298,7 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
   replicate_rows$draw_unit_ids <- I(vector("list", reps))
   replicate_rows$source_unit_ids <- I(vector("list", reps))
   replicate_rows$row_draw_ids <- I(vector("list", reps))
+  replicate_rows$metadata <- rep(list(NA), reps)
   if (!is.null(prior)) {
     if (!identical(colnames(prior$draws), metric_names))
       stop("resume statistic output does not match the original metric names.", call. = FALSE)
@@ -338,6 +340,7 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
       replicate_rows$draw_unit_ids[[i]] <- result$unit_metadata$draw_unit_ids
       replicate_rows$source_unit_ids[[i]] <- result$unit_metadata$source_unit_ids
       replicate_rows$row_draw_ids[[i]] <- result$unit_metadata$row_draw_ids
+      replicate_rows$metadata[[i]] <- if (is.null(result$metadata)) NA else result$metadata
       if (identical(result$status, "success")) {
         if (!identical(names(result$values), metric_names)) {
           replicate_rows$status[[i]] <- "failed"

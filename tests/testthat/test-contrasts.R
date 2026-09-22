@@ -56,7 +56,26 @@ test_that("contrasts use one joint bootstrap draw for every referenced term", {
   expect_true(all(is.finite(result$draws[, "difference"])))
   expect_equal(result$selection, "fixed")
   expect_equal(repeated$selection, "repeat")
+  expect_equal(result$selection_changes, 0L)
+  expect_length(repeated$selection_signatures, 5L)
+  expect_true(is.finite(repeated$selection_changes))
   expect_equal(result$draws, contrast(association, spec, reps = 5L, seed = 99L)$draws)
+})
+
+test_that("cluster contrast draws retain source-unit provenance", {
+  n <- 48L; set.seed(411)
+  scores <- data.frame(A = rnorm(n), B = rnorm(n), C = rnorm(n))
+  fit <- structure(list(locked_scores = scores, folds = rep(1:4, length.out = n),
+    reliability = c(A = NA_real_, B = NA_real_, C = NA_real_)), class = "fit_states")
+  association <- associate(fit,
+    specify_structure(B ~ linear(A), C ~ linear(A), order = c("A", "B", "C")),
+    structural_repeats = 1L, seed = 2L)
+  spec <- contrast_spec(list(difference = "edge:B~A:naive - edge:C~A:naive"))
+  result <- contrast(association, spec, reps = 5L, seed = 101L,
+    resample = "cluster", cluster = rep(seq_len(12L), each = 4L))
+  expect_equal(result$draws, contrast(association, spec, reps = 5L, seed = 101L,
+    resample = "cluster", cluster = rep(seq_len(12L), each = 4L))$draws)
+  expect_true("source_unit_ids" %in% names(result$bootstrap$replicates))
 })
 
 test_that("contrast results retain explicit unavailable and arithmetic failures", {

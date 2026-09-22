@@ -67,7 +67,43 @@
   if (!is.data.frame(table) || !nrow(table)) stop("Outer validation contains no held-out metrics.", call. = FALSE)
   required <- c("outer_id", "outcome", "n", metrics)
   if (!all(required %in% names(table))) stop("Outer validation is missing required held-out metric columns.", call. = FALSE)
+  if ("metric_scope" %in% names(table) && any(table$metric_scope != "outer_test"))
+    stop("Outer comparison requires held-out metrics with metric_scope = \"outer_test\".", call. = FALSE)
   table[, c("outer_id", "outcome", "n", metrics), drop = FALSE]
+}
+
+.comparison_remap_constructs <- function(result, alignment, target_fingerprint, score_basis_fingerprint) {
+  if (!is.character(alignment) || is.null(names(alignment)) || any(!nzchar(names(alignment))) ||
+      any(!nzchar(alignment)) || anyDuplicated(names(alignment)) || anyDuplicated(unname(alignment)))
+    stop("alignment must be a named character map from model-B construct names to model-A names.", call. = FALSE)
+  out <- result; map <- alignment
+  remap <- function(values) {
+    values <- as.character(values); hit <- values %in% names(map); values[hit] <- unname(map[values[hit]]); values
+  }
+  if (is.data.frame(out$test_metrics) && "outcome" %in% names(out$test_metrics)) out$test_metrics$outcome <- remap(out$test_metrics$outcome)
+  if (is.data.frame(out$predictions) && "outcome" %in% names(out$predictions)) out$predictions$outcome <- remap(out$predictions$outcome)
+  if (is.data.frame(out$selection_metrics) && "outcome" %in% names(out$selection_metrics)) out$selection_metrics$outcome <- remap(out$selection_metrics$outcome)
+  out$settings$target_fingerprint <- target_fingerprint
+  out$settings$score_basis_fingerprint <- score_basis_fingerprint
+  out
+}
+
+.comparison_validate_model_alignment <- function(model_a, model_b, alignment) {
+  names_a <- names(model_a$constructs); names_b <- names(model_b$constructs)
+  map <- if (is.null(alignment)) character() else alignment
+  if (is.null(alignment) && !setequal(names_a, names_b))
+    stop("Different measurement construct names require an explicit alignment map.", call. = FALSE)
+  if (!is.null(alignment) && !is.character(alignment)) return(invisible(TRUE))
+  for (construct_b in names_b) {
+    construct_a <- if (construct_b %in% names(map)) unname(map[[construct_b]]) else construct_b
+    if (!construct_a %in% names_a)
+      stop(sprintf("Alignment does not map model-B construct '%s' to model A.", construct_b), call. = FALSE)
+    indicators_a <- model_a$constructs[[construct_a]]$indicators
+    indicators_b <- model_b$constructs[[construct_b]]$indicators
+    if (!identical(as.character(indicators_a), as.character(indicators_b)))
+      stop(sprintf("Aligned constructs '%s' and '%s' do not share the same observed indicators and score basis.", construct_b, construct_a), call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 .comparison_bootstrap <- function(differences, metrics, reps, seed) {
@@ -94,6 +130,13 @@
 #' @export
 compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared"),
                           reps = 999L, seed = 1L, alignment = NULL) {
+  if (is.character(alignment)) {
+    second <- .comparison_remap_constructs(second, alignment,
+      first$settings$target_fingerprint, first$settings$score_basis_fingerprint)
+    result <- compare_outer(first, second, metrics = metrics, reps = reps, seed = seed)
+    result$alignment <- alignment
+    return(result)
+  }
   .comparison_validate_identity(first, second, require_targets = is.null(alignment))
   metrics <- .comparison_validate_metrics(metrics)
   reps <- .comparison_scalar_integer(reps, "reps")
@@ -159,7 +202,14 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
 #' @export
 compare_models <- function(model_a, structure_a, model_b, structure_b, data, splits,
                            seed = 1L, args_a = list(), args_b = list(), alignment = NULL, ...) {
+  if (!inherits(model_a, "cssem_model") || !inherits(model_b, "cssem_model"))
+    stop("model_a and model_b must be cssem_model objects.", call. = FALSE)
+  if (!inherits(structure_a, "cssem_structure") || !inherits(structure_b, "cssem_structure"))
+    stop("structure_a and structure_b must be cssem_structure objects.", call. = FALSE)
   if (!is.list(args_a) || !is.list(args_b)) stop("args_a and args_b must be named lists.", call. = FALSE)
+  if (!is.null(alignment) && !is.character(alignment) && !is.data.frame(alignment))
+    stop("alignment must be NULL, a named construct map, or an observed-row alignment data frame.", call. = FALSE)
+  .comparison_validate_model_alignment(model_a, model_b, alignment)
   common <- list(data = data, splits = splits, seed = seed)
   extra <- list(...)
   first <- do.call(validate_outer, c(list(model = model_a, structure = structure_a), common, extra, args_a))

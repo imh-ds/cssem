@@ -37,3 +37,12 @@ test_that("paired comparison rejects different target availability", {
   second$test_metrics <- second$test_metrics[second$test_metrics$outer_id != 2L, , drop = FALSE]
   expect_error(compare_outer(first, second, reps = 10L), "target availability")
 })
+
+test_that("paired comparison checks metric scope and accepts explicit construct maps", {
+  first <- .comparison_fixture(); second <- .comparison_fixture()
+  second$test_metrics$metric_scope <- "internal_selection"
+  expect_error(compare_outer(first, second, reps = 10L), "metric_scope")
+  second <- .comparison_fixture(); second$test_metrics$outcome <- "Y_B"
+  mapped <- compare_outer(first, second, alignment = c(Y_B = "Y"), reps = 10L)
+  expect_s3_class(mapped, "cssem_model_comparison")
+})

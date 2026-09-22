@@ -2,7 +2,8 @@
   selection <- match.arg(selection)
   refit <- association$fit
   refit$locked_scores <- context$scores
-  refit$folds <- context$fit$folds
+  if (!is.null(association$fit$folds) && length(association$fit$folds) == nrow(association$fit$locked_scores))
+    refit$folds <- association$fit$folds[context$indices] else refit$folds <- context$fit$folds
   refit$row_ids <- seq_len(nrow(context$scores))
   refit$data <- context$data
   settings <- association$association_settings

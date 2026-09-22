@@ -213,6 +213,8 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
         refit <- .bootstrap_association(context, object, selection)
         values <- .contrast_evaluate_table(parameter_table(refit), spec)$estimates
         if (any(!is.finite(values))) stop("A bootstrap contrast replicate produced an unavailable estimate.", call. = FALSE)
+        attr(values, "bootstrap_metadata") <- list(shape_signature = paste(vapply(refit$full_models,
+          function(model) paste(names(model$shapes), unname(model$shapes), sep = "=", collapse = ";"), character(1)), collapse = "|"))
         values
       }
       bootstrap <- bootstrap_model(boot_fit, statistic, reps = reps, level = level, seed = seed,
@@ -221,7 +223,12 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
       result$successful_replicates <- bootstrap$successful_replicates
       result$failure_count <- bootstrap$failure_count; result$bootstrap <- bootstrap
       result$intervals <- bootstrap$summary
-      result$selection_changes <- if (selection == "fixed") 0L else NA_integer_
+      result$selection_signatures <- if ("metadata" %in% names(bootstrap$replicates))
+        vapply(bootstrap$replicates$metadata, function(meta) if (is.null(meta) || length(meta) != 1L || is.na(meta[[1L]])) NA_character_ else meta$shape_signature, character(1)) else rep(NA_character_, nrow(bootstrap$replicates))
+      result$selection_changes <- if (selection == "fixed") 0L else {
+        reference <- paste(vapply(object$full_models, function(model) paste(names(model$shapes), unname(model$shapes), sep = "=", collapse = ";"), character(1)), collapse = "|")
+        sum(!is.na(result$selection_signatures) & result$selection_signatures != reference)
+      }
     }
   } else {
     result$draws <- matrix(numeric(), nrow = 0L, ncol = length(evaluated$estimates),
