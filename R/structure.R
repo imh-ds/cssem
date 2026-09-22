@@ -716,6 +716,10 @@ specify_structure <- function(..., order = NULL) {
 #'   rejects such rows before fitting.
 #' @param fixed_shapes Optional named list of selected shape vectors used to
 #'   refit an existing structural shape selection without searching again.
+#' @param constraints Optional [cssem_constraint()] declaration. Constraints
+#'   apply only to selected linear locked-score edges; EIV overrides,
+#'   information weighting, interactions, and nonlinear selected shapes are
+#'   rejected explicitly.
 #' @return An object of class `cssem_association`.
 #' @export
 associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smooth_uncertainty = 1,
@@ -725,7 +729,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
                              reliability = NULL, eiv_bootstrap = 0L,
                              respondent_weighting = c("none", "information"),
                              preset = c("default", "exploratory"), level = .95,
-                             missing_policy = c("complete", "error"), fixed_shapes = NULL) {
+                             missing_policy = c("complete", "error"), fixed_shapes = NULL,
+                             constraints = NULL) {
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!inherits(structure, "cssem_structure")) stop("structure must be a cssem_structure.", call. = FALSE)
@@ -735,6 +740,11 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   level <- .bootstrap_validate_level(level)
   respondent_weighting <- match.arg(respondent_weighting)
   missing_policy <- match.arg(missing_policy)
+  constraints <- .validate_constraint_targets(constraints, structure)
+  if (!is.null(constraints) && isTRUE(constraints$active)) {
+    if (respondent_weighting != "none") stop("Constraints reject information weighting; use respondent_weighting = \"none\".", call. = FALSE)
+    if (eiv_bootstrap > 0L || !is.null(reliability)) stop("Constraints reject explicit EIV correction or EIV bootstrap requests.", call. = FALSE)
+  }
   if (preset == "exploratory") {
     if (missing(spline_df)) spline_df <- 3L
     if (missing(structural_repeats)) structural_repeats <- 2L
@@ -917,12 +927,29 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
     effects[[outcome]] <- effect_data; predictions[[outcome]] <- as.data.frame(c(list(observed = scores[[outcome]], theory = selected$prediction), shadow_predictions))
     gaps[[outcome]] <- do.call(rbind, shadow_rows); models[[outcome]] <- full_model
   }
+  constraint_diagnostics <- list(active = FALSE)
+  if (!is.null(constraints) && isTRUE(constraints$active)) {
+    applied <- .constraint_apply(models, scores, constraints)
+    models <- applied$models; constraint_diagnostics <- applied$diagnostics
+    for (outcome in names(models)) {
+      full_model <- models[[outcome]]
+      effect_data <- .effect_rows(full_model, scores, outcome)
+      effect_data$selection_stability <- vapply(effect_data$predictor, function(predictor) {
+        row <- candidates[[outcome]][candidates[[outcome]]$predictor == predictor & candidates[[outcome]]$selected, , drop = FALSE]
+        if (nrow(row) && row$shape[[1L]] != "linear") row$selection_frequency[[1L]] else 1
+      }, numeric(1))
+      effects[[outcome]] <- effect_data
+      predictions[[outcome]]$theory <- .predict_shape_model(full_model, scores)
+      corrected[[outcome]] <- .constraint_effect_rows(corrected[[outcome]], full_model)
+    }
+  }
   corrected_table <- do.call(rbind, corrected)
   structure(list(structure = structure, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
     contributions = do.call(rbind, contributions), predictions = predictions, specification_gap = do.call(rbind, gaps), full_models = models,
     corrected_effects = corrected_table, numerical_diagnostics = .structural_numerical_diagnostics(corrected_table),
     reliability = reliability_vec, eiv_bootstrap = eiv_bootstrap,
     respondent_weighting = respondent_weighting, level = level, scores = scores,
+    constraints = constraints, constraint_diagnostics = constraint_diagnostics,
     # Retain the resolved declaration and controls so update.cssem_association()
     # can rebuild the association through the public associate() contract.
     association_settings = list(folds = folds, spline_df = spline_df,
@@ -931,7 +958,7 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       structural_repeats = structural_repeats, seed = seed, shadow_scope = shadow_scope,
       reliability = reliability, eiv_bootstrap = eiv_bootstrap,
       respondent_weighting = respondent_weighting, preset = preset, level = level,
-      missing_policy = missing_policy, fixed_shapes = fixed_shapes),
+      missing_policy = missing_policy, fixed_shapes = fixed_shapes, constraints = constraints),
     row_ids = score_row_ids, missing_policy = missing_policy,
     folds = folds, structural_repeats = structural_repeats, temporal_order = temporal_order, shadow_scope = scopes,
     status = "associational"), class = "cssem_association")
