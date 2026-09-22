@@ -1,5 +1,19 @@
 # cssem (development version)
 
+## Structural prediction (2026-09-21)
+
+* Added `predict.cssem_association()` for predictor-only structural scoring.
+  Observed-parent predictions do not require outcome indicators, preserve the
+  fitted measurement scale, handle interactions, flag extrapolation, and make
+  missing parent inputs explicit.
+* Added recursive upstream prediction for unavailable endogenous mediators,
+  with cycle detection, observed-versus-recursive source metadata, and clear
+  unavailable-exogenous errors.
+* Added `prediction_assessment()` with RMSE, MAE, R-squared, calibration
+  intercept/slope, target-availability status, and an optional training
+  target-mean baseline. Core implementation commits: `e7a0e4f`, `97a722d`,
+  `f7a4cd1`.
+
 ## Bug fixes (2026-09-20 audit)
 
 * **A1 — Nonlinear mediation baselines:** mediation contrasts now use the same

@@ -365,7 +365,8 @@ method, seed, and selected shapes. A failed partition is retained with its
 partition ID, stage, and message so one failure cannot erase the remaining
 evaluation evidence. Missing-data policies are explicit for both measurement
 and structural stages, and held-out data without declared indicator columns
-reports the existing G7 predictor-only limitation.
+is rejected by the whole-pipeline outer metric workflow; predictor-only
+prospective scoring is provided by G7's `predict()` contract.
 Prior-only held-out outcome or predictor states are excluded from outer error
 metrics instead of being evaluated as finite prior predictions, and missing
 model indicators are rejected before partition fitting begins. Time partitions
@@ -394,28 +395,46 @@ not yet been added.
 **Tracking commits:** `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`,
 `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f`.
 
-### [ ] G7. Structural prediction for new observations
+### [x] G7. Structural prediction for new observations
 
 **Evidence/gap:** [score_states()](../R/fit.R#L295) scores new indicator data,
-and `.predict_shape_model()` predicts internally. There is no supported
-`predict.cssem_association()` combining those pieces or defining which parent
-states must be observed versus recursively predicted. Scoring every construct
-currently requires every declared indicator column, including outcome blocks
-that prospective prediction may not have.
+and `.predict_shape_model()` predicts internally. Before this implementation
+there was no supported public prediction contract, and scoring every construct
+required every declared indicator column, including outcome blocks that
+prospective prediction may not have.
 
 **Comparator:** SEMinR documents both `predict()` and `predict_pls()`.
 [SEMinR prediction methods](https://cran.r-project.org/web/packages/seminr/seminr.pdf#page=66)
 
-**Build:** a public predictor-only scoring/prediction workflow with explicit
-outcomes, required columns, model scale, interaction handling, and optional
-recursive propagation. Separate predictions from disattenuated effect estimates;
-an effect correction is not automatically the best predictive coefficient.
-Report extrapolation and unavailable inputs. Add a prediction assessment table
-with stated targets, calibration, errors, and simple baselines.
+**Implemented (2026-09-21, core workflow):**
+`predict.cssem_association()` now provides predictor-only structural scoring in
+`mode = "observed"`, with explicit outcome selection, required-parent
+availability, locked measurement scale, interaction handling, extrapolation
+flags, and `missing_policy = "error"` or `"na"`. Requested outcome indicators
+are never read by the predictor path. `mode = "recursive"` resolves unavailable
+endogenous upstream constructs along the declared structural models, retains
+observed upstream indicators when present, reports recursive versus observed
+sources, rejects cycles, and identifies unavailable exogenous inputs.
 
-**Acceptance:** predicting Y works without Y's indicators; no held-out outcome
-is used indirectly; predictions match the selected model on valid inputs;
-recursive and observed-parent modes have clearly different contracts.
+`prediction_assessment()` compares finite predictions with target states scored
+by the same encoders. Its typed metrics table reports sample size, RMSE, MAE,
+R-squared, calibration intercept and slope, and an optional training
+target-mean baseline. Missing target indicators produce an explicit
+`target_unavailable` status. Separate typed prediction and assessment objects
+are available through `as.data.frame()` and `print()` methods; prediction is
+kept distinct from disattenuated effect estimates.
+
+The workflow remains **Partial** for methodology: categorical structural
+outcomes, predictive intervals and coverage studies, and causal or
+model-selection uncertainty are not implied by this API. Those limits remain
+tracked by the later categorical-outcome, uncertainty, and causal gaps.
+
+**Acceptance:** predicting Y works without Y's indicators; target indicators
+cannot change predictions; valid inputs reproduce the selected shape model;
+recursive and observed-parent modes have distinct contracts; unavailable inputs
+and target-free assessments are explicit rather than silently omitted.
+
+**Tracking commits:** `e7a0e4f`, `97a722d`, `f7a4cd1`.
 
 ### [ ] G8. Group comparison and measurement invariance
 
