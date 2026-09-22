@@ -225,6 +225,8 @@
 #'   concise message. It does not alter the results.
 #' @return An object of class `cssem_bootstrap` containing replicate draws,
 #'   statuses, failure reasons, summary intervals, and reproducibility metadata.
+#'   Cluster resampling additionally records original and resampled unit counts,
+#'   source and draw-level IDs, and a `cluster_resampling_only` limitation.
 #' @export
 bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
                             refit = c("locked_scores", "measurement"), workers = 1L,

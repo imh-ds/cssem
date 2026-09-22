@@ -15,7 +15,9 @@ fit_states(
   diagnostics = TRUE,
   preset = c("default", "exploratory"),
   missing_policy = c("partial", "listwise", "error"),
-  split = NULL
+  split = NULL,
+  cluster = NULL,
+  design = NULL
 )
 }
 \arguments{
@@ -58,6 +60,16 @@ indicator before fitting. \code{"error"} rejects any missing declared indicator.
 assignment with one value per input row. Explicit assignments are retained in
 the fitted object's \code{measurement_split} metadata and are filtered
 alongside listwise exclusions.}
+
+\item{cluster}{Optional column name or one-value-per-input-row vector
+identifying repeated observations from the same independent unit. Omitted
+measurement splits are grouped by unit and explicit assignments are checked for
+cluster leakage. This is a cluster-aware resampling contract, not a multilevel
+SEM estimator.}
+
+\item{design}{Optional named design metadata. Survey weights, strata,
+finite-population corrections, replicate weights, and design-based standard
+errors are unsupported and fail explicitly.}
 }
 \value{
 An object of class \code{fit_states} containing locked scores, full-data

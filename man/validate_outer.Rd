@@ -17,7 +17,9 @@ validate_outer(
   diagnostics = FALSE,
   structural_args = list(),
   measurement_missing_policy = c("partial", "listwise", "error"),
-  structural_missing_policy = c("complete", "error")
+  structural_missing_policy = c("complete", "error"),
+  cluster = NULL,
+  design = NULL
 )
 \method{print}{cssem_outer_validation}(x, ...)
 }
@@ -51,6 +53,14 @@ held-out measurement data: \code{"partial"}, \code{"listwise"}, or
 \item{structural_missing_policy}{Missing locked-score policy for structural
 selection: \code{"complete"} or \code{"error"}.}
 
+\item{cluster}{Optional column name or one-value-per-row vector identifying
+repeated observations. Train/test partitions are rejected when a cluster
+crosses the boundary; grouped split labels are used when omitted.}
+
+\item{design}{Optional named design metadata. Unsupported survey weights,
+strata, finite-population corrections, replicate weights, and design-based
+standard errors fail explicitly.}
+
 \item{x}{A \code{cssem_outer_validation} object.}
 
 \item{...}{Unused.}
@@ -60,7 +70,8 @@ An object of class \code{cssem_outer_validation} containing predictions,
 internal selection metrics, held-out metrics, provenance, and failures. The
 provenance table includes \code{status_detail} when a partition has no observed
 held-out outcomes; split provenance retains source group/time vectors needed to
-recheck grouped and time-ordered constraints.
+recheck grouped and time-ordered constraints, plus row and independent-unit
+counts.
 }
 \description{
 Fits each outer partition using training rows only. Measurement assignments

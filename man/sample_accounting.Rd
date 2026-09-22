@@ -13,7 +13,9 @@ sample_accounting(object, ...)
 }
 \value{
 An object of class \code{cssem_sample_accounting} with \code{summary},
-\code{rows}, \code{policy}, \code{input_n}, and \code{retained_n} fields.
+\code{rows}, \code{policy}, \code{input_n}, \code{retained_n},
+\code{independent_unit_n}, and \code{unit_summary} fields when cluster labels
+are available.
 }
 \description{
 Returns a stable sample ledger for measurement, structural, and derived causal

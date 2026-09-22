@@ -71,6 +71,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
   input_data <- data
   input_row_ids <- seq_len(nrow(input_data))
   input_cluster_ids <- .resolve_cluster_ids(cluster, input_data)
+  all_cluster_ids <- input_cluster_ids
   .preflight_stop(check_model(model), "Model preflight failed")
   .preflight_stop(check_data(data, model), "Data preflight failed")
   resolved_split <- .resolve_split_assignment(split, data, model$folds)
@@ -223,7 +224,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     bags <- .plausible_values(oof_posterior, posterior_nodes, locked, centers, scales_raw, draws, seed)
   }
   sample_ledger <- .measurement_sample_ledger(model, input_data, input_row_ids,
-    as.data.frame(locked), missing_policy)
+    as.data.frame(locked), missing_policy, cluster_ids = all_cluster_ids)
   structure(list(model = model, data = data, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
@@ -233,6 +234,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
     input_data = input_data, row_ids = as.integer(input_row_ids),
+    input_cluster_ids = all_cluster_ids,
     cluster_ids = input_cluster_ids,
     cluster_summary = .cluster_summary(input_cluster_ids),
     independent_unit_n = .cluster_unit_n(input_cluster_ids),

@@ -13,7 +13,9 @@ bootstrap_model(
   refit = c("locked_scores", "measurement"),
   workers = 1L,
   resume = NULL,
-  progress = FALSE
+  progress = FALSE,
+  resample = c("row", "cluster"),
+  cluster = NULL
 )
 }
 \arguments{
@@ -29,6 +31,15 @@ bootstrap_model(
 
 \item{refit}{Whether to resample \code{locked_scores} or refit the measurement encoder for each replicate.}
 
+\item{resample}{Resampling unit. The default \code{"row"} preserves ordinary
+row bootstrap behavior. \code{"cluster"} samples complete independent units
+with replacement and records draw-level unit provenance. This does not fit a
+multilevel SEM.}
+
+\item{cluster}{Optional column name or cluster vector used when
+\code{resample = "cluster"}. If omitted, labels retained on \code{fit} are
+used.}
+
 \item{workers}{Number of worker processes. Replicate seeds are deterministic across worker counts; values above one require the installed package to be available to the workers.}
 
 \item{resume}{An earlier \code{cssem_bootstrap} object with the same \code{seed}, \code{level}, and \code{refit}, used to continue a partially completed run.}
@@ -36,7 +47,7 @@ bootstrap_model(
 \item{progress}{Whether to report completion of each replicate with a concise message. It does not alter the results.}
 }
 \value{
-An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata.
+An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata. Cluster resampling additionally records original and resampled unit counts, source and draw-level IDs, and a \code{cluster_resampling_only} limitation.
 }
 \description{
 The statistic callback receives a context for each resampled data set and must return a named numeric vector. The default \code{locked_scores} mode keeps the fitted measurement encoders fixed and resamples their locked scores; \code{measurement} refits the measurement encoder for every replicate. Shape selection and any downstream estimand are controlled by the callback instead of being silently changed by this helper.

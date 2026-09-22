@@ -57,7 +57,8 @@
 #'   remain in the same time block.
 #' @param seed Seed for random and group assignments.
 #' @return A `cssem_splits` object with an integer `assignment`, reusable outer
-#'   train/test row IDs, and provenance.
+#'   train/test row IDs, provenance, and independent-unit counts. Grouped
+#'   assignments retain source labels so leakage can be checked before fitting.
 #' @export
 make_splits <- function(data, method = c("random", "group", "time"), folds = 5L,
                         group = NULL, time = NULL, seed = 1L) {

@@ -31,7 +31,8 @@ remain in the same time block.}
 }
 \value{
 A \code{cssem_splits} object with an integer \code{assignment}, reusable outer
-train/test row IDs, and provenance.
+train/test row IDs, provenance, and independent-unit counts. Grouped
+assignments retain source labels so leakage can be checked before fitting.
 }
 \description{
 Creates reproducible split assignments for cross-fitting and outer evaluation.

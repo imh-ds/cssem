@@ -82,3 +82,47 @@ test_that("structural accounting reports complete-case exclusions by outcome", {
     effect_accounting$summary$target == "X -> Y"))
   expect_equal(effect_accounting$input_n, nrow(data))
 })
+
+test_that("sample accounting reports independent units after listwise filtering", {
+  set.seed(73)
+  n <- 36L
+  data <- data.frame(
+    a1 = sample(1:5, n, replace = TRUE),
+    a2 = sample(1:5, n, replace = TRUE),
+    a3 = sample(1:5, n, replace = TRUE),
+    x = rnorm(n), y = rnorm(n), subject = rep(seq_len(12), each = 3)
+  )
+  data[c(2L, 20L), "a1"] <- NA
+  model <- specify_measurement(
+    A = ordinal("a1", "a2", "a3"),
+    X = manifest("x"), Y = manifest("y"), folds = 3L
+  )
+  fit <- fit_states(model, data, cluster = "subject", missing_policy = "listwise",
+    iterations = 1L, diagnostics = FALSE)
+  accounting <- sample_accounting(fit)
+  expect_equal(accounting$independent_unit_n, length(unique(fit$cluster_ids)))
+  expect_true(all(c("cluster_id", "n_rows", "retained_rows") %in% names(accounting$unit_summary)))
+  expect_equal(sum(accounting$unit_summary$retained_rows), nrow(fit$data))
+
+  association <- associate(fit,
+    specify_structure(Y ~ linear(X) + linear(A), order = c("A", "X", "Y")),
+    structural_repeats = 1L, shadow_scope = "temporal", missing_policy = "complete")
+  association_accounting <- sample_accounting(association)
+  expect_true(is.numeric(association_accounting$independent_unit_n))
+  expect_true(nrow(association_accounting$unit_summary) > 0L)
+
+  effect <- causal_effect(association, treatment = "X", outcome = "Y", disattenuate = FALSE)
+  effect_accounting <- sample_accounting(effect)
+  expect_true(is.numeric(effect_accounting$independent_unit_n))
+  expect_true(nrow(effect_accounting$unit_summary) > 0L)
+})
+
+test_that("unsupported survey design metadata is rejected explicitly", {
+  data <- simulate_states(n = 36, seed = 74, missing = 0)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  expect_error(
+    fit_states(model, data, design = list(weights = rep(1, nrow(data))),
+      iterations = 1L, diagnostics = FALSE),
+    "survey design"
+  )
+})

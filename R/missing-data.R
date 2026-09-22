@@ -5,8 +5,24 @@
   as.character(row.names(data))
 }
 
+.unit_accounting <- function(cluster_ids, input_n, retained_ids = integer(),
+                             effective_ids = retained_ids) {
+  if (is.null(cluster_ids)) return(list(independent_unit_n = NA_integer_,
+    unit_summary = data.frame()))
+  .validate_cluster_labels(cluster_ids, input_n, "cluster")
+  units <- unique(cluster_ids)
+  retained_ids <- as.integer(retained_ids)
+  effective_ids <- as.integer(effective_ids)
+  out <- data.frame(cluster_id = units,
+    n_rows = vapply(units, function(unit) sum(cluster_ids == unit), integer(1)),
+    retained_rows = vapply(units, function(unit) sum(cluster_ids[retained_ids] == unit), integer(1)),
+    effective_rows = vapply(units, function(unit) sum(cluster_ids[effective_ids] == unit), integer(1)),
+    stringsAsFactors = FALSE)
+  list(independent_unit_n = as.integer(sum(out$retained_rows > 0L)), unit_summary = out)
+}
+
 .measurement_sample_ledger <- function(model, input_data, retained_ids,
-                                       scores = NULL, policy = "partial") {
+                                       scores = NULL, policy = "partial", cluster_ids = NULL) {
   if (!is.data.frame(input_data)) stop("input_data must be a data frame.", call. = FALSE)
   input_n <- nrow(input_data)
   retained <- seq_len(input_n) %in% as.integer(retained_ids)
@@ -43,11 +59,16 @@
       n_complete = sum(retained & status == "complete"),
       n_partial = sum(retained & status == "partial"),
       n_prior_only = sum(retained & status == "prior_only"),
+      independent_unit_n = if (is.null(cluster_ids)) NA_integer_ else
+        length(unique(cluster_ids[retained])),
       n_excluded = sum(!retained), stringsAsFactors = FALSE)
   }
+  units <- .unit_accounting(cluster_ids, input_n, retained_ids,
+    retained_ids[retained[retained_ids]])
   list(summary = do.call(rbind, summaries), rows = do.call(rbind, rows),
     policy = policy, input_n = input_n, retained_n = sum(retained),
-    retained_ids = as.integer(retained_ids))
+    retained_ids = as.integer(retained_ids), independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary)
 }
 
 .measurement_status <- function(fit, row_ids, required) {
@@ -111,7 +132,8 @@
     summaries[[outcome]] <- data.frame(stage = "structural", target = outcome,
       n_total = input_n, n_retained = sum(available), n_effective = sum(complete),
       n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
-      n_prior_only = sum(prior_only), n_excluded = sum(!complete), stringsAsFactors = FALSE)
+      n_prior_only = sum(prior_only), independent_unit_n = NA_integer_,
+      n_excluded = sum(!complete), stringsAsFactors = FALSE)
   }
   list(summary = if (length(summaries)) do.call(rbind, summaries) else data.frame(),
     rows = if (length(rows)) do.call(rbind, rows) else data.frame(),
@@ -154,7 +176,8 @@
   summary <- data.frame(stage = stage, target = target, n_total = input_n,
     n_retained = sum(available), n_effective = sum(complete),
     n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
-    n_prior_only = 0L, n_excluded = sum(!complete), stringsAsFactors = FALSE)
+    n_prior_only = 0L, independent_unit_n = NA_integer_,
+    n_excluded = sum(!complete), stringsAsFactors = FALSE)
   list(summary = summary, rows = rows, retained_n = sum(available),
     retained_ids = association_ids)
 }
@@ -171,7 +194,8 @@
 #' @param object A `fit_states`, `cssem_association`, or derived effect object.
 #' @param ... Unused.
 #' @return An object of class `cssem_sample_accounting` with `summary`, `rows`,
-#'   `policy`, `input_n`, and `retained_n` fields.
+#'   `policy`, `input_n`, `retained_n`, `independent_unit_n`, and `unit_summary`
+#'   fields when cluster labels are available.
 #' @export
 sample_accounting <- function(object, ...) UseMethod("sample_accounting")
 
@@ -182,7 +206,13 @@ sample_accounting.fit_states <- function(object, ...) {
   retained_ids <- if (!is.null(object$row_ids)) object$row_ids else seq_len(nrow(object$data))
   policy <- if (is.null(object$missing_policy)) "partial" else object$missing_policy
   ledger <- if (!is.null(object$sample_ledger)) object$sample_ledger else
-    .measurement_sample_ledger(object$model, input_data, retained_ids, object$locked_scores, policy)
+    .measurement_sample_ledger(object$model, input_data, retained_ids, object$locked_scores, policy,
+      cluster_ids = object$input_cluster_ids)
+  if (is.null(ledger$unit_summary) || !nrow(ledger$unit_summary)) {
+    units <- .unit_accounting(object$input_cluster_ids, nrow(input_data), retained_ids)
+    ledger$independent_unit_n <- units$independent_unit_n
+    ledger$unit_summary <- units$unit_summary
+  }
   class(ledger) <- c("cssem_sample_accounting", "list")
   ledger
 }
@@ -192,10 +222,13 @@ sample_accounting.cssem_association <- function(object, ...) {
   if (!inherits(object, "cssem_association")) stop("object must be a cssem_association object.", call. = FALSE)
   measurement <- sample_accounting(object$fit)
   structural <- .association_sample_ledger(object)
+  units <- .unit_accounting(object$fit$input_cluster_ids, measurement$input_n,
+    structural$retained_ids, structural$rows$row_id[structural$rows$score_finite])
   out <- list(summary = rbind(measurement$summary, structural$summary),
     rows = rbind(measurement$rows, structural$rows),
     policy = object$missing_policy, input_n = measurement$input_n,
-    retained_n = structural$retained_n,
+    retained_n = structural$retained_n, independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary,
     retained_ids = structural$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
@@ -208,10 +241,13 @@ sample_accounting.causal_effect <- function(object, ...) {
   effect <- .effect_sample_ledger(object, stage = "causal",
     target = paste(object$treatment, object$outcome, sep = " -> "),
     required = c(object$treatment, object$outcome, object$adjust))
+  units <- .unit_accounting(object$association$fit$input_cluster_ids, measurement$input_n,
+    effect$retained_ids, effect$rows$row_id[effect$rows$score_finite])
   out <- list(summary = rbind(measurement$summary, effect$summary),
     rows = rbind(measurement$rows, effect$rows),
     policy = object$association$missing_policy, input_n = measurement$input_n,
-    retained_n = effect$retained_n, retained_ids = effect$retained_ids)
+    retained_n = effect$retained_n, independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary, retained_ids = effect$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
 }
@@ -223,10 +259,13 @@ sample_accounting.indirect_effect <- function(object, ...) {
   effect <- .effect_sample_ledger(object, stage = "causal",
     target = paste(object$x, object$y, sep = " -> "),
     required = c(object$x, object$y, object$mediators))
+  units <- .unit_accounting(object$association$fit$input_cluster_ids, measurement$input_n,
+    effect$retained_ids, effect$rows$row_id[effect$rows$score_finite])
   out <- list(summary = rbind(measurement$summary, effect$summary),
     rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
     input_n = measurement$input_n, retained_n = effect$retained_n,
-    retained_ids = effect$retained_ids)
+    independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary, retained_ids = effect$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
 }
@@ -238,10 +277,13 @@ sample_accounting.conditional_slopes <- function(object, ...) {
   effect <- .effect_sample_ledger(object, stage = "causal",
     target = paste(object$predictor, object$outcome, sep = " -> "),
     required = c(object$predictor, object$outcome, object$moderator))
+  units <- .unit_accounting(object$association$fit$input_cluster_ids, measurement$input_n,
+    effect$retained_ids, effect$rows$row_id[effect$rows$score_finite])
   out <- list(summary = rbind(measurement$summary, effect$summary),
     rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
     input_n = measurement$input_n, retained_n = effect$retained_n,
-    retained_ids = effect$retained_ids)
+    independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary, retained_ids = effect$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
 }
@@ -254,10 +296,13 @@ sample_accounting.conditional_indirect_effect <- function(object, ...) {
   effect <- .effect_sample_ledger(object, stage = "causal",
     target = paste(object$x, object$y, sep = " -> "),
     required = c(object$x, object$y, object$moderator))
+  units <- .unit_accounting(object$association$fit$input_cluster_ids, measurement$input_n,
+    effect$retained_ids, effect$rows$row_id[effect$rows$score_finite])
   out <- list(summary = rbind(measurement$summary, effect$summary),
     rows = rbind(measurement$rows, effect$rows), policy = object$association$missing_policy,
     input_n = measurement$input_n, retained_n = effect$retained_n,
-    retained_ids = effect$retained_ids)
+    independent_unit_n = units$independent_unit_n,
+    unit_summary = units$unit_summary, retained_ids = effect$retained_ids)
   class(out) <- c("cssem_sample_accounting", "list")
   out
 }
@@ -265,7 +310,10 @@ sample_accounting.conditional_indirect_effect <- function(object, ...) {
 #' @export
 print.cssem_sample_accounting <- function(x, ...) {
   cat("CS-SEM sample accounting: ", x$retained_n, "/", x$input_n,
-    " rows retained (policy: ", x$policy, ")\n", sep = "")
+    " rows retained (policy: ", x$policy, ")", sep = "")
+  if (!is.null(x$independent_unit_n) && is.finite(x$independent_unit_n))
+    cat("; independent units: ", x$independent_unit_n, sep = "")
+  cat("\n")
   if (nrow(x$summary)) print(x$summary, row.names = FALSE)
   invisible(x)
 }

@@ -163,11 +163,18 @@
 #'   held-out measurement data: `"partial"`, `"listwise"`, or `"error"`.
 #' @param structural_missing_policy Missing locked-score policy for structural
 #'   selection: `"complete"` or `"error"`.
+#' @param cluster Optional column name or one-value-per-row vector identifying
+#'   repeated observations. Train/test partitions are rejected when a cluster
+#'   crosses the boundary; grouped split labels are used when omitted.
+#' @param design Optional named design metadata. Unsupported survey weights,
+#'   strata, finite-population corrections, replicate weights, and design-based
+#'   standard errors fail explicitly.
 #' @return An object of class `cssem_outer_validation` containing predictions,
 #'   internal selection metrics, held-out metrics, provenance, and failures.
 #'   The provenance table includes `status_detail` when a partition has no
-#'   observed held-out outcomes; split provenance retains the source group/time
-#'   vectors needed to recheck grouped and time-ordered constraints.
+#'   observed held-out outcomes, plus row and independent-unit counts; split
+#'   provenance retains the source group/time vectors needed to recheck grouped
+#'   and time-ordered constraints.
 #' @export
 validate_outer <- function(model, structure, data, splits, seed = 1L,
                            iterations = 15L, tolerance = 1e-3,
