@@ -112,8 +112,8 @@ test_that("recursive prediction follows row-specific upstream demand", {
     shadow_scope = "temporal", seed = 3)
   newdata <- data.frame(a1 = c("irrelevant", "1"),
     a2 = c("irrelevant", "1"),
-    b1 = c(NA_real_, data$b1[[2L]]),
-    b2 = c(NA_real_, data$b2[[2L]]),
+    b1 = c(data$b1[[1L]], NA_real_),
+    b2 = c(data$b2[[1L]], NA_real_),
     c1 = c(data$c1[[1L]], NA_real_), c2 = c(data$c2[[1L]], NA_real_))
 
   result <- predict(association, newdata, outcomes = "D", mode = "recursive")
