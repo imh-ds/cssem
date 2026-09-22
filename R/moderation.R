@@ -176,9 +176,13 @@ conditional_slopes <- function(association, outcome, predictor, moderator, level
   jn <- NULL
   if (isTRUE(johnson_neyman) && !is.null(boot)) {
     grid <- seq(-3, 3, length.out = 121L)
-    bounds <- vapply(.moderator_values(scores, moderator, grid), ci_at, numeric(2L))
+    moderator_value <- .moderator_values(scores, moderator, grid)
+    bounds <- vapply(moderator_value, ci_at, numeric(2L))
     significant <- bounds[1L, ] > 0 | bounds[2L, ] < 0
-    jn <- list(grid = grid, significant = significant, intervals = .significant_intervals(grid, significant))
+    jn <- list(grid = grid, significant = significant, intervals = .significant_intervals(grid, significant),
+      moderator_value = unname(moderator_value), slope = vapply(moderator_value, slope_at, numeric(1)),
+      ci_low = unname(bounds[1L, ]), ci_high = unname(bounds[2L, ]),
+      interval_basis = "percentile_bootstrap")
   }
 
   structure(list(association = association, outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,

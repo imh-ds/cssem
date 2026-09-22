@@ -475,13 +475,14 @@ evidence_ledger <- function(fit) {
 #'
 #' @param x A `fit_states` object.
 #' @param type Diagnostic to plot: locked construct `"scores"`, construct
-#'   `"redundancy"`, or held-out `"item_loss"`.
+#'   `"redundancy"`, held-out `"item_loss"`, or measurement-engine
+#'   `"convergence"`.
 #' @param ... Additional arguments passed to the underlying base graphics call.
 #' @return `x`, invisibly.
 #' @examples
 #' # plot(fit, type = "redundancy")
 #' @export
-plot.fit_states <- function(x, type = c("scores", "redundancy", "item_loss"), ...) {
+plot.fit_states <- function(x, type = c("scores", "redundancy", "item_loss", "convergence"), ...) {
   type <- match.arg(type)
   if (type == "scores") {
     graphics::pairs(x$locked_scores, main = "CS-SEM locked construct states", ...)
@@ -489,8 +490,27 @@ plot.fit_states <- function(x, type = c("scores", "redundancy", "item_loss"), ..
     graphics::image(seq_len(ncol(x$redundancy)), seq_len(nrow(x$redundancy)), x$redundancy, axes = FALSE, col = grDevices::hcl.colors(20, "Blue-Red 3"), ...)
     graphics::axis(1, at = seq_len(ncol(x$redundancy)), labels = colnames(x$redundancy)); graphics::axis(2, at = seq_len(nrow(x$redundancy)), labels = rownames(x$redundancy))
     graphics::title("Construct correlations")
-  } else {
+  } else if (type == "item_loss") {
     graphics::stripchart(value ~ item, data = x$item_metrics, method = "jitter", vertical = TRUE, ylab = "Held-out loss", xlab = "Indicator", ...)
+  } else {
+    data <- plot_data(x, type = "convergence")
+    if (!any(is.finite(data$converged) | is.finite(data$fold_rate))) {
+      graphics::plot.new()
+      graphics::title(main = "Measurement optimizer convergence")
+      graphics::text(.5, .55, labels = "Convergence is not applicable to the declared measurement engines.")
+      return(invisible(x))
+    }
+    y <- rev(seq_len(nrow(data)))
+    full <- as.numeric(data$converged)
+    graphics::plot(full, y, xlim = c(-.05, 1.05), ylim = c(.5, nrow(data) + .5),
+      yaxt = "n", ylab = "", xlab = "Converged (1 = yes, 0 = no)",
+      main = "Measurement optimizer convergence", pch = 19, ...)
+    graphics::axis(2, at = y, labels = data$construct, las = 1)
+    finite <- is.finite(data$fold_rate)
+    if (any(finite)) graphics::points(data$fold_rate[finite], y[finite], pch = 1, col = "#A65E00")
+    graphics::axis(1, at = c(0, 1), labels = c("No", "Yes"))
+    graphics::legend("bottom", legend = c("Full-data fit", "Cross-fitting folds"),
+      pch = c(19, 1), col = c("#000000", "#A65E00"), horiz = TRUE, bty = "n", cex = .8, xpd = NA)
   }
   invisible(x)
 }

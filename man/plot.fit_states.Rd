@@ -4,13 +4,15 @@
 \alias{plot.fit_states}
 \title{Plot CS-SEM measurement diagnostics}
 \usage{
-\method{plot}{fit_states}(x, type = c("scores", "redundancy", "item_loss"), ...)
+\method{plot}{fit_states}(x, type = c("scores", "redundancy", "item_loss",
+  "convergence"), ...)
 }
 \arguments{
 \item{x}{A \code{fit_states} object.}
 
 \item{type}{Diagnostic to plot: locked construct \code{"scores"}, construct
-\code{"redundancy"}, or held-out \code{"item_loss"}.}
+\code{"redundancy"}, held-out \code{"item_loss"}, or measurement-engine
+\code{"convergence"}.}
 
 \item{...}{Additional arguments passed to the underlying base graphics call.}
 }

@@ -45,8 +45,17 @@
 # Per-edge effect rows, with causal status merged in from a routing table.
 .evidence_effects <- function(association, routing) {
   ledger <- effect_ledger(association)
+  parameters <- parameter_table(association)
   estimate <- ifelse(is.finite(ledger$corrected_estimate), ledger$corrected_estimate, ledger$naive_estimate)
   key <- .path_key(ledger$predictor, ledger$outcome)
+  parameter_key <- if (nrow(parameters)) .path_key(parameters$predictor, parameters$outcome) else character()
+  parameter_row <- match(key, parameter_key)
+  basis <- if (length(parameter_row) && "estimate_basis" %in% names(parameters))
+    as.character(parameters$estimate_basis[parameter_row]) else rep("unavailable", length(key))
+  units <- if (length(parameter_row) && "units" %in% names(parameters))
+    as.character(parameters$units[parameter_row]) else rep("", length(key))
+  basis[is.na(basis)] <- "unavailable"
+  units[is.na(units)] <- ""
   status <- rep("associational", nrow(ledger)); robustness <- rep(NA_real_, nrow(ledger)); estimand <- rep(NA_character_, nrow(ledger))
   if (!is.null(routing)) {
     match_row <- match(key, routing$table$path)
@@ -57,7 +66,7 @@
   }
   verdict <- vapply(seq_len(nrow(ledger)), function(i)
     .edge_verdict(ledger$selection_frequency[i], estimate[i], ledger$edge_drop_mse_increase[i], ledger$temporal_gap[i], status[i]), character(1))
-  data.frame(path = key, shape = ledger$shape, estimate = estimate,
+  data.frame(path = key, shape = ledger$shape, estimate = estimate, basis = basis, units = units,
     contribution = ledger$edge_drop_mse_increase, stability = ledger$selection_frequency,
     shadow_gap = ledger$temporal_gap, causal_status = status, estimand = estimand,
     robustness_value = robustness, verdict = verdict, stringsAsFactors = FALSE)
