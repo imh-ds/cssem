@@ -38,7 +38,7 @@ multilevel SEM.}
 
 \item{cluster}{Optional column name or cluster vector used when
 \code{resample = "cluster"}. If omitted, labels retained on \code{fit} are
-used.}
+used. Explicit labels are also honored by the point-estimate callback.}
 
 \item{workers}{Number of worker processes. Replicate seeds are deterministic across worker counts; values above one require the installed package to be available to the workers.}
 
@@ -47,7 +47,7 @@ used.}
 \item{progress}{Whether to report completion of each replicate with a concise message. It does not alter the results.}
 }
 \value{
-An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata. Cluster resampling additionally records original and resampled unit counts, source and draw-level IDs, and a \code{cluster_resampling_only} limitation.
+An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata. Cluster resampling additionally records the original-unit denominator, distinct source-unit and draw-occurrence counts, rows per draw, source and draw-level IDs, and a \code{cluster_resampling_only} limitation. Measurement-refit callbacks receive source-unit labels in \code{context$cluster_ids}; duplicated draws therefore remain in one measurement fold, while \code{context$draw_cluster_ids} retains draw-occurrence labels.
 }
 \description{
 The statistic callback receives a context for each resampled data set and must return a named numeric vector. The default \code{locked_scores} mode keeps the fitted measurement encoders fixed and resamples their locked scores; \code{measurement} refits the measurement encoder for every replicate. Shape selection and any downstream estimand are controlled by the callback instead of being silently changed by this helper.

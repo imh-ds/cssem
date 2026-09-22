@@ -11,8 +11,8 @@
     unit_summary = data.frame()))
   .validate_cluster_labels(cluster_ids, input_n, "cluster")
   units <- unique(cluster_ids)
-  retained_ids <- as.integer(retained_ids)
-  effective_ids <- as.integer(effective_ids)
+  retained_ids <- unique(as.integer(retained_ids))
+  effective_ids <- unique(as.integer(effective_ids))
   out <- data.frame(cluster_id = units,
     n_rows = vapply(units, function(unit) sum(cluster_ids == unit), integer(1)),
     retained_rows = vapply(units, function(unit) sum(cluster_ids[retained_ids] == unit), integer(1)),
@@ -132,7 +132,8 @@
     summaries[[outcome]] <- data.frame(stage = "structural", target = outcome,
       n_total = input_n, n_retained = sum(available), n_effective = sum(complete),
       n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
-      n_prior_only = sum(prior_only), independent_unit_n = NA_integer_,
+      n_prior_only = sum(prior_only), independent_unit_n = if (is.null(fit$input_cluster_ids)) NA_integer_ else
+        length(unique(fit$input_cluster_ids[which(complete)])),
       n_excluded = sum(!complete), stringsAsFactors = FALSE)
   }
   list(summary = if (length(summaries)) do.call(rbind, summaries) else data.frame(),
@@ -176,7 +177,8 @@
   summary <- data.frame(stage = stage, target = target, n_total = input_n,
     n_retained = sum(available), n_effective = sum(complete),
     n_score_finite = sum(complete), n_complete = sum(complete), n_partial = 0L,
-    n_prior_only = 0L, independent_unit_n = NA_integer_,
+    n_prior_only = 0L, independent_unit_n = if (is.null(fit$input_cluster_ids)) NA_integer_ else
+      length(unique(fit$input_cluster_ids[which(complete)])),
     n_excluded = sum(!complete), stringsAsFactors = FALSE)
   list(summary = summary, rows = rows, retained_n = sum(available),
     retained_ids = association_ids)

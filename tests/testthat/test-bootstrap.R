@@ -90,14 +90,36 @@ test_that("cluster bootstrap samples complete unequal units and retains draw IDs
   expect_identical(before, after)
   expect_identical(boot$resample, "cluster")
   expect_equal(boot$original_unit_n, 12L)
-  expect_true(all(boot$replicates$resampled_unit_n == 12L))
+  expect_true(all(boot$replicates$resampled_unit_n <= boot$original_unit_n))
+  expect_true(any(boot$replicates$resampled_unit_n < boot$original_unit_n))
+  expect_true(all(boot$replicates$resampled_draw_n == 12L))
   expect_true(all(boot$replicates$resampled_row_n == boot$draws[, "rows"]))
   expect_true(all(vapply(boot$replicates$draw_unit_ids, function(x) length(x) == 12L, logical(1))))
   expect_true(all(vapply(seq_len(nrow(boot$replicates)), function(i)
     length(boot$replicates$row_draw_ids[[i]]) == boot$replicates$resampled_row_n[[i]], logical(1))))
   expect_true(any(vapply(boot$replicates$source_unit_ids, function(x) anyDuplicated(x) > 0L, logical(1))))
   expect_true(all(vapply(boot$replicates$source_unit_ids, function(x) length(x) == 12L, logical(1))))
+  expect_true(all(vapply(boot$replicates$rows_per_unit, function(x) length(x) == 12L, logical(1))))
   expect_true(all(boot$draws[, "units"] <= boot$replicates$resampled_unit_n))
+})
+
+test_that("cluster bootstrap keeps source units together and honors explicit labels", {
+  data <- simulate_states(n = 48, seed = 909, missing = 0)
+  data$subject <- rep(seq_len(16), each = 3)
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)), folds = 3L)
+  fit <- fit_states(model, data, iterations = 1L, diagnostics = FALSE)
+  statistic <- function(context) {
+    if (context$replicate == 0L)
+      return(c(point_units = length(unique(context$cluster_ids)), source_leak = 0))
+    folds <- context$fit$measurement_split$assignment
+    source_folds <- tapply(folds, context$cluster_ids, function(x) length(unique(x)))
+    c(point_units = length(unique(context$cluster_ids)), source_leak = max(source_folds))
+  }
+  boot <- bootstrap_model(fit, statistic, reps = 3L, refit = "measurement",
+    resample = "cluster", cluster = "subject", seed = 38L)
+  expect_equal(unname(boot$point_estimate[["point_units"]]), 16)
+  expect_true(all(boot$draws[, "source_leak"] == 1))
+  expect_equal(boot$replicates$resampled_draw_n, rep(16L, 3L))
 })
 
 test_that("cluster bootstrap is deterministic and supports measurement refits", {

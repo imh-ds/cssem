@@ -110,11 +110,21 @@ test_that("sample accounting reports independent units after listwise filtering"
   association_accounting <- sample_accounting(association)
   expect_true(is.numeric(association_accounting$independent_unit_n))
   expect_true(nrow(association_accounting$unit_summary) > 0L)
+  structural_units <- association_accounting$summary$independent_unit_n[
+    association_accounting$summary$stage == "structural"]
+  expect_true(all(is.finite(structural_units)))
 
   effect <- causal_effect(association, treatment = "X", outcome = "Y", disattenuate = FALSE)
   effect_accounting <- sample_accounting(effect)
   expect_true(is.numeric(effect_accounting$independent_unit_n))
   expect_true(nrow(effect_accounting$unit_summary) > 0L)
+})
+
+test_that("unit accounting deduplicates row ledgers across targets", {
+  ids <- rep(seq_len(3L), each = 2L)
+  units <- cssem:::.unit_accounting(ids, input_n = length(ids),
+    retained_ids = seq_along(ids), effective_ids = c(1L, 2L, 3L, 4L, 1L, 4L))
+  expect_equal(units$unit_summary$effective_rows, c(2L, 2L, 0L))
 })
 
 test_that("unsupported survey design metadata is rejected explicitly", {

@@ -36,24 +36,30 @@
   sampled <- units[sample.int(length(units), length(units), replace = TRUE)]
   draw_ids <- rep(paste0("draw_", seq_along(sampled)), vapply(sampled, function(unit) sum(cluster_ids == unit), integer(1)))
   indices <- unlist(lapply(sampled, function(unit) which(cluster_ids == unit)), use.names = FALSE)
+  source_ids <- as.character(sampled)
+  row_source_ids <- rep(source_ids, vapply(sampled, function(unit) sum(cluster_ids == unit), integer(1)))
   list(indices = as.integer(indices), draw_unit_ids = unique(draw_ids),
-    row_draw_ids = draw_ids, source_unit_ids = sampled)
+    row_draw_ids = draw_ids, source_unit_ids = source_ids,
+    row_source_ids = row_source_ids)
 }
 
 .bootstrap_unit_metadata <- function(cluster_ids, indices, draw_unit_ids = NULL,
                                      source_unit_ids = NULL) {
   if (is.null(cluster_ids)) return(list(original_unit_n = NA_integer_,
     resampled_unit_n = NA_integer_, resampled_row_n = length(indices),
+    resampled_draw_n = NA_integer_,
     rows_per_unit = integer(), draw_unit_ids = character(), source_unit_ids = character(),
-    row_draw_ids = character()))
+    row_draw_ids = character(), row_source_ids = character()))
   if (is.null(draw_unit_ids)) draw_unit_ids <- as.character(cluster_ids[indices])
   if (is.null(source_unit_ids)) source_unit_ids <- as.character(cluster_ids[indices])
   counts <- table(factor(draw_unit_ids, levels = unique(draw_unit_ids)))
   list(original_unit_n = as.integer(length(unique(cluster_ids))),
-    resampled_unit_n = as.integer(length(unique(draw_unit_ids))),
+    resampled_unit_n = as.integer(length(unique(source_unit_ids))),
     resampled_row_n = as.integer(length(indices)),
+    resampled_draw_n = as.integer(length(unique(draw_unit_ids))),
     rows_per_unit = as.integer(counts), draw_unit_ids = as.character(unique(draw_unit_ids)),
-    source_unit_ids = as.character(source_unit_ids), row_draw_ids = as.character(draw_unit_ids))
+    source_unit_ids = as.character(source_unit_ids), row_draw_ids = as.character(draw_unit_ids),
+    row_source_ids = as.character(cluster_ids[indices]))
 }
 
 .bootstrap_statistic_vector <- function(value) {
@@ -105,11 +111,14 @@
 
 .bootstrap_context <- function(fit, indices, refit, replicate, seed, settings,
                                cluster_ids = NULL, row_draw_ids = NULL,
-                               source_unit_ids = NULL, resample = "row") {
+                               source_unit_ids = NULL, row_source_ids = NULL,
+                               resample = "row") {
   raw <- fit$data[indices, , drop = FALSE]
   unit_metadata <- .bootstrap_unit_metadata(cluster_ids, indices,
     draw_unit_ids = row_draw_ids, source_unit_ids = source_unit_ids)
-  draw_cluster_ids <- if (is.null(cluster_ids)) NULL else row_draw_ids
+  source_cluster_ids <- if (is.null(cluster_ids)) NULL else {
+    if (is.null(row_source_ids)) as.character(cluster_ids[indices]) else as.character(row_source_ids)
+  }
   if (refit == "locked_scores") {
     scored_fit <- fit
     scores <- fit$locked_scores[indices, , drop = FALSE]
@@ -121,11 +130,12 @@
       quadrature = settings$quadrature, diagnostics = FALSE,
       preset = settings$preset, missing_policy = settings$missing_policy,
       split = refit_spec$split,
-      cluster = draw_cluster_ids, design = settings$design), list()))
+      cluster = source_cluster_ids, design = settings$design), list()))
     scores <- scored_fit$locked_scores
   }
   list(fit = scored_fit, scores = scores, data = raw, indices = indices,
-    cluster_ids = draw_cluster_ids, source_cluster_ids = source_unit_ids,
+    cluster_ids = source_cluster_ids, draw_cluster_ids = row_draw_ids,
+    source_cluster_ids = source_unit_ids,
     unit_metadata = unit_metadata, replicate = replicate, seed = seed,
     refit = refit, resample = resample)
 }
@@ -138,15 +148,18 @@
     indices <- sampled$indices
     row_draw_ids <- sampled$row_draw_ids
     source_unit_ids <- sampled$source_unit_ids
+    row_source_ids <- sampled$row_source_ids
   } else {
     indices <- sample.int(nrow(fit$data), nrow(fit$data), replace = TRUE)
     row_draw_ids <- if (is.null(cluster_ids)) NULL else as.character(cluster_ids[indices])
     source_unit_ids <- if (is.null(cluster_ids)) NULL else as.character(cluster_ids[indices])
+    row_source_ids <- source_unit_ids
   }
   result <- tryCatch({
     context <- .bootstrap_context(fit, indices, refit, job$replicate, job$seed, settings,
       cluster_ids = cluster_ids, row_draw_ids = row_draw_ids,
-      source_unit_ids = source_unit_ids, resample = resample)
+      source_unit_ids = source_unit_ids, row_source_ids = row_source_ids,
+      resample = resample)
     list(replicate = job$replicate, seed = job$seed, status = "success",
       failure_reason = "", values = .bootstrap_statistic_vector(statistic(context)),
       unit_metadata = context$unit_metadata)
@@ -225,8 +238,12 @@
 #'   concise message. It does not alter the results.
 #' @return An object of class `cssem_bootstrap` containing replicate draws,
 #'   statuses, failure reasons, summary intervals, and reproducibility metadata.
-#'   Cluster resampling additionally records original and resampled unit counts,
-#'   source and draw-level IDs, and a `cluster_resampling_only` limitation.
+#'   Cluster resampling additionally records the original-unit denominator,
+#'   distinct source-unit and draw-occurrence counts, rows per draw, source and
+#'   draw-level IDs, and a `cluster_resampling_only` limitation. In a measurement
+#'   refit, `context$cluster_ids` uses source-unit labels so duplicated draws of
+#'   one source unit stay in one measurement fold; `context$draw_cluster_ids`
+#'   retains the draw-occurrence labels for provenance.
 #' @export
 bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
                             refit = c("locked_scores", "measurement"), workers = 1L,
@@ -261,9 +278,9 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
 
   completed <- if (is.null(prior)) 0L else nrow(prior$replicates)
   point_context <- list(fit = fit, scores = fit$locked_scores, data = fit$data,
-    indices = seq_len(nrow(fit$data)), cluster_ids = fit$cluster_ids,
-    source_cluster_ids = fit$cluster_ids,
-    unit_metadata = .bootstrap_unit_metadata(fit$cluster_ids, seq_len(nrow(fit$data))),
+    indices = seq_len(nrow(fit$data)), cluster_ids = cluster_ids,
+    source_cluster_ids = cluster_ids,
+    unit_metadata = .bootstrap_unit_metadata(cluster_ids, seq_len(nrow(fit$data))),
     replicate = 0L, seed = seed, refit = refit, resample = resample)
   point <- .bootstrap_statistic_vector(statistic(point_context))
   metric_names <- names(point)
@@ -274,7 +291,9 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
     stringsAsFactors = FALSE)
   replicate_rows$original_unit_n <- if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids))
   replicate_rows$resampled_unit_n <- NA_integer_
+  replicate_rows$resampled_draw_n <- NA_integer_
   replicate_rows$resampled_row_n <- NA_integer_
+  replicate_rows$rows_per_unit <- I(vector("list", reps))
   replicate_rows$draw_unit_ids <- I(vector("list", reps))
   replicate_rows$source_unit_ids <- I(vector("list", reps))
   replicate_rows$row_draw_ids <- I(vector("list", reps))
@@ -313,7 +332,9 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
       replicate_rows$failure_reason[[i]] <- if (result$status == "failed") result$failure_reason else ""
       replicate_rows$original_unit_n[[i]] <- result$unit_metadata$original_unit_n
       replicate_rows$resampled_unit_n[[i]] <- result$unit_metadata$resampled_unit_n
+      replicate_rows$resampled_draw_n[[i]] <- result$unit_metadata$resampled_draw_n
       replicate_rows$resampled_row_n[[i]] <- result$unit_metadata$resampled_row_n
+      replicate_rows$rows_per_unit[[i]] <- result$unit_metadata$rows_per_unit
       replicate_rows$draw_unit_ids[[i]] <- result$unit_metadata$draw_unit_ids
       replicate_rows$source_unit_ids[[i]] <- result$unit_metadata$source_unit_ids
       replicate_rows$row_draw_ids[[i]] <- result$unit_metadata$row_draw_ids
@@ -335,6 +356,7 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
     seed = seed, refit = refit, workers = workers, resample = resample,
     original_unit_n = if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids)),
     resampled_unit_n = if (is.null(cluster_ids)) NA_integer_ else unique(replicate_rows$resampled_unit_n),
+    resampled_draw_n = if (is.null(cluster_ids)) NA_integer_ else unique(replicate_rows$resampled_draw_n),
     limitation = if (identical(resample, "cluster")) "cluster_resampling_only: grouped resampling does not estimate multilevel, longitudinal, growth, or survey-design parameters." else "row_resampling",
     components = if (refit == "measurement") "measurement_encoder_refit" else "locked_scores_only",
     statistic = statistic, progress = progress)
@@ -349,6 +371,7 @@ summary.cssem_bootstrap <- function(object, ...) {
     refit = object$refit, resample = object$resample,
     original_unit_n = object$original_unit_n,
     resampled_unit_n = object$resampled_unit_n,
+    resampled_draw_n = object$resampled_draw_n,
     limitation = object$limitation), class = c("summary.cssem_bootstrap", "summary"))
 }
 
