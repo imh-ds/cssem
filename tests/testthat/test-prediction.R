@@ -74,6 +74,45 @@ test_that("recursive prediction resolves an unavailable endogenous mediator", {
   expect_true(any(grepl("Quality", result$availability$required_constructs)))
 })
 
+test_that("recursive prediction uses observed mediators without unused ancestors", {
+  generated <- cssem:::.structural_validation_data("linear", n = 42, seed = 39, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  chain <- specify_structure(
+    Quality ~ linear(Trust),
+    Loyalty ~ linear(Quality),
+    order = c("Trust", "Quality", "Loyalty"))
+  association <- associate(fit, chain, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  quality_items <- generated$model$constructs$Quality$indicators
+  target_items <- generated$model$constructs$Loyalty$indicators
+  mediator_only <- generated$data[, setdiff(quality_items, target_items), drop = FALSE]
+
+  result <- predict(association, mediator_only, outcomes = "Loyalty", mode = "recursive")
+  expect_true(all(is.finite(result$predictions$prediction)))
+  expect_true(all(result$predictions$source == "observed"))
+})
+
+test_that("recursive prediction does not promote prior-only states to inputs", {
+  generated <- cssem:::.structural_validation_data("linear", n = 42, seed = 40, items = 3, missing = 0)
+  generated$model$folds <- 3L
+  fit <- fit_states(generated$model, generated$data, seed = 2, iterations = 1, diagnostics = FALSE)
+  chain <- specify_structure(
+    Quality ~ linear(Trust),
+    Loyalty ~ linear(Quality),
+    order = c("Trust", "Quality", "Loyalty"))
+  association <- associate(fit, chain, structural_repeats = 1L,
+    shadow_scope = "temporal", seed = 3)
+  trust_items <- generated$model$constructs$Trust$indicators
+  predictor_only <- generated$data[, trust_items, drop = FALSE]
+  predictor_only[] <- NA_real_
+
+  result <- predict(association, predictor_only, outcomes = "Loyalty", mode = "recursive",
+    missing_policy = "na")
+  expect_true(all(is.na(result$predictions$prediction)))
+  expect_true(all(result$predictions$status %in% c("unavailable", "missing_input")))
+})
+
 test_that("recursive prediction reports unavailable exogenous inputs", {
   generated <- cssem:::.structural_validation_data("linear", n = 36, seed = 35, items = 3, missing = 0)
   generated$model$folds <- 3L

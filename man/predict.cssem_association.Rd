@@ -23,8 +23,8 @@ constructs. Extra columns are ignored.}
 all declared structural outcomes.}
 
 \item{mode}{Prediction mode. \code{"observed"} evaluates outcomes from their
-directly observed parent constructs. \code{"recursive"} is reserved for
-recursive upstream prediction.}
+directly observed parent constructs. \code{"recursive"} predicts unavailable
+endogenous upstream parents when needed.}
 
 \item{missing_policy}{Whether missing required indicator columns stop with an
 error or return unavailable rows with \code{NA} predictions.}
