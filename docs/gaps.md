@@ -73,7 +73,7 @@ correctness concerns.
 | G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2`, `27e84c1` |
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
 | G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
-| G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families | `a8351cf`, `0d6ddc4`, pending docs commit |
+| G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d` |
 | G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
 | G14 | P1 | Partial | Causal assumptions and validation contract |
@@ -770,8 +770,8 @@ envelope. Probability/threshold simulations and family-specific interval
 calibration remain follow-up validation work.
 
 **Tracking commits:** `a8351cf` (design, plan, tests), `0d6ddc4`
-(estimators, diagnostics, prediction API), and the documentation commit that
-records this status.
+(estimators, diagnostics, prediction API), `7eb29fb` (marginal contrasts), and
+`499973d` (this status documentation).
 
 ### [ ] G12. Structural and effect visualization
 
