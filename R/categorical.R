@@ -22,6 +22,7 @@
 marginal_contrast <- function(association, outcome, predictor, values,
                               newdata = NULL, reps = 0L, level = .95,
                               seed = 1L) {
+  contrast_call <- match.call()
   .preserve_seed()
   reps <- .bootstrap_scalar_integer(reps, "reps", minimum = 0L)
   level <- .bootstrap_validate_level(level)
@@ -113,11 +114,20 @@ marginal_contrast <- function(association, outcome, predictor, values,
       interval_reps = reps, successful_replicates = successful, level = level,
       n = nrow(data), stringsAsFactors = FALSE)
   }
-  structure(list(contrast = result, family = family, outcome = outcome,
+  output <- structure(list(contrast = result, family = family, outcome = outcome,
     predictor = predictor, values = values, draws = draws,
     successful_replicates = successful, failure_count = reps - successful,
     level = level, seed = seed, interval_status = interval_status),
     class = c("cssem_marginal_contrast", "list"))
+  association_provenance <- association$provenance_record
+  output$provenance_record <- .cssem_provenance_record("marginal_contrast", contrast_call,
+    settings = list(outcome = outcome, predictor = predictor, values = as.numeric(values),
+      reps = reps, level = level, seed = seed,
+      input_source = if (is.null(newdata)) "association_scores" else "newdata_locked_scores"),
+    input = .cssem_provenance_input_summary(data, retained_rows = seq_len(nrow(data))),
+    parent = if (is.null(association_provenance)) list() else list(association = association_provenance),
+    packages = "stats")
+  output
 }
 
 #' @export

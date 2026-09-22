@@ -33,6 +33,7 @@ test_that("contrast specifications evaluate safe arithmetic over stable IDs", {
   expect_error(contrast_spec(list(call = "log(edge:B~A:naive)")), "function calls")
   result <- contrast(association, spec)
   expect_s3_class(result, "cssem_contrast")
+  expect_cssem_provenance(result, "contrast", "associate")
   expect_equal(result$estimates[["double"]], 2 * estimate)
   expect_equal(result$estimates[["squared"]], estimate^2)
   base <- contrast(association, contrast_spec(list(path = "edge:B~A"), basis = "naive"))

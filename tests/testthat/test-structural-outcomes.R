@@ -54,6 +54,7 @@ test_that("binary structural outcomes use probability-scale diagnostics", {
   expect_error(marginal_contrast(association, "Y", "X", c(-1, 1), reps = 1.5),
     "non-negative whole-number")
   expect_s3_class(contrast, "cssem_marginal_contrast")
+  expect_cssem_provenance(contrast, "marginal_contrast", "associate")
   expect_true(all(is.finite(contrast$contrast$probability_contrast)))
   expect_true(all(is.finite(contrast$contrast$estimate_ci_low)))
   expect_true(all(contrast$contrast$estimate_ci_low <= contrast$contrast$estimate_ci_high))

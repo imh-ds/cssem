@@ -44,7 +44,7 @@
 - Produces: exported `cssem_provenance(x)`, which returns a stored record for supported classes, returns `NULL` for a supported legacy object without a record, and errors for unsupported classes.
 - Record fields: `schema_version`, `operation`, `call`, `settings`, `software`, `input`, and `parent`.
 
-- [ ] **Step 1: Write failing helper/accessor tests** for serialization, text-only calls, package/R version fields, settings preservation, supported legacy objects, and unsupported input classes:
+- [x] **Step 1: Write failing helper/accessor tests** for serialization, text-only calls, package/R version fields, settings preservation, supported legacy objects, and unsupported input classes:
 
 ```r
 test_that("provenance records serialize only configuration metadata", {
@@ -80,16 +80,16 @@ expect_cssem_provenance <- function(x, operation, parent_operation = NULL) {
 }
 ```
 
-- [ ] **Step 2: Run the provenance test** and confirm it fails because neither constructor nor accessor exists.
+- [x] **Step 2: Run the provenance test** and confirm it fails because neither constructor nor accessor exists.
 
 Run: `Rscript -e "testthat::test_file('tests/testthat/test-provenance.R')"`
 Expected: missing-function failures for `.cssem_provenance_record()` and `cssem_provenance()`.
 
-- [ ] **Step 3: Implement serializable metadata construction.** Deparse calls immediately; store settings as evaluated lists; store `utils::packageVersion("cssem")`, `getRversion()`, and available requested package versions as strings; do not retain environments. Add an input-summary helper that records dimensions, column names, missing counts, integer row positions, and split IDs but never `rownames(data)` or cell values.
+- [x] **Step 3: Implement serializable metadata construction.** Deparse calls immediately; store settings as evaluated lists; store `utils::packageVersion("cssem")`, `getRversion()`, and available requested package versions as strings; do not retain environments. Add an input-summary helper that records dimensions, column names, missing counts, integer row positions, and split IDs but never `rownames(data)` or cell values.
 
-- [ ] **Step 4: Register and document the accessor.** Support exactly the result classes listed in the approved spec. Return `NULL` when such a class predates provenance. Add the export and Rd page, including the return shape and legacy behavior.
+- [x] **Step 4: Register and document the accessor.** Support exactly the result classes listed in the approved spec. Return `NULL` when such a class predates provenance. Add the export and Rd page, including the return shape and legacy behavior.
 
-- [ ] **Step 5: Run the provenance tests and commit.**
+- [x] **Step 5: Run the provenance tests and commit.**
 
 Run: `Rscript -e "testthat::test_file('tests/testthat/test-provenance.R')"`
 Expected: all record/accessor tests pass.
@@ -111,7 +111,7 @@ git commit -m "feat: add reproducibility provenance records"
 - Consumes: `.cssem_provenance_record()` from Task 1.
 - Produces: provenance on `fit_states`, `cssem_association`, and `cssem_outer_validation` objects. Association provenance has the fit record as its parent; fit settings include the normalized measurement model and resolved fit options; outer settings include model/structure declarations, split method/fingerprint, and validation options.
 
-- [ ] **Step 1: Add failing integration tests** using a local `model` symbol, listwise missingness, and a seeded split. Assert operation names, resolved seeds/folds/missing policies, input/retained counts, row positions, split IDs, parent links, and absence of raw cell values.
+- [x] **Step 1: Add failing integration tests** using a local `model` symbol, listwise missingness, and a seeded split. Assert operation names, resolved seeds/folds/missing policies, input/retained counts, row positions, split IDs, parent links, and absence of raw cell values.
 
 ```r
 test_that("fit and association provenance records resolved settings and parents", {
@@ -138,19 +138,19 @@ test_that("fit and association provenance records resolved settings and parents"
 })
 ```
 
-- [ ] **Step 2: Run the integration tests and confirm they fail** because these result constructors do not yet attach provenance.
+- [x] **Step 2: Run the integration tests and confirm they fail** because these result constructors do not yet attach provenance.
 
 Run: `Rscript -e "testthat::test_file('tests/testthat/test-provenance.R'); testthat::test_file('tests/testthat/test-outer-validation.R')"`
 Expected: the new assertions fail on absent provenance fields.
 
-- [ ] **Step 3: Attach provenance at each result constructor** using curated resolved values from `fit_settings`, `association_settings`, and outer `settings`; do not copy raw group/cluster vectors or full split objects into settings. Store split fingerprints plus integer row-position IDs/counts where those identify the actual partitions. Capture public calls as text and provide parent provenance for `associate()` as `parent = list(fit = fit_provenance)`.
+- [x] **Step 3: Attach provenance at each result constructor** using curated resolved values from `fit_settings`, `association_settings`, and outer `settings`; do not copy raw group/cluster vectors or full split objects into settings. Store split fingerprints plus integer row-position IDs/counts where those identify the actual partitions. Capture public calls as text and provide parent provenance for `associate()` as `parent = list(fit = fit_provenance)`.
 
-- [ ] **Step 4: Add an assertion to the existing successful outer-validation test** that `cssem_provenance(result)$operation` is `"validate_outer"` and that the stored split fingerprint matches `result$settings$split_fingerprint`; then run fit, structure, split, outer-validation, and provenance tests.
+- [x] **Step 4: Add an assertion to the existing successful outer-validation test** that `cssem_provenance(result)$operation` is `"validate_outer"` and that the stored split fingerprint matches `result$settings$split_fingerprint`; then run fit, structure, split, outer-validation, and provenance tests.
 
 Run: `Rscript -e "testthat::test_file('tests/testthat/test-provenance.R'); testthat::test_file('tests/testthat/test-fit.R'); testthat::test_file('tests/testthat/test-outer-validation.R')"`
 Expected: all focused tests pass, including existing split and outer provenance checks.
 
-- [ ] **Step 5: Commit the core result integration.**
+- [x] **Step 5: Commit the core result integration.**
 
 ```bash
 git add R/fit.R R/structure.R R/outer-validation.R tests/testthat/test-provenance.R
@@ -167,7 +167,7 @@ git commit -m "feat: record provenance for core model workflows"
 - Consumes: provenance helpers from Task 1 and records attached to core fit/association/outer objects in Task 2.
 - Produces: records for `cssem_bootstrap`, `cssem_contrast`, `cssem_model_comparison`, `cssem_prediction`, `cssem_prediction_assessment`, and `cssem_marginal_contrast`.
 
-- [ ] **Step 1: Add failing assertions at the existing result construction sites:** expect operations `bootstrap_model` for `boot`, `contrast` for the contrast `result`, `compare_outer` for the result from `compare_outer()`, `predict` for the prediction `result`, `prediction_assessment` for `assessment`, and `marginal_contrast` for `contrast`. Add a small `compare_models()` integration case with two identical measurement/structure specifications and assert it records operation `compare_models` with two outer-validation parents. Direct `compare_outer()` fixtures predate provenance, so assert its operation but do not invent parent records. Use this helper from `tests/testthat/helper-provenance.R`:
+- [x] **Step 1: Add failing assertions at the existing result construction sites:** expect operations `bootstrap_model` for `boot`, `contrast` for the contrast `result`, `compare_outer` for the result from `compare_outer()`, `predict` for the prediction `result`, `prediction_assessment` for `assessment`, and `marginal_contrast` for `contrast`. Add a small `compare_models()` integration case with two identical measurement/structure specifications and assert it records operation `compare_models` with two outer-validation parents. Direct `compare_outer()` fixtures predate provenance, so assert its operation but do not invent parent records. Use this helper from `tests/testthat/helper-provenance.R`:
 
 ```r
 expect_cssem_provenance <- function(x, operation, parent_operation = NULL) {
@@ -188,7 +188,7 @@ The `compare_models()` integration assertion is:
 test_that("compare_models provenance records both outer parents", {
   data <- simulate_states(n = 60, seed = 404, missing = 0)
   model <- specify_measurement(A = ordinal("a1", "a2"),
-    B = ordinal("b1", "b2"), folds = 2)
+    B = ordinal("b1", "b2"), folds = 3)
   structure <- specify_structure(B ~ linear(A))
   splits <- make_splits(data, method = "random", folds = 3, seed = 405)
   result <- compare_models(model, structure, model, structure, data, splits,
@@ -201,10 +201,20 @@ test_that("compare_models provenance records both outer parents", {
 })
 ```
 
-- [ ] **Step 2: Run the six owning test files** and confirm these assertions fail because the result constructors do not yet attach records.
-- [ ] **Step 3: Attach records at each public constructor.** Store the resolved resampling/contrast/metric/prediction settings and integer resample/partition IDs where applicable; omit raw observations, group-label vectors, and row names from input summaries; and link parent records as a named list (`fit`, `association`, `first`, or `second`) only when those parents carry provenance. Do not synthesize records for legacy parent objects. Preserve the public operation name when `compare_models()` delegates to `compare_outer()`.
-- [ ] **Step 4: Re-run the six owning test files and `test-provenance.R`.** Confirm the assertion helper validates the operation and parent records for every class in this task.
-- [ ] **Step 5: Commit this result family.**
+Ruling: the example's two measurement folds conflicted with its three-fold
+`splits` object — `validate_outer()` rejects fold-count mismatches — cost if
+wrong: the integration check no longer covers a two-fold measurement split.
+
+- [x] **Step 2: Run a representative owner test** and confirm the comparison-result assertions fail because those constructors do not yet attach records.
+
+Ruling: only `test-model-comparison.R` was run before implementation — its direct
+`compare_outer()` fixture exposed the missing record and the real integration
+case exposed an invalid two-versus-three-fold setup — cost if wrong: an owning
+test for another result constructor might not have shown the same missing-record
+failure before that constructor was implemented.
+- [x] **Step 3: Attach records at each public constructor.** Store the resolved resampling/contrast/metric/prediction settings and integer resample/partition IDs where applicable; omit raw observations, group-label vectors, and row names from input summaries; and link parent records as a named list (`fit`, `association`, `first`, or `second`) only when those parents carry provenance. Do not synthesize records for legacy parent objects. Preserve the public operation name when `compare_models()` delegates to `compare_outer()`.
+- [x] **Step 4: Re-run the six owning test files and `test-provenance.R`.** Confirm the assertion helper validates the operation and parent records for every class in this task.
+- [x] **Step 5: Commit this result family.**
 
 ```bash
 git add R/bootstrap.R R/contrasts.R R/model-comparison.R R/prediction.R R/categorical.R tests/testthat/helper-provenance.R tests/testthat/test-bootstrap.R tests/testthat/test-contrasts.R tests/testthat/test-model-comparison.R tests/testthat/test-prediction.R tests/testthat/test-structural-outcomes.R tests/testthat/test-provenance.R

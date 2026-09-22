@@ -21,6 +21,7 @@ test_that("paired outer comparison computes partition deltas and intervals", {
   first <- .comparison_fixture(); second <- .comparison_fixture(shift = -.2)
   result <- compare_outer(first, second, metrics = c("rmse", "r_squared"), reps = 25L, seed = 88L)
   expect_s3_class(result, "cssem_model_comparison")
+  expect_cssem_provenance(result, "compare_outer")
   expect_equal(result$differences$rmse[result$differences$outer_id == 1L], -.2)
   expect_equal(result$differences$r_squared[result$differences$outer_id == 1L], -.2)
   expect_true(all(c("metric", "estimate", "ci_low", "ci_high") %in% names(result$intervals)))
@@ -45,4 +46,19 @@ test_that("paired comparison checks metric scope and accepts explicit construct 
   second <- .comparison_fixture(); second$test_metrics$outcome <- "Y_B"
   mapped <- compare_outer(first, second, alignment = c(Y_B = "Y"), reps = 10L)
   expect_s3_class(mapped, "cssem_model_comparison")
+})
+
+test_that("compare_models provenance records both outer-validation parents", {
+  data <- simulate_states(n = 60, seed = 404, missing = 0)
+  model <- specify_measurement(A = ordinal("a1", "a2"),
+    B = ordinal("b1", "b2"), folds = 3)
+  structure <- specify_structure(B ~ linear(A))
+  splits <- make_splits(data, method = "random", folds = 3, seed = 405)
+  result <- compare_models(model, structure, model, structure, data, splits,
+    seed = 406, iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1, shadow_scope = "temporal"))
+  provenance <- expect_cssem_provenance(result, "compare_models")
+  expect_length(provenance$parent, 2L)
+  expect_true(all(vapply(provenance$parent,
+    function(parent) identical(parent$operation, "validate_outer"), logical(1))))
 })

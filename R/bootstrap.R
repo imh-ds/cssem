@@ -252,6 +252,7 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
                             refit = c("locked_scores", "measurement"), workers = 1L,
                             resume = NULL, progress = FALSE,
                             resample = c("row", "cluster"), cluster = NULL) {
+  bootstrap_call <- match.call()
   .preserve_seed()
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states object.", call. = FALSE)
   if (!is.function(statistic)) stop("statistic must be a function.", call. = FALSE)
@@ -365,6 +366,19 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
     limitation = if (identical(resample, "cluster")) "cluster_resampling_only: grouped resampling does not estimate multilevel, longitudinal, growth, or survey-design parameters." else "row_resampling",
     components = if (refit == "measurement") "measurement_encoder_refit" else "locked_scores_only",
     statistic = statistic, progress = progress)
+  fit_provenance <- fit$provenance_record
+  input <- if (!is.null(fit_provenance)) fit_provenance$input else
+    .cssem_provenance_input_summary(fit$data)
+  result$provenance_record <- .cssem_provenance_record("bootstrap_model", bootstrap_call,
+    settings = list(reps = reps, level = level, seed = seed, refit = refit,
+      workers = workers, resample = resample, progress = progress,
+      statistic = paste(deparse(substitute(statistic)), collapse = " "),
+      cluster = list(available_in_fit = !is.null(cluster_ids),
+        resampling_requested = identical(resample, "cluster") || !is.null(cluster),
+        column = if (length(cluster) == 1L && is.character(cluster)) cluster else NULL,
+        unit_n = if (is.null(cluster_ids)) NA_integer_ else length(unique(cluster_ids)))),
+    input = input, parent = if (is.null(fit_provenance)) list() else list(fit = fit_provenance),
+    packages = c("MASS", "parallel"))
   class(result) <- c("cssem_bootstrap", "list")
   result
 }

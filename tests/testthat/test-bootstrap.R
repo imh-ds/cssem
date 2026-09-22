@@ -13,6 +13,7 @@ test_that("reusable bootstrap records draws, failures, and configurable interval
   boot <- bootstrap_model(fit, statistic, reps = 8, level = .90, seed = 19)
 
   expect_s3_class(boot, "cssem_bootstrap")
+  expect_cssem_provenance(boot, "bootstrap_model", "fit_states")
   expect_equal(dim(boot$draws), c(8L, 2L))
   expect_equal(boot$level, .90)
   expect_equal(boot$successful_replicates, 8L)

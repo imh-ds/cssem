@@ -9,6 +9,7 @@ test_that("observed prediction does not require outcome indicators", {
 
   result <- predict(association, predictor_only, outcomes = "Loyalty")
   expect_s3_class(result, "cssem_prediction")
+  expect_cssem_provenance(result, "predict", "associate")
   expect_equal(nrow(result$predictions), nrow(predictor_only))
   expect_true(all(result$predictions$outcome == "Loyalty"))
   expect_true(all(is.finite(result$predictions$prediction)))
@@ -207,6 +208,7 @@ test_that("prediction assessment reports errors, calibration, and a training bas
 
   assessment <- prediction_assessment(association, generated$data, outcomes = "Loyalty")
   expect_s3_class(assessment, "cssem_prediction_assessment")
+  expect_cssem_provenance(assessment, "prediction_assessment", "associate")
   expect_true(all(c("outcome", "status", "n", "rmse", "mae", "r_squared",
     "calibration_intercept", "calibration_slope", "baseline_rmse") %in%
     names(assessment$metrics)))

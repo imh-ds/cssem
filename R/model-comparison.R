@@ -132,10 +132,14 @@
 #' @export
 compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared"),
                           reps = 999L, seed = 1L, alignment = NULL) {
+  comparison_call <- match.call()
   if (is.character(alignment)) {
     second <- .comparison_remap_constructs(second, alignment)
     result <- compare_outer(first, second, metrics = metrics, reps = reps, seed = seed)
     result$alignment <- alignment
+    result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+      first, second, list(metrics = metrics, reps = reps, seed = seed,
+        alignment = .comparison_provenance_alignment(alignment)))
     return(result)
   }
   .comparison_validate_identity(first, second, require_targets = is.null(alignment))
@@ -155,11 +159,15 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
           ifelse(mean(differences[[metric]]) > 0, "second_better", ifelse(mean(differences[[metric]]) < 0, "first_better", "tie")),
         level = .95, stringsAsFactors = FALSE)
     }))
-    return(structure(list(first = first, second = second, differences = differences,
+    result <- structure(list(first = first, second = second, differences = differences,
       intervals = intervals, draws = draws, metrics = metrics, reps = reps, seed = seed,
       alignment = alignment, status = "complete",
       limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
-      class = c("cssem_model_comparison", "list")))
+      class = c("cssem_model_comparison", "list"))
+    result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+      first, second, list(metrics = metrics, reps = reps, seed = seed,
+        alignment = .comparison_provenance_alignment(alignment)))
+    return(result)
   }
   first_metrics <- .comparison_metric_table(first, metrics)
   second_metrics <- .comparison_metric_table(second, metrics)
@@ -183,10 +191,34 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
         ifelse(mean(differences[[metric]]) > 0, "second_better", ifelse(mean(differences[[metric]]) < 0, "first_better", "tie")),
       level = .95, stringsAsFactors = FALSE)
   }))
-  structure(list(first = first, second = second, differences = differences,
+  result <- structure(list(first = first, second = second, differences = differences,
     intervals = intervals, draws = draws, metrics = metrics, reps = reps, seed = seed,
     status = "complete", limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
     class = c("cssem_model_comparison", "list"))
+  result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+    first, second, list(metrics = metrics, reps = reps, seed = seed, alignment = alignment))
+  result
+}
+
+.comparison_provenance_record <- function(operation, call, first, second, settings) {
+  parents <- list()
+  first_record <- first$provenance_record
+  second_record <- second$provenance_record
+  if (inherits(first_record, "cssem_provenance")) parents$first <- first_record
+  if (inherits(second_record, "cssem_provenance")) parents$second <- second_record
+  input <- if (!is.null(first_record$input)) first_record$input else
+    if (!is.null(second_record$input)) second_record$input else .cssem_provenance_input_summary()
+  .cssem_provenance_record(operation, call, settings = settings, input = input,
+    parent = parents, packages = "MASS")
+}
+
+.comparison_provenance_alignment <- function(alignment) {
+  if (is.null(alignment)) return(NULL)
+  if (is.character(alignment)) return(alignment)
+  if (is.data.frame(alignment))
+    return(list(type = "data.frame", rows = as.integer(nrow(alignment)),
+      columns = as.character(names(alignment))))
+  list(type = class(alignment))
 }
 
 #' Compare two model specifications on one supplied outer split design
@@ -203,6 +235,7 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
 #' @export
 compare_models <- function(model_a, structure_a, model_b, structure_b, data, splits,
                            seed = 1L, args_a = list(), args_b = list(), alignment = NULL, ...) {
+  compare_models_call <- match.call()
   if (!inherits(model_a, "cssem_model") || !inherits(model_b, "cssem_model"))
     stop("model_a and model_b must be cssem_model objects.", call. = FALSE)
   if (!inherits(structure_a, "cssem_structure") || !inherits(structure_b, "cssem_structure"))
@@ -219,6 +252,24 @@ compare_models <- function(model_a, structure_a, model_b, structure_b, data, spl
   result$model_a <- model_a; result$structure_a <- structure_a
   result$model_b <- model_b; result$structure_b <- structure_b
   result$alignment <- alignment
+  parents <- list()
+  if (inherits(first$provenance_record, "cssem_provenance")) parents$first <- first$provenance_record
+  if (inherits(second$provenance_record, "cssem_provenance")) parents$second <- second$provenance_record
+  input <- if (!is.null(first$provenance_record$input)) first$provenance_record$input else
+    .cssem_provenance_input_summary(data, split_ids = list(outer_split = seq_len(nrow(data))))
+  result$provenance_record <- .cssem_provenance_record("compare_models", compare_models_call,
+    settings = list(model_a = .cssem_provenance_model_specification(model_a),
+      structure_a = .cssem_provenance_structure_specification(structure_a),
+      model_b = .cssem_provenance_model_specification(model_b),
+      structure_b = .cssem_provenance_structure_specification(structure_b),
+      seed = seed, comparison = list(metrics = result$metrics, reps = result$reps,
+        seed = result$seed),
+      alignment = .comparison_provenance_alignment(alignment),
+      split = list(method = splits$method, folds = splits$folds,
+        fingerprint = .outer_split_fingerprint(splits)),
+      forwarded_argument_names = list(common = names(extra), args_a = names(args_a),
+        args_b = names(args_b))),
+    input = input, parent = parents, packages = c("MASS", "rpart", "splines"))
   result
 }
 

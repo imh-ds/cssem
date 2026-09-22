@@ -301,6 +301,7 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
                                       mode = c("observed", "recursive"),
                                       missing_policy = c("error", "na"),
                                       type = c("expected", "probability", "class"), ...) {
+  prediction_call <- match.call()
   mode <- match.arg(mode)
   missing_policy <- match.arg(missing_policy)
   type <- match.arg(type)
@@ -364,10 +365,17 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
   row.names(predictions) <- NULL
   availability <- do.call(rbind, availability_rows)
   row.names(availability) <- NULL
-  structure(list(predictions = predictions, probabilities = probability_rows,
+  result <- structure(list(predictions = predictions, probabilities = probability_rows,
     classes = class_rows, availability = availability,
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
       type = type, support = support)), class = c("cssem_prediction", "list"))
+  association_provenance <- object$provenance_record
+  result$provenance_record <- .cssem_provenance_record("predict", prediction_call,
+    settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
+      type = type, support_constructs = names(support)),
+    input = .cssem_provenance_input_summary(newdata, retained_rows = seq_len(nrow(newdata))),
+    parent = if (is.null(association_provenance)) list() else list(association = association_provenance))
+  result
 }
 
 #' @export
@@ -444,6 +452,7 @@ prediction_assessment <- function(association, newdata, outcomes = NULL,
                                   mode = c("observed", "recursive"),
                                   missing_policy = c("error", "na"),
                                   baseline = c("mean", "none")) {
+  assessment_call <- match.call()
   if (!inherits(association, "cssem_association"))
     stop("association must be a cssem_association.", call. = FALSE)
   mode <- match.arg(mode); missing_policy <- match.arg(missing_policy); baseline <- match.arg(baseline)
@@ -486,9 +495,15 @@ prediction_assessment <- function(association, newdata, outcomes = NULL,
   }
   metrics <- do.call(rbind, metric_rows); row.names(metrics) <- NULL
   predictions <- do.call(rbind, prediction_rows); row.names(predictions) <- NULL
-  structure(list(metrics = metrics, predictions = predictions,
+  result <- structure(list(metrics = metrics, predictions = predictions,
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
       baseline = baseline)), class = c("cssem_prediction_assessment", "list"))
+  association_provenance <- association$provenance_record
+  result$provenance_record <- .cssem_provenance_record("prediction_assessment", assessment_call,
+    settings = result$settings,
+    input = .cssem_provenance_input_summary(newdata, retained_rows = seq_len(nrow(newdata))),
+    parent = if (is.null(association_provenance)) list() else list(association = association_provenance))
+  result
 }
 
 #' @export

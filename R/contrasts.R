@@ -189,6 +189,7 @@ contrast_spec <- function(definitions, basis = c("auto", "naive", "corrected")) 
 contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
                      resample = c("row", "cluster"), cluster = NULL,
                      selection = c("fixed", "repeat")) {
+  contrast_call <- match.call()
   if (!inherits(spec, "cssem_contrast_spec")) stop("spec must be a contrast_spec() object.", call. = FALSE)
   reps <- .bootstrap_scalar_integer(reps, "reps", minimum = 0L)
   if (length(level) != 1L || !is.numeric(level) || !is.finite(level) || level <= 0 || level >= 1)
@@ -256,6 +257,19 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
     result$intervals <- data.frame(contrast = names(evaluated$estimates), estimate = unname(evaluated$estimates),
       ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
   }
+  object_provenance <- object$provenance_record
+  input <- if (!is.null(object_provenance)) object_provenance$input else
+    .cssem_provenance_input_summary()
+  result$provenance_record <- .cssem_provenance_record("contrast", contrast_call,
+    settings = list(definitions = vapply(spec$definitions, `[[`, character(1), "expression"),
+      basis = spec$basis, reps = reps, level = level, seed = seed,
+      resample = resample, selection = selection,
+      cluster = list(supplied = !is.null(cluster),
+        column = if (length(cluster) == 1L && is.character(cluster)) cluster else NULL,
+        vector_length = if (is.null(cluster) || length(cluster) == 1L && is.character(cluster))
+          NA_integer_ else as.integer(length(cluster)))),
+    input = input, parent = if (is.null(object_provenance)) list() else list(association = object_provenance),
+    packages = "MASS")
   structure(result, class = c("cssem_contrast", "list"))
 }
 
