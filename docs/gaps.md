@@ -8,8 +8,9 @@ implemented core workflows with documented methodological limits, G9 now
 has a partial P2 cluster-aware workflow. G9's P3 multilevel/longitudinal
 extension remains a separate unchecked research project; G10 now has a partial
 core workflow with explicit validation limits; G11 now has a scoped categorical
-structural workflow with explicit limits, and the other unchecked entries are
-proposed work. Existing defect reproductions and fixes belong in
+structural workflow with explicit limits. G12 now has scoped structural,
+effect, evidence, and convergence visualization methods; the other unchecked
+entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -74,7 +75,7 @@ correctness concerns.
 | G9 | P2/P3 | Partial (P2 cluster workflow implemented) | Cluster-aware analysis, then multilevel/longitudinal models | `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5` |
 | G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
 | G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families and calibrated uncertainty | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d`, `b05c8bf`, `a956cf3` |
-| G12 | P2 | Partial | Structural, moderation, and diagnostic plots |
+| G12 | P2 | Implemented (scoped) | Structural, moderation, evidence, and convergence plots | `18d0d87` |
 | G13 | P1 | Partial | Complete examples, provenance, and support reporting |
 | G14 | P1 | Partial | Causal assumptions and validation contract |
 | G15 | P2 | Partial | Study-specific simulation and sample-size planning |
@@ -794,7 +795,7 @@ coefficient inference, calibrated marginal-contrast intervals, tests, and
 help pages), followed by `a956cf3` (explicit insufficient-bootstrap
 replicate accounting test).
 
-### [ ] G12. Structural and effect visualization
+### [x] G12. Structural and effect visualization
 
 **Evidence/gap:** [plot.fit_states()](../R/fit.R#L380) offers scores, redundancy,
 and item loss. There are no package-defined structural path, effect-curve,
@@ -813,6 +814,22 @@ support and interval basis, and omit uncertainty bands when unavailable.
 **Acceptance:** diagrams match the specification and routed status; labels
 preserve scale and correction basis; plots do not convert missing intervals
 into zero-width bands or display associational arrows as established causality.
+
+**Implemented (2026-09-22; `18d0d87`):** `plot_data()` now returns
+customizable data for structural path diagrams, observed-support response
+curves, simple slopes and Johnson-Neyman regions, mediation decompositions,
+evidence-report sections, and measurement convergence. Base-R `plot()` methods
+render those results and support standard static graphics devices. Path
+diagrams show declared direction, scale/basis labels, product-term inputs, and
+explicit routing status; associational paths remain labeled as descriptive.
+Johnson-Neyman output retains the bootstrap bounds and moderator values needed
+for plotting. Convergence output keeps full-data and fold results separate.
+
+**Scope:** response-curve intervals are marked unavailable because the
+selected structural models do not retain curve-level uncertainty; no
+confidence band is drawn. Curves stay within observed locked-score support and
+hold other predictors at their means unless the caller supplies `at` values.
+The plotting workflow adds no graphics dependency.
 
 ### [ ] G13. Complete workflows, provenance, and support reporting
 
