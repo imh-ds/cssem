@@ -518,9 +518,12 @@ and outer train/test partitions reject cluster leakage. `make_splits()` and
 outer-validation provenance report row and independent-unit counts.
 
 `bootstrap_model(resample = "cluster")` samples complete units with replacement,
-preserves source and draw-level IDs for duplicated units, supports measurement
-refits, preserves caller RNG state, and reports the distinct-unit denominator.
-`sample_accounting()` carries unit-level ledgers through measurement,
+preserves source and draw-level IDs for duplicated units, keeps duplicated
+source units together during measurement refits, honors explicit bootstrap
+labels in point-estimate callbacks, and reports separate distinct-unit and
+draw-occurrence counts plus rows per draw. It preserves caller RNG state and
+reports the distinct-unit denominator. `sample_accounting()` carries
+unit-level ledgers through measurement,
 association, and derived-effect results. Unsupported survey weights, strata,
 finite-population corrections, replicate weights, and design-based standard
 errors fail with an explicit message; `respondent_weighting = "information"`
@@ -531,7 +534,7 @@ estimate within/between latent states, longitudinal alignment, growth or random
 effects, multilevel likelihoods, or survey-design standard errors. Those P3
 estimands require the separate design listed below.
 
-**Tracking commits:** `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5`.
+**Tracking commits:** `16d38f2`, `e0cbd83`, `1bf4727`, `2118ff5`, `5556996`.
 
 **Plan:** [G9 cluster-aware analysis and repeated observations implementation plan](superpowers/plans/2026-09-21-g9-cluster-aware-analysis.md)
 and [design specification](superpowers/specs/2026-09-21-g9-cluster-aware-analysis-design.md).
