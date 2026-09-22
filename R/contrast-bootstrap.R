@@ -6,8 +6,13 @@
     refit$folds <- association$fit$folds[context$indices] else refit$folds <- context$fit$folds
   refit$row_ids <- seq_len(nrow(context$scores))
   refit$data <- context$data
+  refit$input_data <- context$data
+  refit$sample_ledger <- NULL
+  refit$cluster_ids <- context$cluster_ids
+  if (!is.null(refit$score_posterior_sd) && nrow(as.data.frame(refit$score_posterior_sd)) == nrow(association$fit$locked_scores))
+    refit$score_posterior_sd <- refit$score_posterior_sd[context$indices, , drop = FALSE]
   settings <- association$association_settings
-  settings$folds <- context$fit$folds
+  settings$folds <- refit$folds
   settings$seed <- context$seed
   settings$eiv_bootstrap <- 0L
   settings$reliability <- association$association_settings$reliability

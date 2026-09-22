@@ -48,6 +48,8 @@ cssem_constraint <- function(equal = list(), fixed = numeric()) {
 .constraint_apply <- function(models, scores, constraints) {
   if (is.null(constraints) || !isTRUE(constraints$active)) return(list(models = models,
     diagnostics = list(active = FALSE), declarations = constraints))
+  if (any(vapply(models, function(model) any(unname(model$shapes) != "linear"), logical(1))))
+    stop("Constraints require every selected structural edge to be linear; nonlinear and product equations are unsupported.", call. = FALSE)
   for (edge in constraints$edges) {
     parts <- .constraint_edge(edge); model <- models[[parts[["outcome"]]]]
     shape <- model$shapes[[parts[["predictor"]]]]

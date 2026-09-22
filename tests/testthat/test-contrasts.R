@@ -94,3 +94,16 @@ test_that("contrast results retain explicit unavailable and arithmetic failures"
   expect_true(all(!result$expression_status$available))
   expect_true(all(nzchar(result$expression_status$availability_reason)))
 })
+
+test_that("partially unavailable contrast specifications preserve valid draws", {
+  n <- 40L; scores <- data.frame(A = seq_len(n) / n, B = seq_len(n)^2 / n)
+  fit <- structure(list(locked_scores = scores, folds = rep(1:4, length.out = n),
+    reliability = c(A = NA_real_, B = NA_real_)), class = "fit_states")
+  association <- associate(fit, specify_structure(B ~ linear(A), order = c("A", "B")),
+    structural_repeats = 1L, seed = 1L)
+  spec <- contrast_spec(list(valid = "edge:B~A:naive * 2", unavailable = "edge:B~A:corrected"))
+  result <- contrast(association, spec, reps = 3L, seed = 12L)
+  expect_true(all(is.finite(result$draws[, "valid"])))
+  expect_true(all(is.na(result$draws[, "unavailable"])))
+  expect_equal(result$successful_replicates, 3L)
+})

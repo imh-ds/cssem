@@ -12,6 +12,8 @@ test_that("linear equality constraints pool selected structural coefficients", {
   c <- result$full_models$C$coefficient[result$full_models$C$maps$A][1L]
   expect_equal(b, c, tolerance = 1e-10)
   expect_true(is.finite(result$constraint_diagnostics$condition_number))
+  expect_true(all(is.na(result$candidate_metrics$rmse)))
+  expect_true(all(is.na(result$predictions$B$theory)))
 })
 
 test_that("fixed constraints and unsupported settings fail explicitly", {
@@ -27,4 +29,10 @@ test_that("fixed constraints and unsupported settings fail explicitly", {
     constraints = cssem_constraint(fixed = c("B~A" = 0)), respondent_weighting = "information"), "information weighting")
   expect_error(associate(fit, structure, structural_repeats = 1L,
     constraints = cssem_constraint(fixed = c("B~A" = 0)), reliability = c(A = .8)), "EIV")
+  nonlinear <- specify_structure(B ~ linear(A), C ~ smooth(A), order = c("A", "B", "C"))
+  fit_three <- structure(list(locked_scores = cbind(scores, C = scores$A),
+    folds = rep(1:4, length.out = n), reliability = c(A = NA_real_, B = NA_real_, C = NA_real_)), class = "fit_states")
+  expect_error(associate(fit_three, nonlinear, structural_repeats = 1L,
+    fixed_shapes = list(B = c(A = "linear"), C = c(A = "smooth_df3")),
+    constraints = cssem_constraint(fixed = c("B~A" = 0))), "every selected structural edge")
 })

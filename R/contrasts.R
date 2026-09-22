@@ -206,7 +206,7 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
   if (reps > 0L) {
     if (!inherits(object, "cssem_association"))
       stop("Bootstrap contrasts currently require a cssem_association object.", call. = FALSE)
-    if (!all(is.finite(evaluated$estimates))) {
+    if (!any(is.finite(evaluated$estimates))) {
       result$draws <- matrix(NA_real_, nrow = reps, ncol = length(evaluated$estimates),
         dimnames = list(as.character(seq_len(reps)), names(evaluated$estimates)))
       result$replicates <- data.frame(replicate = seq_len(reps), status = "failed",
@@ -216,11 +216,13 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
       result$intervals <- data.frame(contrast = names(evaluated$estimates), estimate = unname(evaluated$estimates),
         ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
     } else {
+      bootstrap_names <- names(evaluated$estimates)[is.finite(evaluated$estimates)]
       boot_fit <- object$fit
       if (is.null(boot_fit$data)) boot_fit$data <- as.data.frame(boot_fit$locked_scores)
       statistic <- function(context) {
         refit <- .bootstrap_association(context, object, selection)
         values <- .contrast_evaluate_table(parameter_table(refit), spec)$estimates
+        values <- values[bootstrap_names]
         if (any(!is.finite(values))) stop("A bootstrap contrast replicate produced an unavailable estimate.", call. = FALSE)
         attr(values, "bootstrap_metadata") <- list(shape_signature = paste(vapply(refit$full_models,
           function(model) paste(names(model$shapes), unname(model$shapes), sep = "=", collapse = ";"), character(1)), collapse = "|"))
@@ -228,10 +230,19 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
       }
       bootstrap <- bootstrap_model(boot_fit, statistic, reps = reps, level = level, seed = seed,
         refit = "locked_scores", resample = resample, cluster = cluster)
-      result$draws <- bootstrap$draws; result$replicates <- bootstrap$replicates
+      result$draws <- matrix(NA_real_, nrow = reps, ncol = length(evaluated$estimates),
+        dimnames = list(as.character(seq_len(reps)), names(evaluated$estimates)))
+      result$draws[, bootstrap_names] <- bootstrap$draws
+      result$replicates <- bootstrap$replicates
       result$successful_replicates <- bootstrap$successful_replicates
       result$failure_count <- bootstrap$failure_count; result$bootstrap <- bootstrap
-      result$intervals <- bootstrap$summary
+      result$intervals <- do.call(rbind, lapply(names(evaluated$estimates), function(name) {
+        row <- bootstrap$summary[bootstrap$summary$parameter == name, , drop = FALSE]
+        if (nrow(row)) data.frame(contrast = name, estimate = evaluated$estimates[[name]],
+          ci_low = row$ci_low[[1L]], ci_high = row$ci_high[[1L]], level = level,
+          stringsAsFactors = FALSE) else data.frame(contrast = name, estimate = evaluated$estimates[[name]],
+          ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
+      }))
       result$selection_signatures <- if ("metadata" %in% names(bootstrap$replicates))
         vapply(bootstrap$replicates$metadata, function(meta) if (is.null(meta) || length(meta) != 1L || is.na(meta[[1L]])) NA_character_ else meta$shape_signature, character(1)) else rep(NA_character_, nrow(bootstrap$replicates))
       result$selection_changes <- if (selection == "fixed") 0L else {

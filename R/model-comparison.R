@@ -72,7 +72,7 @@
   table[, c("outer_id", "outcome", "n", metrics), drop = FALSE]
 }
 
-.comparison_remap_constructs <- function(result, alignment, target_fingerprint, score_basis_fingerprint) {
+.comparison_remap_constructs <- function(result, alignment, target_fingerprint = NULL, score_basis_fingerprint = NULL) {
   if (!is.character(alignment) || is.null(names(alignment)) || any(!nzchar(names(alignment))) ||
       any(!nzchar(alignment)) || anyDuplicated(names(alignment)) || anyDuplicated(unname(alignment)))
     stop("alignment must be a named character map from model-B construct names to model-A names.", call. = FALSE)
@@ -83,8 +83,8 @@
   if (is.data.frame(out$test_metrics) && "outcome" %in% names(out$test_metrics)) out$test_metrics$outcome <- remap(out$test_metrics$outcome)
   if (is.data.frame(out$predictions) && "outcome" %in% names(out$predictions)) out$predictions$outcome <- remap(out$predictions$outcome)
   if (is.data.frame(out$selection_metrics) && "outcome" %in% names(out$selection_metrics)) out$selection_metrics$outcome <- remap(out$selection_metrics$outcome)
-  out$settings$target_fingerprint <- target_fingerprint
-  out$settings$score_basis_fingerprint <- score_basis_fingerprint
+  if (!is.null(target_fingerprint)) out$settings$target_fingerprint <- target_fingerprint
+  if (!is.null(score_basis_fingerprint)) out$settings$score_basis_fingerprint <- score_basis_fingerprint
   out
 }
 
@@ -111,7 +111,9 @@
   partitions <- sort(unique(differences$outer_id)); draws <- vector("list", reps)
   for (b in seq_len(reps)) {
     sampled <- sample(partitions, length(partitions), replace = TRUE)
-    rows <- differences[match(sampled, differences$outer_id), , drop = FALSE]
+    rows <- do.call(rbind, lapply(sampled, function(partition) {
+      differences[differences$outer_id == partition, , drop = FALSE]
+    }))
     draws[[b]] <- vapply(metrics, function(metric) mean(rows[[metric]], na.rm = TRUE), numeric(1))
   }
   matrix(unlist(draws), nrow = reps, byrow = TRUE, dimnames = list(NULL, metrics))
@@ -131,8 +133,7 @@
 compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared"),
                           reps = 999L, seed = 1L, alignment = NULL) {
   if (is.character(alignment)) {
-    second <- .comparison_remap_constructs(second, alignment,
-      first$settings$target_fingerprint, first$settings$score_basis_fingerprint)
+    second <- .comparison_remap_constructs(second, alignment)
     result <- compare_outer(first, second, metrics = metrics, reps = reps, seed = seed)
     result$alignment <- alignment
     return(result)

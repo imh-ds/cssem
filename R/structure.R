@@ -939,9 +939,20 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
         if (nrow(row) && row$shape[[1L]] != "linear") row$selection_frequency[[1L]] else 1
       }, numeric(1))
       effects[[outcome]] <- effect_data
-      predictions[[outcome]]$theory <- .predict_shape_model(full_model, scores)
+      predictions[[outcome]]$theory <- NA_real_
       corrected[[outcome]] <- .constraint_effect_rows(corrected[[outcome]], full_model)
+      candidates[[outcome]][, intersect(c("rmse", "r_squared", "mean_mse_improvement", "mse_improvement_se", "nonlinearity_p"), names(candidates[[outcome]]))] <- NA_real_
+      for (predictor in names(full_model$shapes)) {
+        key <- paste(outcome, predictor, sep = "::")
+        if (key %in% names(contributions)) {
+          contributions[[key]]$edge_drop_mse_increase <- NA_real_
+          contributions[[key]]$edge_drop_mse_se <- NA_real_
+        }
+      }
+      gaps[[outcome]]$theory_r_squared <- NA_real_
+      gaps[[outcome]]$specification_gap <- NA_real_
     }
+    constraint_diagnostics$predictive_status <- "unavailable: cross-validated constrained diagnostics are not retained; shape selection metrics describe the unconstrained selection stage"
   }
   corrected_table <- do.call(rbind, corrected)
   structure(list(structure = structure, fit = fit, candidate_metrics = do.call(rbind, candidates), effects = do.call(rbind, effects),
