@@ -66,7 +66,7 @@ correctness concerns.
 | G5 | P1 | Partial (core workflow implemented) | Missing-data policy and sample accounting | `311ec2d`, `8cb4304`, `d9d370b`, `e5f4ff8` |
 | G6 | P1 | Partial (core workflow implemented) | User-defined measurement splits and outer validation | `b87c127`, `7283924`, `871ff19`, `5ca8c05`, `f8f087f`, `1b9c28a`, `a66c627`, `89d5c9f`, `f9f94c4`, `942337f` |
 | G7 | P1 | Partial (core workflow implemented) | Structural prediction for new observations | `e7a0e4f`, `97a722d`, `f7a4cd1`, `566543f`, `b58d4df`, `cf60de7`, `64aedc7`, `5c00b1d`, `b51c2cf`, `1905842`, `a402706` |
-| G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274` |
+| G8 | P2 | Partial (core workflow implemented) | Group comparison and measurement invariance | `183cc0b`, `845e274`, `23551e2` |
 | G9 | P2/P3 | Missing | Cluster-aware analysis, then multilevel/longitudinal models |
 | G10 | P2 | Missing | Defined contrasts and model-comparison workflows |
 | G11 | P3 | Missing | Binary/ordinal structural response families |
@@ -485,7 +485,7 @@ invariance. Focused coverage is in
 alignment, threshold/loading shifts, manifest availability, small groups,
 structural contrasts, reproducible permutations, and invalid inputs.
 
-**Tracking commits:** `183cc0b`, `845e274`.
+**Tracking commits:** `183cc0b`, `845e274`, `23551e2`.
 
 ### [ ] G9. Cluster-aware analysis and repeated observations
 

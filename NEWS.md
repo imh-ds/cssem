@@ -11,7 +11,7 @@
   on pooled locked scores. Linear and product edges receive per-group estimates,
   size-preserving permutation p-values, and null intervals; nonlinear edges are
   explicitly unavailable when a scalar contrast is undefined. Core commits:
-  `183cc0b`, `845e274`.
+  `183cc0b`, `845e274`, `23551e2`.
 
 ## Structural prediction (2026-09-21)
 
