@@ -274,3 +274,136 @@ test_that("PSOCK workers preserve ordered results, RNG, and cleanup", {
     failed$replications$scenario == "base"] == "completed"))
   expect_identical(rownames(showConnections(all = TRUE)), prior_connections)
 })
+
+make_summary_fixture <- function() {
+  rows <- data.frame(
+    scenario = rep("base", 4L), n = rep(100L, 4L), replication = 1:4,
+    generate_seed = 11:14, analyze_seed = 21:24,
+    estimand = rep("beta", 4L), truth = rep(.30, 4L),
+    estimate = c(.20, .40, .50, NA_real_),
+    estimate_status = c("available", "available", "available", "unavailable"),
+    lower = c(.10, .20, .35, NA_real_), upper = c(.50, .40, .45, NA_real_),
+    interval_status = c("available", "available", "available", "unavailable"),
+    generation_status = c("completed", "completed", "completed", "failed"),
+    analysis_status = c("completed", "partial", "completed", "not_run"),
+    converged = c(TRUE, TRUE, FALSE, NA),
+    run_status = c("completed", "partial", "completed", "generation_failed"),
+    failure_stage = c("", "analysis", "", "generation"),
+    failure_reason = c("", "interval unavailable", "", "generator failed"),
+    status_reason = c("", "interval unavailable", "", "generator failed"),
+    stringsAsFactors = FALSE
+  )
+  structure(list(replications = rows), class = "cssem_simulation")
+}
+
+summary_metric <- function(summary, metric, estimand = "beta", scope = NULL) {
+  rows <- summary$metrics[summary$metrics$metric == metric &
+    summary$metrics$estimand == estimand, , drop = FALSE]
+  if (!is.null(scope)) rows <- rows[rows$scope == scope, , drop = FALSE]
+  rows
+}
+
+test_that("summarize_study reports operating characteristics and MC uncertainty", {
+  simulation <- make_summary_fixture()
+  summary <- summarize_study(simulation, null_values = c(beta = .30), level = .95)
+  expect_s3_class(summary, "cssem_study_summary")
+
+  bias <- summary_metric(summary, "bias")
+  expect_equal(bias$estimate, mean(c(-.10, .10, .20)))
+  expect_equal(bias$n_valid, 3L)
+  expect_equal(bias$planned_reps, 4L)
+  errors <- c(-.10, .10, .20)
+  expect_equal(bias$mcse, sd(errors) / sqrt(3))
+  bias_half <- qt(.975, df = 2) * sd(errors) / sqrt(3)
+  expect_equal(bias$mc_lower, mean(errors) - bias_half)
+  expect_equal(bias$mc_upper, mean(errors) + bias_half)
+
+  rmse <- summary_metric(summary, "rmse")
+  expect_equal(rmse$estimate, sqrt(mean(errors^2)))
+  mse_half <- qt(.975, df = 2) * sd(errors^2) / sqrt(3)
+  expect_equal(rmse$mcse, sd(errors^2) / sqrt(3) / (2 * sqrt(mean(errors^2))))
+  expect_equal(rmse$mc_lower, sqrt(max(0, mean(errors^2) - mse_half)))
+  expect_equal(rmse$mc_upper, sqrt(mean(errors^2) + mse_half))
+
+  width <- summary_metric(summary, "mean_interval_width")
+  widths <- c(.40, .20, .10)
+  expect_equal(width$estimate, mean(widths))
+  expect_equal(width$mcse, sd(widths) / sqrt(3))
+
+  coverage <- summary_metric(summary, "coverage")
+  expect_equal(coverage$estimate[coverage$scope == "conditional"], 2 / 3)
+  expect_equal(coverage$estimate[coverage$scope == "unconditional"], 2 / 4)
+  expect_equal(coverage$numerator, c(2L, 2L))
+  expect_equal(coverage$denominator, c(3L, 4L))
+
+  detection <- summary_metric(summary, "detection")
+  expect_equal(detection$estimate[detection$scope == "conditional"], 1 / 3)
+  expect_equal(detection$estimate[detection$scope == "unconditional"], 1 / 4)
+  rate <- coverage[coverage$scope == "conditional", , drop = FALSE]
+  p <- 2 / 3
+  z <- qnorm(.975)
+  wilson_denominator <- 1 + z^2 / 3
+  wilson_center <- (p + z^2 / 6) / wilson_denominator
+  wilson_half <- z * sqrt(p * (1 - p) / 3 + z^2 / 36) / wilson_denominator
+  expect_equal(rate$mcse, sqrt(p * (1 - p) / 3))
+  expect_equal(rate$mc_lower, wilson_center - wilson_half)
+  expect_equal(rate$mc_upper, wilson_center + wilson_half)
+
+  expect_equal(summary_metric(summary, "convergence", "*", "conditional")$estimate, 2 / 3)
+  expect_equal(summary_metric(summary, "convergence", "*", "unconditional")$estimate, 2 / 4)
+  expect_equal(summary_metric(summary, "failure", "*")$estimate, 1 / 4)
+  expect_equal(summary_metric(summary, "partial", "*")$estimate, 1 / 4)
+  expect_equal(summary_metric(summary, "interval_availability")$estimate, 3 / 4)
+})
+
+test_that("summarize_study marks absent nulls and zero denominators unavailable", {
+  simulation <- make_summary_fixture()
+  without_null <- summarize_study(simulation)
+  detection <- summary_metric(without_null, "detection")
+  expect_true(all(detection$availability_status == "unavailable"))
+  expect_true(all(is.na(detection$estimate)))
+
+  rows <- simulation$replications
+  rows$estimate <- NA_real_
+  rows$estimate_status <- "unavailable"
+  rows$lower <- NA_real_
+  rows$upper <- NA_real_
+  rows$interval_status <- "unavailable"
+  rows$status_reason <- "not available"
+  simulation$replications <- rows
+  empty <- summarize_study(simulation, null_values = c(beta = .30))
+  expect_identical(summary_metric(empty, "bias")$availability_status, "unavailable")
+  expect_identical(summary_metric(empty, "coverage", scope = "conditional")$availability_status,
+    "unavailable")
+  expect_equal(summary_metric(empty, "coverage", scope = "unconditional")$estimate, 0)
+  expect_error(summarize_study(simulation, level = 1), "level")
+})
+
+test_that("RMSE and its Monte Carlo error are zero when every valid error is zero", {
+  simulation <- make_summary_fixture()
+  simulation$replications$estimate[1:3] <- simulation$replications$truth[1:3]
+  summary <- summarize_study(simulation)
+  rmse <- summary_metric(summary, "rmse")
+  expect_equal(rmse$estimate, 0)
+  expect_equal(rmse$mcse, 0)
+  expect_equal(rmse$mc_lower, 0)
+  expect_equal(rmse$mc_upper, 0)
+})
+
+test_that("unconditional rates count analysis failures as uncovered and non-detections", {
+  simulation <- make_summary_fixture()
+  rows <- simulation$replications
+  rows$run_status[2:3] <- "analysis_failed"
+  rows$analysis_status[2:3] <- "failed"
+  simulation$replications <- rows
+  summary <- summarize_study(simulation, null_values = c(beta = .30))
+  coverage <- summary_metric(summary, "coverage")
+  expect_equal(coverage$estimate[coverage$scope == "conditional"], 2 / 3)
+  expect_equal(coverage$estimate[coverage$scope == "unconditional"], 1 / 4)
+  detection <- summary_metric(summary, "detection")
+  expect_equal(detection$estimate[detection$scope == "conditional"], 1 / 3)
+  expect_equal(detection$estimate[detection$scope == "unconditional"], 0)
+  convergence <- summary_metric(summary, "convergence", "*")
+  expect_equal(convergence$estimate[convergence$scope == "conditional"], 2 / 3)
+  expect_equal(convergence$estimate[convergence$scope == "unconditional"], 1 / 4)
+})
