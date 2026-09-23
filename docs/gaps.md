@@ -9,8 +9,11 @@ has a partial P2 cluster-aware workflow. G9's P3 multilevel/longitudinal
 extension remains a separate unchecked research project; G10 now has a partial
 core workflow with explicit validation limits; G11 now has a scoped categorical
 structural workflow with explicit limits. G12 now has scoped structural,
-effect, evidence, and convergence visualization methods; the other unchecked
-entries are proposed work. Existing defect reproductions and fixes belong in
+effect, evidence, and convergence visualization methods. G13 now has mixed-scale
+declarations, provenance and optional raw-data retention, a rendered workflow,
+artifact-backed support reporting, and aligned method/migration documentation;
+its validated scope and remaining suite failures are recorded below. The other
+unchecked entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -59,6 +62,9 @@ correctness concerns.
 - **P1:** recommended foundations for dependable use of the present method.
 - **P2:** useful extensions after those foundations are stable.
 - **P3:** optional research/scope expansion requiring a separate methodological decision.
+- **Implemented (scoped):** the requested workflow is delivered within explicit
+  method and validation boundaries; this does not claim full SEM parity or
+  universal methodological validation.
 - **Partial:** internal machinery or part of the workflow exists.
 - **Missing:** no supported public workflow was found; users may still script one themselves.
 
@@ -76,7 +82,7 @@ correctness concerns.
 | G10 | P2 | Partial (core workflow implemented) | Defined contrasts, paired model comparison, and constrained linear estimates | `5082f19`, `4390942`, `90ce50f`, `8603b88`, `f1efc1f`, `b4b7cde`, `99907ea` |
 | G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families and calibrated uncertainty | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d`, `b05c8bf`, `a956cf3` |
 | G12 | P2 | Implemented (scoped) | Structural, moderation, evidence, and convergence plots | `18d0d87` |
-| G13 | P1 | Partial | Complete examples, provenance, and support reporting |
+| G13 | P1 | Implemented (scoped) | Complete examples, provenance, and support reporting | `c1e0676`, `b8933dc`, `142c79e`, `8ec7621`, `12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, `b2d25e4` |
 | G14 | P1 | Partial | Causal assumptions and validation contract |
 | G15 | P2 | Partial | Study-specific simulation and sample-size planning |
 | G16 | P3 | Deliberate limits | Expanded construct and structural model classes |
@@ -831,31 +837,46 @@ confidence band is drawn. Curves stay within observed locked-score support and
 hold other predictors at their means unless the caller supplies `at` values.
 The plotting workflow adds no graphics dependency.
 
-### [ ] G13. Complete workflows, provenance, and support reporting
+### [x] G13. Complete workflows, provenance, and support reporting
 
-**Evidence/gap:** the repository has generated help, README examples, and useful
-method notes, but no package vignette workflow was found. Several advanced help
-examples are commented calls. README/method-note version and selector descriptions
-lag the implementation. Objects retain some seeds, folds, and model version,
-but not a uniform call/options/software/provenance record. Mixed-scale models
-can be declared through low-level lists but lack an equally discoverable helper.
+**Delivered:** `mixed_items()` declares ordinal and continuous indicators in one
+construct; `cssem_provenance()` records calls, resolved settings, software,
+schema/split accounting, and parent links without embedding observations; and
+`fit_states(..., retain_data = FALSE)` supports score-only workflows without
+retaining raw training frames. The deterministic
+[workflow vignette](../vignettes/cssem-workflow.Rmd) renders the measurement,
+missingness, association, contrast, prediction, outer-validation, provenance,
+and optional causal-estimand path. `supported_envelope()` reads the installed
+release artifact, and [capabilities.md](capabilities.md) links statuses to
+tests and named validation artifacts. The [method specification](method-spec.md),
+[associational guide](associational-structure.md), README, and
+[migration table](migration.md) now describe the v0.5.0 APIs and limits; the
+migration inventory covers all 39 deprecated function declarations.
 
-**Comparator:** lavaan offers a staged tutorial; SEMinR provides a worked
-estimation/assessment vignette.
-[lavaan tutorial](https://lavaan.ugent.be/tutorial/index.html),
-[SEMinR vignette](https://sem-in-r.r-universe.dev/seminr/doc/SEMinR.html)
+**Scope:** the support envelope summarizes registered scenarios and metrics,
+not a universal sample-size rule or an individual-study guarantee. The
+validated ordinal measurement conditions remain narrower than implemented
+scale declarations. Latent-state uncertainty and information weighting remain
+experimental, causal assumptions cannot be verified by the software, and
+covariance-SEM fit indices and broader model classes remain outside the
+estimator. Data-dependent refits/diagnostics require `retain_data = TRUE`.
 
-**Build:** runnable end-to-end examples covering measurement, missingness,
-structure, uncertainty, prediction, and optional causal claims; a mixed-item
-declaration recipe/helper; a capabilities table separating implemented,
-experimental, and validated functionality; and reproducibility metadata in
-results. Document scale transformations, estimands, correction limitations,
-support-envelope applicability, and migration from deprecated wrappers. Raw data
-retention should be optional rather than required for every saved result.
+**Validation:** focused G13 tests passed; all 120 Rd files parsed and passed
+`tools::checkRd()`, the vignette rendered, `R CMD build --no-manual` succeeded,
+and `git diff --check` passed. The complete test suite reported six failures:
+the causal-mediation path-count assertion, an unsupported `info` argument to
+testthat `expect_lt()`, mediation-truth names/attributes, a numerical-diagnostics
+class/row-name assertion, and two summary-extractor availability/basis
+assertions. One optional comparator test was skipped because `seminr` is not
+installed. `R CMD check` completed with 1 WARNING and 4 NOTEs when run with
+`LC_ALL=C` while skipping tests, examples, and vignette execution; its warning
+is for existing code/Rd argument mismatches, and its notes include the hidden
+`.superpowers` directory and static-analysis/documentation items. Tests and the
+vignette were exercised separately.
 
-**Acceptance:** examples run from a clean installation using current public
-names; output records enough information to recreate the configuration; readers
-can identify unsupported conditions without reading source code.
+**Implementation commits:** `c1e0676`, `b8933dc`, `142c79e`, `8ec7621`,
+`12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, and
+`b2d25e4`.
 
 ### [ ] G14. Causal assumptions and validation contract
 
@@ -944,17 +965,19 @@ present manually reusing scores as a validated higher-order latent model.
 ## Suggested delivery order
 
 1. Resolve the relevant existing correctness defects in [bugs.md](bugs.md).
-   Stabilize G5/G13: sample accounting and documentation. Use the result and
-   scale-aware measurement contracts delivered in G1-G3.
+   Close remaining G4/G5 methodological gaps using the provenance and
+   documentation foundation delivered in G13 and the scale-aware measurement
+   contracts delivered in G1-G3.
 2. Use the completed G6/G7 split, outer-validation, and prediction workflows to
    validate G4's inference choices. Develop G14's causal validation before
    widening causal claims.
-3. Add G12 plots and G10 contrasts on the stable result/uncertainty schema;
-   extend G8's core diagnostics to a joint constrained estimator only if the
-   methodological decision is approved, then address the cluster-aware portion
-   of G9 and G15 study planning.
-4. Evaluate G11, multilevel/longitudinal G9, and G16 as separate research
-   proposals. They change the estimator's scope and need more than UI work.
+3. Build on the G10 contrast and G12 visualization workflows using the stable
+   result/uncertainty schema; extend G8's core diagnostics to a joint
+   constrained estimator only if the methodological decision is approved,
+   then address the cluster-aware portion of G9 and G15 study planning.
+4. Keep multilevel/longitudinal G9 and G16 as separate research proposals.
+   They change the estimator's scope and need more than UI work. Preserve the
+   explicit categorical-outcome and uncertainty limits recorded for G11.
 
 **Completion rule for future work:** an entry is complete only when its public
 workflow, documentation, edge-case behavior, and stated numerical/methodological

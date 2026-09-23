@@ -206,8 +206,18 @@ argument to testthat `expect_lt()`, a mediation truth comparison that differs
 in names/attributes, a numerical-diagnostics class/row-name comparison, and
 two summary-extractor availability/basis assertions. One comparator test was
 skipped because optional `seminr` is unavailable. `R CMD check` installed the
-package successfully but stopped at DESCRIPTION metadata checking after R
-startup reported unavailable `C.UTF-8` locales; it also noted the existing
-hidden `.superpowers` directory and unavailable optional `lavaan`, `seminr`,
-and `roxygen2` packages. No estimator or test code was changed in this docs
-step.
+package successfully. Its first run stopped at DESCRIPTION metadata checking
+because the Windows locale did not provide `C.UTF-8`; rerunning with `LC_ALL=C`
+completed with 1 WARNING and 4 NOTEs. The warning is for existing Rd/code
+argument mismatches in `associate`, `cssem_structure`, `specify_structure`,
+and `predict.cssem_association`. The notes cover the hidden `.superpowers`
+directory, an internal `:::` reference, unqualified `setNames`/`predict`, and
+missing `compare_models` Rd description. The check used `--no-tests`,
+`--no-examples`, and `--no-vignettes`; those tests and the vignette were run
+separately. Optional `lavaan`, `seminr`, and `roxygen2` were unavailable. No
+estimator or test code was changed in this docs step.
+
+The G13 entry in `docs/gaps.md` now records the scoped completion, workflow and
+artifact evidence, validation limits, and all implementation/documentation
+commit IDs. That tracking update is committed separately from the method and
+migration documentation commit.
