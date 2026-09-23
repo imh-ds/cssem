@@ -229,3 +229,48 @@ test_that("simulate_study validates run controls and preflights truth", {
   expect_error(simulate_study(invalid_spec, reps = 1L), "truth.*estimand")
   expect_equal(calls, 2L)
 })
+
+make_worker_study_spec <- function() {
+  generate_env <- new.env(parent = baseenv())
+  generate_env$noise_sd <- .8
+  generate <- eval(quote(function(scenario, n, seed) {
+    data.frame(y = scenario$mu + noise_sd * stats::rnorm(n))
+  }), envir = generate_env)
+  analysis_env <- new.env(parent = baseenv())
+  analysis_env$offset <- .05
+  analyze <- eval(quote(function(data, scenario, seed) {
+    estimate <- mean(data$y) - offset
+    data.frame_result <- data.frame(estimand = "mean", estimate = estimate,
+      estimate_status = "available", lower = estimate - 1 / sqrt(nrow(data)),
+      upper = estimate + 1 / sqrt(nrow(data)), interval_status = "available",
+      status_reason = "")
+    list(status = "completed", converged = TRUE, failure_reason = "",
+      estimates = data.frame_result)
+  }), envir = analysis_env)
+  scenarios <- data.frame(scenario = c("low", "high"), mu = c(.2, .7))
+  truth <- function(scenario, n) c(mean = scenario$mu - .05)
+  study_spec(scenarios, c(30L, 60L), generate, truth, analyze,
+    metadata = list(description = "Worker reproducibility", analysis_scope = "mean"))
+}
+
+test_that("PSOCK workers preserve ordered results, RNG, and cleanup", {
+  spec <- make_worker_study_spec()
+  set.seed(918L)
+  prior_seed <- .Random.seed
+  prior_connections <- rownames(showConnections(all = TRUE))
+  sequential <- simulate_study(spec, reps = 2L, seed = 63L, workers = 1L)
+  expect_identical(.Random.seed, prior_seed)
+  expect_identical(rownames(showConnections(all = TRUE)), prior_connections)
+  parallel <- simulate_study(spec, reps = 2L, seed = 63L, workers = 2L)
+  expect_identical(.Random.seed, prior_seed)
+  expect_identical(rownames(showConnections(all = TRUE)), prior_connections)
+  expect_identical(parallel$replications, sequential$replications)
+
+  failed <- simulate_study(make_failure_study_spec(), reps = 1L, seed = 64L,
+    workers = 2L)
+  expect_true(all(failed$replications$run_status[
+    failed$replications$scenario == "generation_error"] == "generation_failed"))
+  expect_true(all(failed$replications$run_status[
+    failed$replications$scenario == "base"] == "completed"))
+  expect_identical(rownames(showConnections(all = TRUE)), prior_connections)
+})

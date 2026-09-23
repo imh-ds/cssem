@@ -12,9 +12,8 @@ simulate_study(spec, reps, seed = 1L, workers = 1L)
 
 \item{seed}{Non-negative integer base seed used to assign callback seeds.}
 
-\item{workers}{Positive integer worker count. Use \code{1} for sequential
-execution. Larger worker counts are not supported until the PSOCK execution
-path is enabled.}
+\item{workers}{Positive integer worker count. One runs sequentially; larger
+values use the package's PSOCK worker path.}
 }
 \value{
 A \code{cssem_simulation} object. Its \code{replications} data frame has one
@@ -31,8 +30,9 @@ specification while retaining failed and unavailable results.
 \details{
 The truth callback runs for each scenario and sample size before replications
 start and is not passed to the analysis callback. Job seeds are assigned before
-execution so that later PSOCK execution can preserve the same result ordering.
-The caller's random-number state is restored when the function returns.
+execution, so ordered outputs are invariant to worker count for callbacks that
+are deterministic given their seeds and can be serialized to workers. The
+caller's random-number state is restored when the function returns.
 }
 \examples{
 scenarios <- data.frame(scenario = "base", beta = .3)

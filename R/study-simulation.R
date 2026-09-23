@@ -241,8 +241,8 @@
 #' @param spec A `cssem_study_spec` created by [study_spec()].
 #' @param reps Number of replications for each scenario and sample size.
 #' @param seed Non-negative integer base seed used to assign callback seeds.
-#' @param workers Positive integer worker count. This release runs sequentially;
-#'   PSOCK execution is enabled when the supported worker path is available.
+#' @param workers Positive integer worker count. One runs sequentially; larger
+#'   values use the package's PSOCK worker path.
 #'
 #' @return A `cssem_simulation` object. Its `replications` data frame has one
 #'   row per scheduled replication and estimand, including independent truth,
@@ -259,13 +259,11 @@ simulate_study <- function(spec, reps, seed = 1L, workers = 1L) {
   reps <- .study_scalar_integer(reps, "reps")
   seed <- .study_scalar_integer(seed, "seed", minimum = 0L)
   workers <- .study_scalar_integer(workers, "workers")
-  if (workers > 1L) {
-    stop("workers greater than one are not supported yet.", call. = FALSE)
-  }
 
   truth <- .study_truth_values(spec)
   jobs <- .study_build_jobs(spec, reps, seed, truth)
-  rows <- lapply(jobs, .study_run_one, spec = spec, estimands = truth$estimands)
+  run_job <- function(job) .study_run_one(job, spec, truth$estimands)
+  rows <- .validation_map(jobs, run_job, workers)
   structure(list(
     replications = do.call(rbind, rows),
     scenarios = spec$scenarios,
