@@ -7,14 +7,18 @@
 .resolve_fit_groups <- function(fit, group) {
   if (!inherits(fit, "fit_states")) stop("fit must be a fit_states object.", call. = FALSE)
   input <- if (!is.null(fit$input_data)) fit$input_data else fit$data
-  retained <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(nrow(input))
+  input_n <- if (!is.null(fit$sample_ledger$input_n)) as.integer(fit$sample_ledger$input_n) else
+    if (is.data.frame(input)) nrow(input) else nrow(fit$locked_scores)
+  retained <- if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else seq_len(input_n)
   if (is.character(group) && length(group) == 1L) {
+    if (!is.data.frame(input))
+      stop("group column lookup requires retained training data; refit with retain_data = TRUE or supply a group vector.", call. = FALSE)
     if (!group %in% names(input)) stop("group column was not found in the fit's input data.", call. = FALSE)
     values <- input[[group]]
   } else {
     values <- group
   }
-  if (length(values) == nrow(input)) values <- values[retained]
+  if (length(values) == input_n) values <- values[retained]
   else if (length(values) != length(retained))
     stop("group must be a column name, a vector with one value per input row, or a vector with one value per retained row.", call. = FALSE)
   if (is.factor(values)) values <- as.character(values)
@@ -182,6 +186,7 @@ measurement_invariance <- function(fit, group, reference = NULL, min_group_size 
   invariance_call <- match.call()
   .preserve_seed()
   .measurement_check_fit(fit)
+  .require_retained_data(fit, "measurement_invariance")
   .group_validate_controls(reference, min_group_size, level, tolerance)
   resolved <- .resolve_fit_groups(fit, group)
   if (is.null(reference)) reference <- resolved$labels[[1L]]

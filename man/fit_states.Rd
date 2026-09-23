@@ -17,7 +17,8 @@ fit_states(
   missing_policy = c("partial", "listwise", "error"),
   split = NULL,
   cluster = NULL,
-  design = NULL
+  design = NULL,
+  retain_data = TRUE
 )
 }
 \arguments{
@@ -70,6 +71,10 @@ SEM estimator.}
 \item{design}{Optional named design metadata. Survey weights, strata,
 finite-population corrections, replicate weights, and design-based standard
 errors are unsupported and fail explicitly.}
+
+\item{retain_data}{Whether to retain the original training frames and raw
+row-aligned cluster labels in the fitted object. Set to \code{FALSE} to keep
+locked scores and score-only workflows while omitting those raw inputs.}
 }
 \value{
 An object of class \code{fit_states} containing locked scores, full-data

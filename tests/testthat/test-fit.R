@@ -104,6 +104,67 @@ test_that("manifest() constructs pass through standardized (or raw) with asserte
   expect_equal(range(f_raw$locked_scores$Age), range(d$age))
 })
 
+test_that("fits can omit raw data while retaining score-only workflows", {
+  data <- simulate_states(n = 60, seed = 403, missing = 0)
+  rownames(data) <- paste0("respondent-id-", seq_len(nrow(data)))
+  cluster <- rep(paste0("person-id-", seq_len(nrow(data) / 2L)), each = 2L)
+  indicators <- c(paste0("a", 1:4), paste0("b", 1:4))
+  model <- specify_measurement(A = ordinal(paste0("a", 1:4)),
+    B = ordinal(paste0("b", 1:4)), folds = 3)
+  retained <- fit_states(model, data, seed = 14, iterations = 1,
+    diagnostics = FALSE, cluster = cluster)
+  expect_true(is.data.frame(retained$data))
+  fit <- fit_states(model, data, seed = 14, iterations = 1,
+    diagnostics = FALSE, cluster = cluster, retain_data = FALSE)
+  expect_null(fit$data)
+  expect_null(fit$input_data)
+  expect_false(any(grepl("respondent-id-", fit$sample_ledger$rows$row_name, fixed = TRUE)))
+  expect_null(fit$input_cluster_ids)
+  expect_null(fit$cluster_ids)
+  expect_null(fit$measurement_split$cluster_values)
+  expect_false(any(grepl("person-id-", unlist(fit, recursive = TRUE, use.names = FALSE), fixed = TRUE)))
+  accounting <- sample_accounting(fit)
+  expect_s3_class(accounting, "cssem_sample_accounting")
+  expect_equal(nrow(accounting$unit_summary), length(unique(cluster)))
+  expect_true("cluster_id" %in% names(accounting$unit_summary))
+  expect_false(any(grepl("person-id-", accounting$unit_summary$cluster_id, fixed = TRUE)))
+  expect_true(is.data.frame(score_states(fit, data[, indicators, drop = FALSE])))
+  parameters <- measurement_parameters(fit)
+  expect_true(all(is.finite(parameters$estimate[parameters$parameter != "manifest_scale"])))
+  expect_true(all(is.na(parameters$observed_n)))
+  expect_true(all(is.na(parameters$missing_n)))
+  expect_s3_class(item_response_curve(fit, "A", "a1"), "cssem_item_response_curve")
+  association <- associate(fit, specify_structure(B ~ linear(A)), structural_repeats = 1)
+  expect_s3_class(association, "cssem_association")
+  association_accounting <- sample_accounting(association)
+  expect_equal(association_accounting$independent_unit_n, length(unique(cluster)))
+  expect_false(any(grepl("person-id-", association_accounting$unit_summary$cluster_id, fixed = TRUE)))
+  new_data <- simulate_states(n = 12, seed = 404, missing = 0)
+  prediction <- predict(association, new_data, outcomes = "B")
+  expect_s3_class(prediction, "cssem_prediction")
+  comparison <- group_comparison(association, rep(c("g1", "g2"), each = 30),
+    reference = "g1", permutations = 5, min_group_size = 10)
+  expect_s3_class(comparison, "cssem_group_comparison")
+  expect_error(group_comparison(association, "group_column", permutations = 0),
+    "retain_data = TRUE or supply a group vector")
+  grouped_splits <- make_splits(data, method = "group", folds = 3,
+    group = cluster, seed = 15)
+  split_fit <- fit_states(model, data, seed = 14, iterations = 1,
+    diagnostics = FALSE, split = grouped_splits, retain_data = FALSE)
+  expect_null(split_fit$fit_settings$split$group_values)
+  expect_null(split_fit$fit_settings$split$unit_values)
+  expect_null(split_fit$fit_settings$split$time_values)
+  expect_false(any(grepl("person-id-", unlist(split_fit, recursive = TRUE, use.names = FALSE), fixed = TRUE)))
+  expect_error(bootstrap_model(fit, function(context) mean(context$scores$A), reps = 2),
+    "retain_data = TRUE")
+  expect_error(measurement_assessment(fit), "retain_data = TRUE")
+  expect_error(measurement_invariance(fit, rep(c("g1", "g2"), 30)),
+    "retain_data = TRUE")
+  expect_error(update(fit), "retain_data = TRUE")
+  updated <- update(fit, model = model, data = data, iterations = 1)
+  expect_null(updated$data)
+})
+
 test_that("a mixed construct fits through the existing measurement pipeline", {
   data <- simulate_states(n = 60, seed = 402, missing = 0)
   data$duration <- seq_len(nrow(data)) / 10

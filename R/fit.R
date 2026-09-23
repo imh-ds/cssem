@@ -46,6 +46,9 @@
 #' @param design Optional named design metadata. Survey weights, strata,
 #'   finite-population corrections, replicate weights, and design-based
 #'   standard errors are unsupported and fail explicitly.
+#' @param retain_data Whether to retain the original training frames and raw
+#'   row-aligned cluster labels in the fitted object. Set to `FALSE` to keep
+#'   locked scores and score-only workflows while omitting those raw inputs.
 #' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -61,13 +64,15 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
                       tolerance = 1e-3, quadrature = seq(-4, 4, length.out = 31L),
                       diagnostics = TRUE, preset = c("default", "exploratory"),
                       missing_policy = c("partial", "listwise", "error"), split = NULL,
-                      cluster = NULL, design = NULL) {
+                      cluster = NULL, design = NULL, retain_data = TRUE) {
   fit_call <- match.call()
   .preserve_seed()
   if (!inherits(model, "cssem_model")) stop("model must be a cssem_model.", call. = FALSE)
   if (!is.data.frame(data)) stop("data must be a data frame.", call. = FALSE)
   preset <- match.arg(preset)
   missing_policy <- match.arg(missing_policy)
+  if (!is.logical(retain_data) || length(retain_data) != 1L || is.na(retain_data))
+    stop("retain_data must be TRUE or FALSE.", call. = FALSE)
   .reject_unsupported_design_fields(design)
   input_data <- data
   input_row_ids <- seq_len(nrow(input_data))
@@ -228,11 +233,20 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     as.data.frame(locked), missing_policy, cluster_ids = all_cluster_ids)
   cluster_column <- if (length(cluster) == 1L && is.character(cluster) &&
       cluster %in% names(input_data)) cluster else NULL
+  if (!retain_data) {
+    sample_ledger$rows$row_name <- as.character(sample_ledger$rows$row_id)
+    sample_ledger$rows$unit_id <- if (is.null(all_cluster_ids)) NA_character_ else
+      .anonymous_cluster_ids(all_cluster_ids)[sample_ledger$rows$row_id]
+    sample_ledger$unit_summary <- .anonymize_unit_summary(sample_ledger$unit_summary)
+    measurement_split$cluster_values <- NULL
+    measurement_split$unit_summary <- .anonymize_unit_summary(measurement_split$unit_summary)
+  }
   fit_provenance <- .cssem_provenance_record("fit_states",
     .cssem_provenance_call(fit_call, c("data", "split", "cluster", "design")),
     settings = list(model = .cssem_provenance_model_specification(model), seed = seed,
       draws = draws, iterations = iterations, tolerance = tolerance, quadrature = quadrature,
       diagnostics = diagnostics, preset = preset, missing_policy = missing_policy,
+      retain_data = retain_data,
       split = list(method = measurement_method, folds = model$folds,
         provenance = unclass(measurement_provenance)),
       cluster = list(supplied = !is.null(all_cluster_ids), column = cluster_column,
@@ -240,7 +254,14 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
       design_fields = if (is.null(design)) character() else names(design)),
     input = .cssem_provenance_input_summary(input_data, retained_rows = input_row_ids,
       split_ids = list(measurement_fold = as.integer(fold))), packages = "MASS")
-  structure(list(model = model, data = data, locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
+  fit_settings <- list(seed = seed, draws = draws, iterations = iterations,
+    tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
+    preset = preset, missing_policy = missing_policy,
+    split = if (retain_data) split else .sanitize_splits_for_retention(split),
+    cluster = if (retain_data) cluster else cluster_column, design = design,
+    retain_data = retain_data)
+  structure(list(model = model, data = if (retain_data) data else NULL,
+    locked_scores = as.data.frame(locked), full_encoders = full, folds = fold,
     item_metrics = do.call(rbind, metric_list), stability = stability, redundancy = redundancy,
     reliability = reliability, score_posterior_sd = as.data.frame(score_posterior_sd),
     warnings = warnings, residual_dependence = residual_dependence,
@@ -248,10 +269,11 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # The standardization applied to the out-of-fold scores, retained so that
     # score_states() can put new records on the same scale as locked_scores.
     score_center = centers, score_scale = scales_raw,
-    input_data = input_data, row_ids = as.integer(input_row_ids),
-    input_cluster_ids = all_cluster_ids,
-    cluster_ids = input_cluster_ids,
-    cluster_summary = .cluster_summary(input_cluster_ids),
+    input_data = if (retain_data) input_data else NULL, row_ids = as.integer(input_row_ids),
+    input_cluster_ids = if (retain_data) all_cluster_ids else NULL,
+    cluster_ids = if (retain_data) input_cluster_ids else NULL,
+    cluster_summary = if (retain_data) .cluster_summary(input_cluster_ids) else
+      .anonymize_unit_summary(.cluster_summary(input_cluster_ids)),
     independent_unit_n = .cluster_unit_n(input_cluster_ids),
     missing_policy = missing_policy, sample_ledger = sample_ledger,
     measurement_split = measurement_split,
@@ -259,10 +281,7 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     # refit is always a fresh call to fit_states(), so update() cannot mutate
     # the fitted object or silently reuse stale scores.
     numerical_diagnostics = .measurement_numerical_diagnostics(full, model, n = n),
-    fit_settings = list(seed = seed, draws = draws, iterations = iterations,
-      tolerance = tolerance, quadrature = quadrature, diagnostics = diagnostics,
-      preset = preset, missing_policy = missing_policy, split = split,
-      cluster = cluster, design = design),
+    fit_settings = fit_settings,
     provenance_record = fit_provenance,
     measurement_engine = stats::setNames(lapply(construct_names, function(nm) list(estimator = full[[nm]]$estimator,
       converged = full[[nm]]$converged, iterations = full[[nm]]$iterations,

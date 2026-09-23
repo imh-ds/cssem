@@ -112,7 +112,7 @@
 measurement_assessment <- function(fit, construct = NULL) {
   assessment_call <- match.call()
   .measurement_check_fit(fit)
-  if (is.null(fit$data)) stop("measurement_assessment() requires a fit that retains its training data; refit with fit_states().", call. = FALSE)
+  .require_retained_data(fit, "measurement_assessment")
   constructs <- names(fit$full_encoders)
   if (!is.null(construct)) {
     if (length(construct) != 1L || !construct %in% constructs) stop("construct must name one fitted construct.", call. = FALSE)

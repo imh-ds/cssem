@@ -48,6 +48,33 @@
     stringsAsFactors = FALSE)
 }
 
+.anonymous_cluster_ids <- function(cluster_ids) {
+  if (is.null(cluster_ids)) return(NULL)
+  unit_index <- match(cluster_ids, unique(cluster_ids))
+  paste0("unit_", unit_index)
+}
+
+.anonymize_unit_summary <- function(unit_summary) {
+  if (!is.data.frame(unit_summary) || !nrow(unit_summary) || !"cluster_id" %in% names(unit_summary))
+    return(unit_summary)
+  unit_summary$cluster_id <- paste0("unit_", seq_len(nrow(unit_summary)))
+  unit_summary
+}
+
+.sanitize_splits_for_retention <- function(split) {
+  if (!is.list(split) || !inherits(split, "cssem_splits")) return(split)
+  for (field in c("group_values", "time_values", "unit_values")) split[[field]] <- NULL
+  if (!is.null(split$unit_summary)) split$unit_summary <- .anonymize_unit_summary(split$unit_summary)
+  split
+}
+
+.require_retained_data <- function(fit, operation) {
+  if (!is.data.frame(fit$data))
+    stop(sprintf("%s() requires the original item rows; fit with retain_data = TRUE.", operation),
+      call. = FALSE)
+  invisible(fit$data)
+}
+
 .cluster_unit_n <- function(cluster_ids) {
   if (is.null(cluster_ids)) return(NA_integer_)
   as.integer(length(unique(cluster_ids)))
