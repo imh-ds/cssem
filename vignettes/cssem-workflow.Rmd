@@ -119,15 +119,34 @@ outer
 This call demonstrates the package's declared adjusted-linear estimand. Its
 interpretation requires a defensible temporal order, an adequate adjustment set,
 consistency, positivity, and no unmeasured confounding. The software checks some
-structural and temporal-order constraints, but it cannot verify those study
-assumptions from the data or from the declarations. The result label is not
-evidence that the assumptions hold.
+structural and temporal-order constraints and can audit a typed causal graph,
+but it cannot verify those study assumptions from the data or from the
+declarations. The result label is not evidence that the assumptions hold.
 
 ```{r causal}
+trust_loyalty_design <- causal_design(
+  edges = data.frame(
+    from = c("Age", "Age", "Trust"),
+    to = c("Trust", "Loyalty", "Loyalty")
+  ),
+  treatment = "Trust", outcome = "Loyalty", adjust = "Age",
+  assumptions = list(
+    consistency = "assumed",
+    no_unmeasured_confounding = "assumed",
+    positivity = "assumed",
+    measurement_validity = "assumed",
+    temporal_order = "assumed"
+  )
+)
 causal_effect(association, treatment = "Trust", outcome = "Loyalty",
   adjust = "Age", estimand = "adjusted_linear", disattenuate = FALSE,
-  temporal_order = c("Age", "Trust", "Loyalty"))
+  temporal_order = c("Age", "Trust", "Loyalty"),
+  design = trust_loyalty_design)
 ```
+
+The [causal validation manifest](../R/causal-validation.R) also provides
+independent structural targets for six score-level stress scenarios; it does
+not refit measurement models or establish identification for the example data.
 
 For the estimator's current evidence and explicit boundaries, see
 [`capabilities.md`](../docs/capabilities.md) and the

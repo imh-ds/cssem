@@ -1,5 +1,23 @@
 # cssem (development version)
 
+## Causal assumptions and validation contract (2026-09-22)
+
+* Added typed causal-versus-associational graphs, machine-readable assumption
+  states, DAG/backdoor audits, and optional design gating for direct and
+  mediation estimands. Assumptions remain declarations; a graph audit cannot
+  verify no unmeasured confounding or positivity.
+* Added estimand-specific nuisance diagnostics and a continuous-treatment
+  residual-variation support proxy, explicitly labeled as not a positivity
+  proof. Added independent-truth causal validation scenarios for confounding,
+  weak overlap, nuisance misspecification, score measurement error, nonlinear
+  treatment response, and mediation. Results report bias and interval coverage
+  when available, plus admissibility and diagnostics. The simulation runner
+  validates locked scores and does not refit the measurement pipeline.
+* `causal_indirect_effect(..., mediators=)` now filters the displayed
+  path-specific effects to paths using the requested mediator set while
+  preserving its all-path total and indirect estimands. Implementation
+  commits: `8adba22`, `8d7874a`, `02c4617`.
+
 ## Defined contrasts, paired comparisons, and linear constraints (2026-09-22)
 
 * Added stable `parameter_id` and availability/status fields to public

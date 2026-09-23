@@ -12,7 +12,9 @@ structural workflow with explicit limits. G12 now has scoped structural,
 effect, evidence, and convergence visualization methods. G13 now has mixed-scale
 declarations, provenance and optional raw-data retention, a rendered workflow,
 artifact-backed support reporting, and aligned method/migration documentation;
-its validated scope and remaining suite failures are recorded below. The other
+its validated scope and remaining suite failures are recorded below. G14 now
+has a scoped causal-graph audit and an independent-truth validation runner;
+assumption verification and broader calibration remain limited. The other
 unchecked entries are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
@@ -83,7 +85,7 @@ correctness concerns.
 | G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families and calibrated uncertainty | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d`, `b05c8bf`, `a956cf3` |
 | G12 | P2 | Implemented (scoped) | Structural, moderation, evidence, and convergence plots | `18d0d87` |
 | G13 | P1 | Implemented (scoped) | Complete examples, provenance, and support reporting | `c1e0676`, `b8933dc`, `142c79e`, `8ec7621`, `12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, `b2d25e4` |
-| G14 | P1 | Partial | Causal assumptions and validation contract |
+| G14 | P1 | Partial (core workflow implemented) | Causal assumptions and validation contract | `8adba22`, `8d7874a`, `02c4617`, `67dbc78` |
 | G15 | P2 | Partial | Study-specific simulation and sample-size planning |
 | G16 | P3 | Deliberate limits | Expanded construct and structural model classes |
 
@@ -878,30 +880,104 @@ vignette were exercised separately.
 `12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, and
 `b2d25e4`.
 
-### [ ] G14. Causal assumptions and validation contract
+### [x] G14. Causal assumptions and validation contract
 
-**Evidence/gap:** [causal.R](../R/causal.R),
+**Evidence/gap at the audit baseline:** [causal.R](../R/causal.R),
 [causal-mediation.R](../R/causal-mediation.R), and [routing.R](../R/routing.R)
-provide more than ordinary associational SEM, but do not expose a complete
-causal-graph/identification audit or a dedicated causal validation manifest
-parallel to the structural and mediation suites. Adjustment declarations and
-temporal order do not by themselves verify no unmeasured confounding.
+provided causal estimands but no machine-readable graph audit or independent
+causal-validation manifest. Adjustment declarations and temporal order do not
+by themselves verify no unmeasured confounding.
 
 **Comparator boundary:** this is a requirement arising from CS-SEM's own causal
 claims, not a missing lavaan/SEMinR parity feature. Neither comparator's path
 syntax is being treated as a causal-identification guarantee.
 
-**Build:** machine-readable assumptions, causal-versus-associational graph
-semantics, checks for graph-implied forbidden adjustments, overlap/nuisance
-diagnostics appropriate to each estimand, and estimand-specific sensitivity
-reporting. Add independent simulations for confounding, weak overlap, nuisance
-misspecification, measurement error, nonlinear treatment, and mediation.
-Separate unsupported designs from failed diagnostics and unverifiable assumptions.
+**Design and implementation sequence:**
 
-**Acceptance:** address bugs A1–A4/A9/A10 before strengthening causal reporting;
-invalid simulated designs never gain causal status merely from metadata;
-coverage and bias are evaluated against independent targets. Temporal-order
-checks are described as necessary discipline, not sufficient identification.
+1. Define a typed graph contract with separate causal and associational edges,
+   machine-readable assumption statuses, acyclic causal arrows, and a backdoor
+   audit that flags treatment descendants and graph-implied open paths.
+2. Integrate the optional audit into direct and mediation estimands; require
+   causal-DAG support for analyzed mediation paths and keep temporal-order
+   checks as necessary discipline rather than identification proof.
+3. Report estimand-specific diagnostics and sensitivity: treatment-support
+   proxy and nuisance fit for direct effects; stagewise diagnostics for
+   mediation; preserve explicit non-causal labels when graph or support checks
+   fail.
+4. Add a deterministic independent-truth manifest and runner for confounding,
+   weak overlap, nuisance misspecification, measurement error, nonlinear
+   treatment effects, and mediation. Return bias and interval coverage when
+   intervals are available, alongside graph admissibility, failure, and
+   runtime fields.
+5. Document the public contract, run focused graph, estimator, and simulation
+   checks, and record the implementation commits.
+
+**Implemented (scoped):** `causal_design()` and `validate_causal_design()` now
+distinguish causal DAG arrows from associational links, retain per-assumption
+statuses and optional evidence, check acyclicity, post-treatment adjustment,
+and the sufficient backdoor criterion, and report graph validity separately
+from causal admissibility. Optional design input gates direct and mediation
+causal labels; mediation additionally requires every analyzed path to appear
+in the causal DAG. Direct effects expose linear or cross-fitted nuisance
+diagnostics and a residual treatment-variance support proxy; mediation exposes
+stagewise linear R-squared diagnostics and the same support proxy. Sensitivity
+outputs include the existing unmeasured-confounding robustness values and
+reliability sensitivity. A requested mediation subset now filters the
+path-specific display while retaining the all-path total and indirect
+estimands.
+
+`causal_validation_manifest()` and `validate_causal()` supply six seeded
+score-level simulation scenarios with analytic or structural targets that are
+independent of fitted CS-SEM estimates. Results retain signed/absolute bias,
+coverage when an interval is available, design/adjustment admissibility,
+labels, support and nuisance diagnostics, errors, and runtime. The
+measurement-error case injects known score noise and reliability; it does not
+refit the item measurement pipeline.
+
+**Acceptance and limits:** the included confounding scenario omits a known
+common cause from adjustment and remains associational; near-deterministic
+treatment support also cannot receive a causal label. Screening tests cover
+all six scenarios and a bootstrap interval case. The residual-variance proxy
+does not establish positivity; assumptions marked `assumed` remain analyst
+declarations that software cannot verify. Simulation results cover locked
+scores rather than the full measurement-refitting pipeline, and this is not a
+calibrated release envelope across study designs. Causal claims remain
+conditional on substantive assumptions and measurement/model adequacy. The
+prerequisite fixes A1–A4, A9, and A10 are recorded as patched in
+[bugs.md](bugs.md).
+
+**Validation:** focused causal-design (22 assertions), causal validation (23),
+direct causal (108), and mediation (36) tests pass. The two causal estimator
+files emit existing deprecation, convergence, and spline-boundary warnings;
+the installed-testthat assertion incompatibility was updated to a supported
+equivalent, and mediation display selection now has a row-count regression
+check. The four touched Rd pages pass `tools::checkRd()`. `R CMD INSTALL`
+and a smoke test through the installed exports also pass. A deterministic
+screening run used
+60 replications per scenario (`seed = 20260922`, 50 percentile-bootstrap
+resamples where applicable); it had zero estimator failures and produced:
+
+| Scenario | Mean bias | RMSE | 95% interval coverage |
+| --- | ---: | ---: | ---: |
+| Confounding omitted from adjustment | 0.576 | 0.577 | 0.000 |
+| Weak overlap | 0.009 | 0.936 | 0.917 |
+| Nuisance misspecification (DML) | 0.004 | 0.040 | 0.950 |
+| Score measurement error | 0.002 | 0.067 | 0.917 |
+| Nonlinear treatment response (AME) | 0.004 | 0.033 | 0.933 |
+| Mediation | 0.003 | 0.018 | 0.950 |
+
+The deliberately confounded scenario is graph-inadmissible and returns an
+associational label; its bias and zero coverage are expected under the omitted
+common cause. Weak overlap has high RMSE despite near-zero average bias and is
+kept out of causal status. The other four coverage proportions are exploratory
+60-replication checks, not precise calibration claims or release gates.
+
+**Tracking commits:** `8adba22` (graph audit and estimator integration),
+`8d7874a` (support/nuisance diagnostics and independent-truth validation), and
+`02c4617` (mediator-selected path reporting); `67dbc78` adjusts an assertion
+to the supported testthat API. The full package test directory was not rerun
+for G14; a prior run exceeded ten minutes and was stopped, so this change is
+verified by the focused causal files and package-install smoke checks above.
 
 ### [ ] G15. Study-specific simulation and sample-size planning
 

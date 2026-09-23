@@ -85,6 +85,17 @@ their documented design declarations, and software cannot verify consistency,
 positivity, no unmeasured confounding, correct measurement, or the substantive
 adequacy of an adjustment set from the data alone.
 
+`causal_design()` distinguishes typed causal arrows from associational links
+and records assumption statuses as analyst declarations. Its audit checks DAG
+structure and graph-implied backdoor adjustment; a passing audit establishes
+only consistency with that declared graph. Direct and mediation estimands can
+use the audit to prevent unsupported graphs from receiving a causal label.
+Continuous-treatment residual variation is reported as a support proxy, not a
+positivity test. `causal_validation_manifest()` and `validate_causal()` compare
+estimates with independent targets across six seeded score-level scenarios;
+these simulations do not refit measurement models or verify assumptions for a
+real study.
+
 ## Evidence and boundaries
 
 The v0.5.0 release artifact records recovery for named simulation scenarios.
