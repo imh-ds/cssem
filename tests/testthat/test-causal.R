@@ -85,7 +85,7 @@ test_that("flexible causal identification uses nonlinear residual treatment vari
   for (estimand in c("adjusted_dml", "adjusted_ame")) {
     effect <- causal_effect(association, "X", "Y", adjust = "C",
       estimand = estimand, temporal_order = c("C", "X", "Y"))
-    expect_lt(effect$identification_strength, .10, info = estimand)
+    expect_true(effect$identification_strength < .10, info = estimand)
     expect_identical(effect$label, "adjusted_association")
     expect_false(isTRUE(effect$stable))
   }
