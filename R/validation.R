@@ -106,19 +106,23 @@
       worker_pid = Sys.getpid(), stringsAsFactors = FALSE))
 }
 
-#' Return the v0.3 supported operating envelope
+#' Return the confirmed operating envelope and its validation evidence
 #'
-#' @return A one-row data frame describing the initial supported conditions.
+#' This report summarizes the registered release scenarios and metrics. It is
+#' evidence for those conditions, not a universal sample-size rule or a
+#' guarantee for a new study.
+#'
+#' @return A one-row data frame containing the envelope thresholds, evaluated
+#'   job counts, inside-envelope convergence, release-gate status, and named
+#'   exploratory conditions.
 #' @examples
 #' supported_envelope()
 #' @export
 supported_envelope <- function() {
-  data.frame(
-    constructs = "one-dimensional ordinal manifestation blocks",
-    minimum_indicators = 4L, minimum_n = 200L, minimum_loading = .70,
-    maximum_missing = .10, notes = "Cross-loadings, strong overlap, sparse categories, and local dependence are exploratory.",
-    stringsAsFactors = FALSE
-  )
+  path <- system.file("extdata", "supported_envelope.csv", package = "cssem")
+  if (!nzchar(path) || !file.exists(path))
+    stop("The installed package is missing its supported-envelope evidence file.", call. = FALSE)
+  utils::read.csv(path, stringsAsFactors = FALSE)
 }
 
 #' Create a deterministic v0.3 measurement validation manifest

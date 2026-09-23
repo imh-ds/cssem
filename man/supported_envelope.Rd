@@ -2,15 +2,19 @@
 % Please edit documentation in R/validation.R
 \name{supported_envelope}
 \alias{supported_envelope}
-\title{Return the v0.3 supported operating envelope}
+\title{Return the confirmed operating envelope and its validation evidence}
 \usage{
 supported_envelope()
 }
 \value{
-A one-row data frame describing the initial supported conditions.
+A one-row data frame containing the envelope thresholds, evaluated
+job counts, inside-envelope convergence, release-gate status, and named
+exploratory conditions.
 }
 \description{
-Return the v0.3 supported operating envelope
+This report summarizes the registered release scenarios and metrics. It is
+evidence for those conditions, not a universal sample-size rule or a
+guarantee for a new study.
 }
 \examples{
 supported_envelope()

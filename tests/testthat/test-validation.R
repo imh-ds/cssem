@@ -5,6 +5,11 @@ test_that("validation manifests are deterministic and expose required scenarios"
   expect_true(all(c("diagnostic_clean", "diagnostic_local_dependence") %in% measurement_manifest("diagnostic")$scenario))
   expect_true(all(c("linear", "monotone_increasing", "monotone_decreasing", "smooth_strong", "null", "interaction", "omitted", "downstream") %in% structural$scenario))
   expect_equal(supported_envelope()$minimum_n, 200)
+  evidence <- utils::read.csv(test_path("..", "internal", "validation_results", "supported_envelope.csv"),
+    stringsAsFactors = FALSE)
+  envelope <- supported_envelope()
+  expect_named(envelope, names(evidence))
+  expect_equal(envelope, evidence)
 })
 
 test_that("measurement validation is deterministic for a fixed seed", {

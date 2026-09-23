@@ -114,7 +114,33 @@ git add DESCRIPTION vignettes/cssem-workflow.Rmd
 git commit -m "docs: add runnable CS-SEM workflow vignette"
 ```
 
-### Task 2: Publish the capabilities and evidence table
+### Task 2: Return checked-in release evidence from `supported_envelope()`
+
+**Files:**
+- Create: `inst/extdata/supported_envelope.csv` (the package-installed copy of the checked-in release artifact)
+- Modify: `R/validation.R`, `man/supported_envelope.Rd`
+- Test: `tests/testthat/test-validation.R`
+
+**Interfaces:**
+- Consumes: `tests/internal/validation_results/supported_envelope.csv` generated from confirmation results.
+- Produces: `supported_envelope()` with the existing envelope columns plus the confirmation job counts, inside-envelope convergence, release-gate status, and exploratory-condition list from the installed evidence file.
+
+- [x] **Step 1: Extend the existing test** to assert that `supported_envelope()` includes `confirmation_measurement_jobs`, `confirmation_structural_jobs`, `confirmation_jobs_inside_envelope`, `inside_envelope_convergence`, `release_gates_passed`, and `exploratory_conditions`, and that its values match the checked-in release evidence.
+- [x] **Step 2: Run `test-validation.R` red** and confirm the current hand-maintained helper lacks the evidence columns.
+- [x] **Step 3: Copy the exact checked-in evidence row into package `inst/extdata/`** and change `supported_envelope()` to read that installed CSV. Update its roxygen description to identify the reported release evidence and state that it does not guarantee performance in a new study; update the generated Rd help to match.
+- [x] **Step 4: Run `test-validation.R` green** and confirm the helper preserves the existing threshold columns while returning the artifact metrics. The focused test passed all six assertions.
+- [x] **Step 5: Commit the artifact-backed support helper.**
+
+Ruling: the new test was first run red because the helper returned six hand-maintained fields instead of the artifact's twelve. The installed resource and public helper now match the checked-in release row exactly; the report explicitly says it is not a guarantee for a new study.
+
+```bash
+git add R/validation.R tests/testthat/test-validation.R man/supported_envelope.Rd inst/extdata/supported_envelope.csv
+git commit -m "feat: expose release evidence in supported envelope"
+```
+
+Ruling: the existing function returned the old thresholds but omitted the generated job, convergence, and gate metrics. The installed helper will read the same artifact row used by the documentation so the release report cannot drift independently.
+
+### Task 3: Publish the capabilities and evidence table
 
 **Files:**
 - Create: `docs/capabilities.md`
@@ -132,7 +158,7 @@ git add docs/capabilities.md
 git commit -m "docs: publish CS-SEM capability evidence table"
 ```
 
-### Task 3: Align user-facing method, migration, and release documentation
+### Task 4: Align user-facing method, migration, and release documentation
 
 **Files:**
 - Modify: `README.md`
