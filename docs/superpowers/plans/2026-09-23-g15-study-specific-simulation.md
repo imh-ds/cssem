@@ -232,7 +232,7 @@ beta <- subset(sim$replications, estimand == "beta" & estimate_status == "availa
 expect_lt(abs(mean(beta) - .30), 4 / sqrt(120 * length(beta)))
 ```
 
-- [ ] **Step 3: Render and test the example.** Render with `rmarkdown::render()` to a temporary output directory and run the focused test file. Expected: all chunks execute without network access and the generated HTML stays outside `vignettes/`.
+- [ ] **Step 3: Render and test the example.** Render with `rmarkdown::render()` to a temporary output directory and run the focused test file. If Pandoc is unavailable, use `knitr::knit()` to a temporary Markdown file so all chunks still execute, and record the HTML-render limitation. Keep all generated output outside `vignettes/`.
 
 - [ ] **Step 4: Commit the example and fixtures.** Commit the vignette and helper as `docs: demonstrate study simulation callbacks`.
 

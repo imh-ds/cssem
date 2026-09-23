@@ -1,0 +1,121 @@
+---
+title: "Study-specific simulation and sample-size planning"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Study-specific simulation and sample-size planning}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(cssem)
+```
+
+The study-simulation workflow takes a scenario grid and three callbacks: one
+generates the observed data, one returns an independently derived target, and
+one runs the analysis. The target callback receives the sample size, so it can
+represent quantities that change with the design. It is evaluated before the
+replications and is never passed to the analysis callback.
+
+This small Gaussian example estimates a population mean and the expected
+prediction error from predicting a new response with the sample mean. If the
+response variance is `sigma2`, the expected prediction error is
+`sigma2 * (1 + 1 / n)`: one variance term comes from the new response and the
+other from estimating the mean with `n` observations.
+
+```{r define-study}
+scenarios <- data.frame(
+  scenario = "normal_intercept",
+  mu = 0.5,
+  sigma2 = 0.5
+)
+
+generate <- function(scenario, n, seed) {
+  set.seed(seed)
+  data.frame(y = stats::rnorm(n, mean = scenario$mu, sd = sqrt(scenario$sigma2)))
+}
+
+truth <- function(scenario, n) {
+  c(mean = scenario$mu,
+    prediction_risk = scenario$sigma2 * (1 + 1 / n))
+}
+
+analyze <- function(data, scenario, seed) {
+  n <- nrow(data)
+  estimate_mean <- mean(data$y)
+  sample_variance <- stats::var(data$y)
+  df <- n - 1L
+  mean_half_width <- stats::qt(.975, df = df) * sqrt(sample_variance / n)
+  variance_interval <- c(
+    df * sample_variance / stats::qchisq(.975, df = df),
+    df * sample_variance / stats::qchisq(.025, df = df)
+  )
+  risk_multiplier <- 1 + 1 / n
+  estimates <- data.frame(
+    estimand = c("mean", "prediction_risk"),
+    estimate = c(estimate_mean, sample_variance * risk_multiplier),
+    estimate_status = "available",
+    lower = c(estimate_mean - mean_half_width,
+      variance_interval[[1L]] * risk_multiplier),
+    upper = c(estimate_mean + mean_half_width,
+      variance_interval[[2L]] * risk_multiplier),
+    interval_status = "available",
+    status_reason = "",
+    stringsAsFactors = FALSE
+  )
+  list(status = "completed", converged = TRUE, failure_reason = "",
+    estimates = estimates)
+}
+
+spec <- study_spec(
+  scenarios = scenarios,
+  sample_sizes = c(40L, 80L),
+  generate = generate,
+  truth = truth,
+  analyze = analyze,
+  metadata = list(
+    description = "Gaussian intercept-only prediction study",
+    analysis_scope = "refit the sample mean and Gaussian variance at each replication",
+    target = "Expected new-response squared prediction error"
+  )
+)
+```
+
+Run replications and summarize them with an explicit null for mean detection:
+
+```{r run-study}
+simulation <- simulate_study(spec, reps = 200L, seed = 2026L)
+summary <- summarize_study(simulation, null_values = c(mean = 0))
+
+unique(simulation$replications[
+  simulation$replications$estimand == "prediction_risk",
+  c("n", "truth")
+])
+```
+
+The table shows a different prediction-risk target at each sample size. The
+summary reports both conditional rates among available results and unconditional
+rates over every scheduled replication. Failed analyses and unavailable
+intervals count as uncovered and as non-detections unconditionally; they remain
+visible in the replication ledger and in the failure and availability metrics.
+
+```{r coverage-summary}
+subset(summary$metrics,
+  metric == "coverage" & estimand == "prediction_risk",
+  select = c(scenario, n, estimand, scope, estimate, denominator,
+    mcse, mc_lower, mc_upper, availability_status)
+)
+```
+
+This example validates the callback workflow against a known Gaussian target;
+it does not validate the package's CS-SEM estimators. A CS-SEM study can call its
+`fit_states()`, `associate()`, and inference pipeline from `analyze()`, while
+`generate()` and `truth()` encode the study's measurement design and independent
+data-generating target. The declared `analysis_scope` describes what the
+callback refits, but it does not prove that every intended pipeline stage is
+rerun.
+
+The sample-size planner remains gated on the G4 and G6 methodological evidence
+recorded in `docs/gaps.md`; a simulation summary alone is not a universal sample
+size rule.

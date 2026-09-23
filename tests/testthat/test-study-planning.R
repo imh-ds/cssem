@@ -407,3 +407,36 @@ test_that("unconditional rates count analysis failures as uncovered and non-dete
   expect_equal(convergence$estimate[convergence$scope == "conditional"], 2 / 3)
   expect_equal(convergence$estimate[convergence$scope == "unconditional"], 1 / 4)
 })
+
+test_that("a known Gaussian slope agrees with its independent analytic oracle", {
+  n <- 120L
+  reps <- 200L
+  simulation <- simulate_study(make_gaussian_slope_spec(n), reps = reps, seed = 407L)
+  estimates <- simulation$replications$estimate[
+    simulation$replications$estimand == "beta" &
+      simulation$replications$estimate_status == "available"]
+  expect_length(estimates, reps)
+  expect_lt(abs(mean(estimates) - .30), 4 / sqrt(n * reps))
+})
+
+test_that("study design fixtures exercise mixed indicators and missingness mechanisms", {
+  set.seed(77L)
+  prior_seed <- .Random.seed
+  design <- make_design_fixture(n = 1000L, seed = 502L)
+  expect_identical(.Random.seed, prior_seed)
+  expect_identical(design, make_design_fixture(n = 1000L, seed = 502L))
+  expect_type(design$continuous_item_1, "double")
+  expect_true(is.ordered(design$ordinal_item_1))
+  expect_type(design$manifest_control, "double")
+  expect_equal(design$product_term,
+    design$manifest_control * design$latent_proxy)
+  skew <- mean((design$skewed_state - mean(design$skewed_state))^3) /
+    stats::sd(design$skewed_state)^3
+  expect_gt(skew, .2)
+  mcar <- is.na(design$mcar_item)
+  mar <- is.na(design$mar_item)
+  expect_gt(sum(mcar), 0L)
+  expect_gt(sum(mar), 0L)
+  expect_lt(abs(stats::cor(as.numeric(mcar), design$manifest_control)), .12)
+  expect_gt(stats::cor(as.numeric(mar), design$manifest_control), .15)
+})
