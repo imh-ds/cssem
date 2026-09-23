@@ -39,6 +39,7 @@ Thumbs.db
 .agents/
 .codex/
 .superpowers/
+.worktrees/
 
 # Additional files
 ideation.md
