@@ -72,6 +72,8 @@
 #'   callbacks.
 #' @export
 study_spec <- function(scenarios, sample_sizes, generate, truth, analyze, metadata) {
+  callback_expressions <- list(generate = substitute(generate),
+    truth = substitute(truth), analyze = substitute(analyze))
   if (!is.data.frame(scenarios) || nrow(scenarios) < 1L) {
     stop("scenarios must be a non-empty data frame.", call. = FALSE)
   }
@@ -109,6 +111,9 @@ study_spec <- function(scenarios, sample_sizes, generate, truth, analyze, metada
     generate = generate,
     truth = truth,
     analyze = analyze,
-    metadata = metadata
+    metadata = metadata,
+    callback_labels = vapply(callback_expressions, function(expr) {
+      if (is.name(expr)) as.character(expr) else "<anonymous>"
+    }, character(1))
   ), class = "cssem_study_spec")
 }
