@@ -85,7 +85,7 @@ correctness concerns.
 | G11 | P3 | Implemented (scoped) | Binary/ordinal structural response families and calibrated uncertainty | `a8351cf`, `0d6ddc4`, `7eb29fb`, `499973d`, `b05c8bf`, `a956cf3` |
 | G12 | P2 | Implemented (scoped) | Structural, moderation, evidence, and convergence plots | `18d0d87` |
 | G13 | P1 | Implemented (scoped) | Complete examples, provenance, and support reporting | `c1e0676`, `b8933dc`, `142c79e`, `8ec7621`, `12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, `b2d25e4` |
-| G14 | P1 | Partial (core workflow implemented) | Causal assumptions and validation contract | `8adba22`, `8d7874a`, `02c4617`, `67dbc78` |
+| G14 | P1 | Implemented (scoped) | Causal assumptions and validation contract | `8adba22`, `8d7874a`, `02c4617`, `67dbc78` |
 | G15 | P2 | Partial | Study-specific simulation and sample-size planning |
 | G16 | P3 | Deliberate limits | Expanded construct and structural model classes |
 
@@ -944,7 +944,9 @@ scores rather than the full measurement-refitting pipeline, and this is not a
 calibrated release envelope across study designs. Causal claims remain
 conditional on substantive assumptions and measurement/model adequacy. The
 prerequisite fixes A1–A4, A9, and A10 are recorded as patched in
-[bugs.md](bugs.md).
+[bugs.md](bugs.md). The inability to discover unmeasured confounders is an
+inherent limitation of observational data, not unfinished G14 functionality;
+the audit checks the implications of the user's declared causal model.
 
 **Validation:** focused causal-design (22 assertions), causal validation (23),
 direct causal (108), and mediation (36) tests pass. The two causal estimator
@@ -1045,8 +1047,8 @@ present manually reusing scores as a validated higher-order latent model.
    documentation foundation delivered in G13 and the scale-aware measurement
    contracts delivered in G1-G3.
 2. Use the completed G6/G7 split, outer-validation, and prediction workflows to
-   validate G4's inference choices. Develop G14's causal validation before
-   widening causal claims.
+   validate G4's inference choices. Keep causal claims within G14's declared
+   graph and registered validation scope.
 3. Build on the G10 contrast and G12 visualization workflows using the stable
    result/uncertainty schema; extend G8's core diagnostics to a joint
    constrained estimator only if the methodological decision is approved,
