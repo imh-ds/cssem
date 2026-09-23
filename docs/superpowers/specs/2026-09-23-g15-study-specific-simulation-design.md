@@ -48,9 +48,11 @@ a validated `cssem_study_spec` object.
 - `generate(scenario, n, seed)` receives a named list for one scenario row,
   sample size, and deterministic seed. It returns the observed analysis data as
   a data frame; it does not return the oracle target.
-- `truth(scenario)` returns a finite named numeric vector keyed by estimand.
-  Every scenario must define the same estimand names. It is evaluated separately
-  from the analysis callback and before replications for that scenario begin.
+- `truth(scenario, n)` returns a finite named numeric vector keyed by estimand.
+  Every scenario/sample-size pair must define the same estimand names. It is
+  evaluated separately from the analysis callback and before replications for
+  that scenario/sample-size pair begin. Passing `n` allows targets such as
+  expected prediction error to vary with the training sample size.
 - `analyze(data, scenario, seed)` returns a list with an overall `status`
   (`completed`, `partial`, or `failed`), a
   logical-or-missing `converged` value, an optional `failure_reason`, and an
@@ -90,8 +92,9 @@ seeds and can be serialized to workers.
 The returned `cssem_simulation` object contains:
 
 - one row per scheduled replication and estimand, including scenario, sample
-  size, replication number, seeds, truth, estimate, interval bounds, generation
-  and analysis statuses, convergence, and failure reason;
+  size, replication number, seeds, the scenario/sample-size-specific truth,
+  estimate, interval bounds, generation and analysis statuses, convergence, and
+  failure reason;
 - the scenario table, sample-size grid, replication count, base seed, worker
   count, user metadata, and callback labels needed to interpret the run;
 - an explicit run status for each replication: completed, partial, generation
@@ -230,7 +233,8 @@ estimator as its own oracle.
 
 Specification validation checks scenario keys, sample sizes, callback
 callability and signatures, metadata, truth names/values, output column types,
-and agreement between estimand names and truth. Per-replication callback errors
+and agreement between estimand names and truth for each scenario/sample-size
+pair. Per-replication callback errors
 are recorded with the stage and message; errors in preflight truth or static
 specification are raised before the simulation starts. Partial analysis output
 remains available when some estimands succeed and others fail.
@@ -266,23 +270,33 @@ The implementation plan must preserve this gate. It may implement the generic
 runner and summaries before the sample-size planner, but it must not bypass the
 G4/G6 methodological dependency to make G15 appear complete.
 
+`validate_outer()` currently returns point prediction metrics without interval
+bounds. A G6 coverage study must therefore provide an independently justified
+interval method through the analysis callback and evaluate it against a
+scenario/sample-size-specific target. It must not treat dependent outer folds as
+independent observations to manufacture an interval. If no suitable interval
+method is justified and calibrated, the G6 gate remains open and the public
+sample-size planner stays gated.
+
 ## Testing and acceptance
 
 Focused tests must establish that:
 
 1. a known simple estimator agrees with an independent analytic oracle within
    expected Monte Carlo uncertainty;
-2. conditional and unconditional coverage/detection use their stated, distinct
+2. truth values are evaluated independently for each scenario/sample-size pair,
+   including a fixture whose target changes with `n`;
+3. conditional and unconditional coverage/detection use their stated, distinct
    denominators, with failed and unavailable replications retained;
-3. bias, RMSE, interval width, rates, Monte Carlo standard errors, and uncertainty
+4. bias, RMSE, interval width, rates, Monte Carlo standard errors, and uncertainty
    intervals match independently calculated fixture values;
-4. the smallest qualifying grid value is selected, out-of-grid sample sizes are
+5. the smallest qualifying grid value is selected, out-of-grid sample sizes are
    never proposed, and fail versus inconclusive decisions follow interval
    overlap rules;
-5. callback and malformed-output errors are traceable by replication and stage;
-6. results are identical across worker counts for seeded callbacks and caller
+6. callback and malformed-output errors are traceable by replication and stage;
+7. results are identical across worker counts for seeded callbacks and caller
    RNG state is restored;
-7. examples exercise continuous/mixed blocks, manifest variables, correlated
+8. examples exercise continuous/mixed blocks, manifest variables, correlated
    products, non-Gaussian states, and missingness conditions.
 
 The acceptance criteria from `docs/gaps.md` remain authoritative: known simple
