@@ -243,6 +243,13 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
   for (outcome in names(association$full_models)) models[[outcome]] <- association$full_models[[outcome]]
   core <- .cssem_mediation_core(models, scores, structure, x, y,
     reliability = reliability, delta = delta, eiv_bootstrap = eiv_bootstrap, seed = seed)
+  if (!is.null(mediators) && nrow(core$path_specific)) {
+    keep <- vapply(strsplit(core$path_specific$mediators, ", ", fixed = TRUE),
+      function(path_mediators) all(path_mediators %in% mediators), logical(1))
+    core$path_specific <- core$path_specific[keep, , drop = FALSE]
+    if (!nrow(core$path_specific))
+      stop("No mediating path passes only through the requested mediators.", call. = FALSE)
+  }
 
   # The admissibility diagnostics must describe the same all-path estimand as
   # the causal core, rather than only the optionally selected display subset.

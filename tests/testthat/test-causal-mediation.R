@@ -149,7 +149,9 @@ test_that("causal mediation validates every declared path mediator", {
   accepted <- causal_indirect_effect(association_ok, "X", "Y", adjust = "C",
     mediators = "M1", temporal_order = c("C", "X", "M1", "M2", "Y"))
   expect_identical(accepted$label, "causal_under_assumptions")
-  expect_length(accepted$path_specific, 2L)
+  expect_equal(nrow(accepted$path_specific), 1L)
+  expect_true(all(vapply(strsplit(accepted$path_specific$mediators, ", ", fixed = TRUE),
+    function(path_mediators) all(path_mediators %in% accepted$mediators), logical(1))))
 })
 
 test_that("an endogenous treatment propagates through causal mediation", {
