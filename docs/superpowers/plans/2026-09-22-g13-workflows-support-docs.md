@@ -149,9 +149,9 @@ Ruling: the existing function returned the old thresholds but omitted the genera
 - Consumes: implemented public exports, current tests, `docs/validation-v02.md`, `docs/validation.md`, and checked-in `supported_envelope` artifacts.
 - Produces: a table with columns `Capability`, `Status`, `Evidence`, and `Conditions and limits`; statuses are exactly `implemented`, `experimental`, or `validated`.
 
-- [ ] **Step 1: Create the table from evidence already present.** Include measurement families and missingness, cross-fitting/splits, structural selector and outer prediction, uncertainty and inference, groups/contrasts, and causal/mediation. Use only the statuses `implemented`, `experimental`, or `validated`; state excluded model classes and causal limits in the conditions column. Link every `validated` row to a named checked-in validation artifact and every other row to its public API or test documentation.
-- [ ] **Step 2: Check the table's required boundaries** by reading it alongside `supported_envelope()` documentation and the validation files. Confirm the envelope is described as scenario evidence, not a universal guarantee; latent uncertainty and respondent weighting retain their experimental status; causal assumptions are not described as tested facts; covariance-fit indices remain outside the estimator.
-- [ ] **Step 3: Commit the evidence table.**
+- [x] **Step 1: Create the table from evidence already present.** Include measurement families and missingness, cross-fitting/splits, structural selector and outer prediction, uncertainty and inference, groups/contrasts, and causal/mediation. Use only the statuses `implemented`, `experimental`, or `validated`; state excluded model classes and causal limits in the conditions column. Link every `validated` row to a named checked-in validation artifact and every other row to its public API or test documentation.
+- [x] **Step 2: Check the table's required boundaries** by reading it alongside `supported_envelope()` documentation and the validation files. Confirm the envelope is described as scenario evidence, not a universal guarantee; latent uncertainty and respondent weighting retain their experimental status; causal assumptions are not described as tested facts; covariance-fit indices remain outside the estimator.
+- [x] **Step 3: Commit the evidence table.**
 
 ```bash
 git add docs/capabilities.md
