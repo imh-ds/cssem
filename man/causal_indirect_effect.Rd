@@ -15,7 +15,8 @@ causal_indirect_effect(
   disattenuate = TRUE,
   eiv_bootstrap = 0L,
   delta = 1,
-  seed = 1L
+  seed = 1L,
+  design = NULL
 )
 }
 \arguments{
@@ -45,6 +46,11 @@ intervals. Zero (default) omits intervals.}
 \item{delta}{Size of the \code{x} contrast in standardized units. Defaults to one.}
 
 \item{seed}{Bootstrap seed.}
+
+\item{design}{Optional \code{\link{causal_design}()} for graph and mediation-assumption
+auditing. When supplied, a causal label requires an admissible backdoor
+design, all required assumptions, and causal-DAG edges for the analyzed
+treatment-to-outcome paths.}
 }
 \value{
 An object of class \code{causal_indirect_effect}.

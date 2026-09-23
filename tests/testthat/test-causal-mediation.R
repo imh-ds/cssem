@@ -40,6 +40,37 @@ test_that("a causal label requires a declared temporal order", {
     "adjusted_association")
 })
 
+test_that("causal mediation requires a valid graph and mediation assumptions", {
+  fixture <- .causal_mediation_fixture(n = 2000)
+  edges <- data.frame(
+    from = c("C", "C", "C", "X", "M", "X"),
+    to = c("X", "M", "Y", "M", "Y", "Y")
+  )
+  assumptions <- list(
+    consistency = "assumed",
+    no_unmeasured_confounding = "assumed",
+    positivity = "assumed",
+    measurement_validity = "assumed",
+    temporal_order = "assumed",
+    no_exposure_induced_mediator_outcome_confounding = "assumed"
+  )
+  design <- causal_design(edges, treatment = "X", outcome = "Y",
+    adjust = "C", assumptions = assumptions)
+  effect <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "M", "Y"), design = design)
+  expect_identical(effect$label, "causal_under_assumptions")
+  expect_true(effect$design_audit$causal_admissible)
+
+  assumptions$no_exposure_induced_mediator_outcome_confounding <- "not_assessed"
+  unassessed_design <- causal_design(edges, treatment = "X", outcome = "Y",
+    adjust = "C", assumptions = assumptions)
+  unassessed <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "M", "Y"), design = unassessed_design)
+  expect_identical(unassessed$label, "adjusted_association")
+  expect_false(unassessed$design_audit$causal_admissible)
+  expect_output(print(unassessed), "design assumptions or path audit unmet")
+})
+
 test_that("causal mediation rejects temporal orders that contradict the structure", {
   fixture <- .causal_mediation_fixture(n = 2000)
   expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",

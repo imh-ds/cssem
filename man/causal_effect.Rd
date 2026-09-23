@@ -15,7 +15,8 @@ causal_effect(
   eiv_bootstrap = 0L,
   reliability_grid = c(0.5, 0.6, 0.7, 0.8, 0.9, 1),
   spline_df = 5L,
-  seed = 1L
+  seed = 1L,
+  design = NULL
 )
 }
 \arguments{
@@ -56,6 +57,10 @@ sensitivity curve (\code{"adjusted_linear"} only).}
 for \code{"adjusted_ame"}) for the flexible-estimand nuisances.}
 
 \item{seed}{Bootstrap seed.}
+
+\item{design}{Optional \code{\link{causal_design}()} for graph and assumption auditing.
+When supplied, a causal label additionally requires an admissible backdoor
+design and all required assumptions to be explicitly declared assumed.}
 }
 \value{
 An object of class \code{causal_effect}.

@@ -8,7 +8,8 @@ causal_edge(
   from,
   to,
   adjust,
-  estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame")
+  estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
+  design = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ causal_edge(
 adjustment), \code{"adjusted_dml"} (flexible spline adjustment for nonlinear
 confounding), or \code{"adjusted_ame"} (doubly-robust average marginal effect).
 See \code{\link[=causal_effect]{causal_effect()}}.}
+
+\item{design}{Optional \code{\link{causal_design}()} for graph and assumption auditing.}
 }
 \value{
 A \code{causal_edge} specification for \code{\link[=route]{route()}}.

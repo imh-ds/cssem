@@ -151,6 +151,75 @@ test_that("a causal label requires both an adjustment set and a temporal order",
   expect_identical(causal_effect(association, "X", "Y")$label, "unadjusted_association")
 })
 
+test_that("a causal effect requires a valid declared design when one is supplied", {
+  association <- .causal_fixture()
+  assumptions <- list(
+    consistency = "assumed",
+    no_unmeasured_confounding = "assumed",
+    positivity = "assumed",
+    measurement_validity = "assumed",
+    temporal_order = "assumed"
+  )
+  valid_design <- causal_design(
+    data.frame(from = c("C", "C", "X"), to = c("X", "Y", "Y")),
+    treatment = "X", outcome = "Y", adjust = "C", assumptions = assumptions
+  )
+  valid <- causal_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y"), design = valid_design)
+  expect_identical(valid$label, "causal_under_assumptions")
+  expect_true(valid$design_audit$causal_admissible)
+
+  invalid_design <- causal_design(
+    data.frame(from = c("C", "C", "U", "U", "X"),
+      to = c("X", "Y", "X", "Y", "Y")),
+    treatment = "X", outcome = "Y", adjust = "C", assumptions = assumptions
+  )
+  invalid <- causal_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y"), design = invalid_design)
+  expect_identical(invalid$label, "adjusted_association")
+  expect_false(invalid$design_audit$causal_admissible)
+  expect_output(print(invalid), "design assumptions or graph audit unmet")
+
+  unassessed <- causal_design(
+    data.frame(from = c("C", "C", "X"), to = c("X", "Y", "Y")),
+    treatment = "X", outcome = "Y", adjust = "C"
+  )
+  result <- causal_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y"), design = unassessed)
+  expect_identical(result$label, "adjusted_association")
+  expect_false(result$design_audit$causal_admissible)
+})
+
+test_that("routing keeps an inadmissible graph declaration associational", {
+  association <- .causal_fixture()
+  assumptions <- list(
+    consistency = "assumed",
+    no_unmeasured_confounding = "assumed",
+    positivity = "assumed",
+    measurement_validity = "assumed",
+    temporal_order = "assumed"
+  )
+  design <- causal_design(
+    data.frame(from = c("C", "C", "U", "U", "X"),
+      to = c("X", "Y", "X", "Y", "Y")),
+    treatment = "X", outcome = "Y", adjust = "C", assumptions = assumptions
+  )
+  routing <- route(association,
+    causal = list(causal_edge("X", "Y", adjust = "C", design = design)),
+    temporal_order = c("C", "X", "Y"))
+
+  row <- routing$table[routing$table$path == "X→Y", , drop = FALSE]
+  expect_identical(row$status[[1L]], "causal_inadmissible")
+  expect_match(row$interpretation[[1L]], "design audit")
+  expect_false(grepl("causal pathway", row$interpretation[[1L]]))
+  effect <- routing$causal_effects[["X→Y"]]
+  expect_identical(cssem:::.causal_verdict(effect$label,
+    effect$identification_strength, effect$robustness_value, effect$design_audit),
+    "Adjusted association (causal design audit unmet)")
+  expect_match(cssem:::.edge_verdict(1, .4, .1, .1, "causal_inadmissible"),
+    "causal design audit unmet")
+})
+
 test_that("causal_effect prints the reason for a non-causal label", {
   skeleton <- function(label, declared, strength) structure(list(
     treatment = "X", outcome = "Y", adjust = "C", estimand = "adjusted_linear",

@@ -131,7 +131,7 @@ plot_data.default <- function(x, ...) {
         interpretation <- route_row$interpretation[[1L]]
         estimand <- route_row$estimand[[1L]]
         adjustment <- route_row$adjustment_set[[1L]]
-        if (status %in% c("causal", "causal_weak")) {
+        if (status %in% c("causal", "causal_weak", "causal_inadmissible")) {
           estimate <- route_row$effect[[1L]]
           low <- route_row$ci_low[[1L]]
           high <- route_row$ci_high[[1L]]
@@ -149,7 +149,7 @@ plot_data.default <- function(x, ...) {
       value <- if (has_ci) sprintf("%.2f [%.2f, %.2f]", estimate, low, high) else sprintf("%.2f", estimate)
       paste(value, basis, sep = "\n")
     } else paste(shape, basis, sep = "\n")
-    interval_basis <- if (!has_ci) "unavailable" else if (status %in% c("causal", "causal_weak")) {
+    interval_basis <- if (!has_ci) "unavailable" else if (status %in% c("causal", "causal_weak", "causal_inadmissible")) {
       routed_effect <- routing$causal_effects[[key]]
       if (!is.null(routed_effect) && isTRUE(routed_effect$bootstrap > 0L)) "percentile_bootstrap" else "routed_interval"
     } else if (nrow(p) && "uncertainty_method" %in% names(p) && !is.na(p$uncertainty_method[[1L]])) {
@@ -227,6 +227,7 @@ plot_data.cssem_association <- function(x, type = c("paths", "curve"), routing =
     representational = c(col = "#666666", lty = "dotted"),
     causal = c(col = "#2E6B3F", lty = "solid"),
     causal_weak = c(col = "#A65E00", lty = "dashed"),
+    causal_inadmissible = c(col = "#9B4F39", lty = "dotted"),
     derived_term = c(col = "#888888", lty = "dotted")
   )
   lapply(status, function(value) if (is.null(styles[[value]])) styles$associational else styles[[value]])
@@ -489,9 +490,11 @@ plot.evidence_report <- function(x, type = c("effects", "constructs", "causal_cl
     edge_labels <- paste0(gsub(.PATH_ARROW, " -> ", data$path, fixed = TRUE), " [", data$causal_status, "]")
     graphics::axis(2, at = y, labels = edge_labels, las = 1)
     graphics::points(data$contribution, y, pch = ifelse(data$causal_status == "causal", 19,
-      ifelse(data$causal_status == "causal_weak", 1, 17)),
+      ifelse(data$causal_status == "causal_weak", 1,
+        ifelse(data$causal_status == "causal_inadmissible", 2, 17))),
       col = ifelse(data$causal_status == "causal", "#2E6B3F",
-        ifelse(data$causal_status == "causal_weak", "#A65E00", "#315A7D")))
+        ifelse(data$causal_status == "causal_weak", "#A65E00",
+          ifelse(data$causal_status == "causal_inadmissible", "#9B4F39", "#315A7D"))))
     graphics::mtext("Associational effects remain descriptive; causal status appears only when routed.",
       side = 3, line = .25, cex = .75)
   } else if (type == "constructs") {

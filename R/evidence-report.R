@@ -24,6 +24,7 @@
   # A causal edge whose identification failed is reported as the descriptive
   # effect it is, with the failure named, rather than as a causal pathway.
   if (identical(status, "causal_weak")) return(paste(strength, "descriptive effect (declared causal, weakly identified)"))
+  if (identical(status, "causal_inadmissible")) return(paste(strength, "descriptive effect (causal design audit unmet)"))
   kind <- switch(status, causal = "causal pathway", predictive = "predictive effect", "descriptive effect")
   paste(strength, kind)
 }
@@ -35,8 +36,12 @@
   "Sound"
 }
 
-.causal_verdict <- function(label, identification, robustness) {
-  if (!identical(label, "causal_under_assumptions")) return("Adjusted association (not causal)")
+.causal_verdict <- function(label, identification, robustness, design_audit = NULL) {
+  if (!identical(label, "causal_under_assumptions")) {
+    if (!is.null(design_audit) && !isTRUE(design_audit$causal_admissible))
+      return("Adjusted association (causal design audit unmet)")
+    return("Adjusted association (not causal)")
+  }
   if (is.finite(identification) && identification < 0.10) return("Weakly identified")
   if (is.finite(robustness) && robustness < 0.10) return("Fragile (low robustness)")
   "Supported under assumptions"
@@ -88,14 +93,16 @@
     data.frame(claim = sprintf("%s %s %s", effect$x, .PATH_ARROW, effect$y), type = "indirect (interventional)",
       estimand = effect$estimand, effect = row$reported_effect, ci_low = row$reported_ci_low, ci_high = row$reported_ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
-      label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
+      label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value,
+        effect$design_audit),
       stringsAsFactors = FALSE)
   } else if (inherits(effect, "causal_effect")) {
     data.frame(claim = sprintf("%s %s %s", effect$treatment, .PATH_ARROW, effect$outcome),
       type = if (is.null(effect$claim_type)) "direct" else effect$claim_type,
       estimand = effect$estimand, effect = effect$adjusted_effect, ci_low = effect$ci_low, ci_high = effect$ci_high,
       identification = effect$identification_strength, robustness_value = effect$robustness_value,
-      label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value),
+      label = effect$label, verdict = .causal_verdict(effect$label, effect$identification_strength, effect$robustness_value,
+        effect$design_audit),
       stringsAsFactors = FALSE)
   } else stop("causal claims must be causal_effect or causal_indirect_effect objects.", call. = FALSE)
 }

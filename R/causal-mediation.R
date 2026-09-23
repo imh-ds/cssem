@@ -118,6 +118,10 @@
 #' requires a declared `temporal_order`; otherwise the effect is reported as an
 #' adjusted association. Exposure-induced mediator-outcome confounding and
 #' mediator interactions are not yet modeled.
+#' An optional causal design adds a backdoor audit, checks that every analyzed
+#' treatment-to-outcome path is represented by causal DAG arrows, and requires
+#' an explicit status for exposure-induced mediator-outcome confounding. These
+#' declarations are assumptions; the function cannot verify them from data.
 #'
 #' @param association A `cssem_association` from [associate()].
 #' @param x Name of the locked treatment construct.
@@ -135,6 +139,10 @@
 #'   intervals. Zero (default) omits intervals.
 #' @param delta Size of the `x` contrast in standardized units. Defaults to one.
 #' @param seed Bootstrap seed.
+#' @param design Optional [causal_design()] for graph and mediation-assumption
+#'   auditing. When supplied, a causal label requires an admissible backdoor
+#'   design, all required assumptions, and causal-DAG edges for the analyzed
+#'   treatment-to-outcome paths.
 #' @return An object of class `causal_indirect_effect`.
 #' @examples
 #' # causal_indirect_effect(association, x = "Satisfaction", y = "Loyalty",
@@ -142,7 +150,8 @@
 #' @export
 causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
                                    temporal_order = NULL, estimand = c("interventional"),
-                                   disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+                                   disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L,
+                                   design = NULL) {
   causal_mediation_call <- match.call()
   .preserve_seed()
   estimand <- match.arg(estimand)
@@ -171,6 +180,28 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
     stop("mediators must be intermediate constructs on a declared x -> y path.", call. = FALSE)
   }
   if (!length(mediators)) stop("No mediating path connects x to y; there is no indirect effect to route.", call. = FALSE)
+
+  design_audit <- NULL
+  if (!is.null(design)) {
+    if (!inherits(design, "cssem_causal_design")) stop("design must be a cssem_causal_design.", call. = FALSE)
+    if (!identical(design$treatment, x) || !identical(design$outcome, y) ||
+        !setequal(design$adjust, adjust))
+      stop("design treatment, outcome, and adjustment set must match causal_indirect_effect().", call. = FALSE)
+    design_audit <- validate_causal_design(design, adjust = adjust, estimand = "mediation")
+    causal_edges <- design$edges[design$edges$type == "causal", , drop = FALSE]
+    declared_keys <- paste(causal_edges$from, causal_edges$to, sep = "\r")
+    required_path_keys <- unique(unlist(lapply(paths, function(path) {
+      if (length(path) < 2L) return(character(0))
+      paste(path[-length(path)], path[-1L], sep = "\r")
+    }), use.names = FALSE))
+    paths_match <- all(required_path_keys %in% declared_keys)
+    path_check <- data.frame(check = "mediation_paths_match_causal_dag", passed = paths_match,
+      details = if (paths_match) "Every analyzed structural path is represented by causal DAG edges." else
+        "At least one analyzed structural path is absent from the declared causal DAG.",
+      stringsAsFactors = FALSE)
+    design_audit$checks <- rbind(design_audit$checks, path_check)
+    design_audit$causal_admissible <- isTRUE(design_audit$causal_admissible) && paths_match
+  }
 
   # Discipline: never adjust for a construct downstream of the treatment.
   offenders <- intersect(adjust, .descendants(structure, x))
@@ -205,19 +236,23 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
   # The admissibility diagnostics must describe the same all-path estimand as
   # the causal core, rather than only the optionally selected display subset.
   panel <- .mediation_admissibility(scores, structure, x, y, adjust, path_mediators, reliability)
-  has_order <- !is.null(temporal_order)
-  label <- if (has_order && panel$identification_strength >= .10) "causal_under_assumptions" else "adjusted_association"
+  has_order <- !is.null(temporal_order) || !is.null(design)
+  design_admissible <- is.null(design) || isTRUE(design_audit$causal_admissible)
+  label <- if (has_order && panel$identification_strength >= .10 && design_admissible) "causal_under_assumptions" else "adjusted_association"
 
   result <- structure(c(core, list(x = x, y = y, adjust = adjust, mediators = mediators, estimand = estimand,
     n = nrow(scores), delta = delta, disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap,
-    temporal_order_declared = has_order, label = label, status = label), panel),
+    temporal_order_declared = has_order, design_audit = design_audit,
+    label = label, status = label), panel),
     class = "causal_indirect_effect")
   result$provenance_record <- .cssem_provenance_association_result("causal_indirect_effect",
     causal_mediation_call,
     settings = list(x = x, y = y, adjust = as.character(adjust), mediators = as.character(mediators),
       temporal_order = temporal_order, estimand = estimand,
       disattenuate = isTRUE(disattenuate), eiv_bootstrap = eiv_bootstrap,
-      delta = delta, seed = seed), association = association, packages = "MASS")
+      delta = delta, seed = seed,
+      causal_design = if (is.null(design)) NULL else list(edges = design$edges,
+        assumptions = design$assumptions)), association = association, packages = "MASS")
   result
 }
 
@@ -234,6 +269,8 @@ print.causal_indirect_effect <- function(x, ...) {
   # adjustment set leaving too little treatment variation -- and naming the
   # wrong one sends a reader to fix the wrong thing.
   interpretation <- if (identical(x$label, "causal_under_assumptions")) "Causal under assumptions"
+    else if (!is.null(x$design_audit) && !isTRUE(x$design_audit$causal_admissible))
+      "Adjusted association (not causal: design assumptions or path audit unmet)"
     else if (!isTRUE(x$temporal_order_declared)) "Adjusted association (not causal: no declared temporal order)"
     else sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
       x$identification_strength)

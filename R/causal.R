@@ -132,6 +132,9 @@
 #' an explicit causal-admissibility label. A causal label requires both an
 #' adjustment set and a declared temporal order; otherwise the effect is reported
 #' as an association.
+#' When a causal design is supplied, the label additionally requires the
+#' declared DAG to satisfy the backdoor criterion and every required assumption
+#' to be declared assumed. These assumption declarations remain unverifiable.
 #'
 #' @param association A `cssem_association` from [associate()].
 #' @param treatment Treatment construct name.
@@ -160,6 +163,9 @@
 #' @param spline_df Spline degrees of freedom per confounder (and per treatment,
 #'   for `"adjusted_ame"`) for the flexible-estimand nuisances.
 #' @param seed Bootstrap seed.
+#' @param design Optional [causal_design()] for graph and assumption auditing.
+#'   When supplied, a causal label additionally requires an admissible backdoor
+#'   design and all required assumptions to be explicitly declared assumed.
 #' @return An object of class `causal_effect`.
 #' @examples
 #' # causal_effect(association, "Satisfaction", "Loyalty",
@@ -174,7 +180,8 @@
 causal_effect <- function(association, treatment, outcome, adjust = character(0),
                                 estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
                                 temporal_order = NULL, disattenuate = TRUE, eiv_bootstrap = 0L,
-                                reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L) {
+                                reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L,
+                                design = NULL) {
   causal_call <- match.call()
   .preserve_seed()
   estimand <- match.arg(estimand)
@@ -185,6 +192,14 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   constructs <- c(treatment, outcome, adjust)
   if (!all(constructs %in% names(scores))) stop("treatment, outcome, and adjust must be locked construct names.", call. = FALSE)
   if (treatment %in% c(outcome, adjust) || outcome %in% adjust) stop("treatment, outcome, and adjust must be distinct.", call. = FALSE)
+  design_audit <- NULL
+  if (!is.null(design)) {
+    if (!inherits(design, "cssem_causal_design")) stop("design must be a cssem_causal_design.", call. = FALSE)
+    if (!identical(design$treatment, treatment) || !identical(design$outcome, outcome) ||
+        !setequal(design$adjust, adjust))
+      stop("design treatment, outcome, and adjustment set must match causal_effect().", call. = FALSE)
+    design_audit <- validate_causal_design(design, adjust = adjust, estimand = "effect")
+  }
   eiv_bootstrap <- as.integer(eiv_bootstrap)
   if (is.na(eiv_bootstrap) || eiv_bootstrap < 0L) stop("eiv_bootstrap must be a non-negative integer.", call. = FALSE)
   if (flexible && !length(adjust)) stop(sprintf("estimand = \"%s\" requires an adjustment set to residualize against.", estimand), call. = FALSE)
@@ -201,6 +216,13 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
         "induces post-treatment bias; remove them, or analyze mediators with ",
         "causal_indirect_effect()."),
       paste(post, collapse = ", ")), call. = FALSE)
+    if (!is.null(design)) {
+      causal_edges <- design$edges[design$edges$type == "causal", , drop = FALSE]
+      in_order <- causal_edges$from %in% temporal_order & causal_edges$to %in% temporal_order
+      if (any(match(causal_edges$from[in_order], temporal_order) >=
+          match(causal_edges$to[in_order], temporal_order)))
+        stop("temporal_order contradicts a causal edge in design.", call. = FALSE)
+    }
   }
 
   # Identification: how much treatment variation survives adjustment, and how
@@ -266,9 +288,11 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   adjusted_mediators <- intersect(adjust, mediators)
   claim_type <- if (length(adjusted_mediators)) "direct (adjusted)" else "total (adjusted)"
 
-  has_adjust <- length(adjust) > 0L; has_order <- !is.null(temporal_order)
+  has_adjust <- length(adjust) > 0L
+  has_order <- !is.null(temporal_order) || !is.null(design)
   estimand_stable <- !flexible || isTRUE(stable)
-  label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable) "causal_under_assumptions"
+  design_admissible <- is.null(design) || isTRUE(design_audit$causal_admissible)
+  label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable && design_admissible) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
   result <- structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
@@ -279,12 +303,14 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     bootstrap = eiv_bootstrap, n = nrow(scores), temporal_order_declared = has_order,
     identification_strength = identification_strength, treatment_r2 = treatment_r2, outcome_r2 = outcome_r2,
     robustness_value = robustness_value, reliability_sensitivity = reliability_sensitivity,
-    label = label, status = label), class = "causal_effect")
+    design_audit = design_audit, label = label, status = label), class = "causal_effect")
   result$provenance_record <- .cssem_provenance_association_result("causal_effect", causal_call,
     settings = list(treatment = treatment, outcome = outcome, adjust = as.character(adjust),
       estimand = estimand, temporal_order = temporal_order, disattenuate = isTRUE(disattenuate),
       eiv_bootstrap = eiv_bootstrap, reliability_grid = as.numeric(reliability_grid),
-      spline_df = spline_df, seed = seed), association = association,
+      spline_df = spline_df, seed = seed,
+      causal_design = if (is.null(design)) NULL else list(edges = design$edges,
+        assumptions = design$assumptions)), association = association,
     packages = c("MASS", "splines"))
   result
 }
@@ -299,6 +325,8 @@ print.causal_effect <- function(x, ...) {
   cat(sprintf("CS-SEM effect: %s -> %s  (n = %d)\n", x$treatment, x$outcome, x$n))
   interpretation <- if (identical(x$label, "causal_under_assumptions")) "Causal under assumptions"
     else if (identical(x$label, "unadjusted_association")) "Unadjusted association (not causal: no adjustment set)"
+    else if (!is.null(x$design_audit) && !isTRUE(x$design_audit$causal_admissible))
+      "Adjusted association (not causal: design assumptions or graph audit unmet)"
     else if (!isTRUE(x$temporal_order_declared)) "Adjusted association (not causal: no declared temporal order)"
     else sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
       x$identification_strength)
