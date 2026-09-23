@@ -1251,7 +1251,8 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       association_input$split_ids$measurement_fold <-
         as.integer(fit$measurement_split$assignment[measurement_rows])
   }
-  association_provenance <- .cssem_provenance_record("associate", associate_call,
+  association_provenance <- .cssem_provenance_record("associate",
+    .cssem_provenance_call(associate_call, c("fit", "structure", "constraints")),
     settings = list(model = .cssem_provenance_model_specification(fit$model),
       structure = .cssem_provenance_structure_specification(structure),
       options = .cssem_provenance_association_settings(association_settings)),

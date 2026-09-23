@@ -19,6 +19,13 @@
 - Existing result fields remain available for compatibility.
 - Existing objects without provenance report it unavailable; the accessor does not synthesize historical metadata.
 - Data-dependent operations on a fit without retained data fail explicitly; score-only prediction and association operations remain available when their other inputs are present.
+- Data-bearing or identifier-bearing call arguments are replaced with a marker before call text is stored.
+
+Ruling: redact data-bearing arguments from deparsed calls — inline R calls can
+contain raw observations or literal group/cluster labels — cost if wrong: the
+call text loses those literal expressions, while resolved settings, schema
+summaries, and parent records retain the reproducibility details that are safe
+to store.
 
 ## Review Focus
 
@@ -231,11 +238,17 @@ git commit -m "feat: record provenance for prediction and resampling results"
 - Consumes: provenance helpers and fit/association records.
 - Produces: records for `cssem_group_comparison`, `cssem_measurement_invariance`, `cssem_measurement_assessment`, and `evidence_report`.
 
-- [ ] **Step 1: Add failing `expect_cssem_provenance()` assertions** to the existing tests using `out` from `measurement_invariance()` (`measurement_invariance`), `first` from `group_comparison()` (`group_comparison`), `assessment` from `measurement_assessment()` (`measurement_assessment`), and `report` from `evidence_report()` (`evidence_report`). Assert the association parent on `first` and fit parent on `out`/`assessment` when the input carries provenance; the synthetic evidence-report fixture should verify its own operation without inventing a parent record.
-- [ ] **Step 2: Run those three test files** and confirm the new assertions fail on absent provenance.
-- [ ] **Step 3: Attach records with resolved controls and parent links.** For explicit group vectors, record vector length/count summaries only; do not include group labels or respondent-level values in settings or provenance.
-- [ ] **Step 4: Run the three owning test files and verify group/missing-row behavior is unchanged.**
-- [ ] **Step 5: Commit this result family.**
+- [x] **Step 1: Add failing `expect_cssem_provenance()` assertions** to the existing tests using `out` from `measurement_invariance()` (`measurement_invariance`), `first` from `group_comparison()` (`group_comparison`), `assessment` from `measurement_assessment()` (`measurement_assessment`), and `report` from `evidence_report()` (`evidence_report`). Assert the association parent on `first` and fit parent on `out`/`assessment` when the input carries provenance; the synthetic evidence-report fixture should verify its own operation without inventing a parent record.
+- [x] **Step 2: Run a representative group test** and confirm the new assertions fail on absent provenance.
+
+Ruling: `test-groups.R` was the red test for this family — it exposed missing
+records on both group result classes — before implementing all four result
+constructors — cost if wrong: a diagnostic-specific failure could remain unseen
+until its post-implementation owning test.
+
+- [x] **Step 3: Attach records with resolved controls and parent links.** For explicit group vectors, record vector length/count summaries only; do not include group labels or respondent-level values in settings or provenance.
+- [x] **Step 4: Run the three owning test files and verify group/missing-row behavior is unchanged.**
+- [x] **Step 5: Commit this result family.**
 
 ```bash
 git add R/groups.R R/measurement-assessment.R R/evidence-report.R tests/testthat/helper-provenance.R tests/testthat/test-groups.R tests/testthat/test-measurement-assessment.R tests/testthat/test-evidence-report.R

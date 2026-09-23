@@ -28,6 +28,18 @@ test_that("cssem_provenance distinguishes supported legacy and unsupported objec
     "supported")
 })
 
+test_that("provenance call text can omit inline observations and identifiers", {
+  call <- quote(fit_states(model,
+    data = data.frame(x = "SECRET-INLINE-OBSERVATION"),
+    cluster = c("SECRET-UNIT-A", "SECRET-UNIT-B")))
+  record <- .cssem_provenance_record("fit_states",
+    .cssem_provenance_call(call, c("data", "cluster")), settings = list())
+  expect_false(any(c("SECRET-INLINE-OBSERVATION", "SECRET-UNIT-A", "SECRET-UNIT-B") %in%
+    record$call))
+  expect_match(record$call, 'data = "<omitted>"')
+  expect_match(record$call, 'cluster = "<omitted>"')
+})
+
 test_that("fit and association provenance record resolved settings and parents", {
   data <- simulate_states(n = 48, seed = 401, missing = 0)
   rownames(data) <- paste0("respondent-id-", seq_len(nrow(data)))

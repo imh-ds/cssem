@@ -260,7 +260,8 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
   object_provenance <- object$provenance_record
   input <- if (!is.null(object_provenance)) object_provenance$input else
     .cssem_provenance_input_summary()
-  result$provenance_record <- .cssem_provenance_record("contrast", contrast_call,
+  result$provenance_record <- .cssem_provenance_record("contrast",
+    .cssem_provenance_call(contrast_call, c("object", "spec", "cluster")),
     settings = list(definitions = vapply(spec$definitions, `[[`, character(1), "expression"),
       basis = spec$basis, reps = reps, level = level, seed = seed,
       resample = resample, selection = selection,

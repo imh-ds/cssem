@@ -11,6 +11,9 @@ test_that("measurement invariance keeps groups on the pooled score scale", {
   out <- measurement_invariance(fit, "group", reference = "control", min_group_size = 50)
 
   expect_s3_class(out, "cssem_measurement_invariance")
+  invariance_provenance <- expect_cssem_provenance(out, "measurement_invariance", "fit_states")
+  expect_false(any(c("control", "treated") %in%
+    unlist(invariance_provenance, recursive = TRUE, use.names = FALSE)))
   expect_equal(out$status, "diagnostic_common_anchor")
   expect_equal(out$groups$n, c(60L, 60L))
   expect_true(all(c("construct", "group", "mean", "sd") %in% names(out$constructs)))
@@ -69,17 +72,21 @@ test_that("group structural comparison returns reproducible path contrasts", {
   fit <- fit_states(model, d, seed = 6, iterations = 2, diagnostics = FALSE)
   association <- associate(fit, specify_structure(B ~ linear(A), order = c("A", "B")),
     structural_repeats = 1, seed = 8)
+  group_labels <- ifelse(d$group == "A", "cohort-private-alpha", "cohort-private-beta")
 
-  first <- group_comparison(association, "group", reference = "A", permutations = 9, seed = 11,
+  first <- group_comparison(association, group_labels, reference = "cohort-private-alpha", permutations = 9, seed = 11,
     min_group_size = 30)
-  second <- group_comparison(association, "group", reference = "A", permutations = 9, seed = 11,
+  second <- group_comparison(association, group_labels, reference = "cohort-private-alpha", permutations = 9, seed = 11,
     min_group_size = 30)
 
   expect_s3_class(first, "cssem_group_comparison")
+  group_provenance <- expect_cssem_provenance(first, "group_comparison", "associate")
+  expect_false(any(c("cohort-private-alpha", "cohort-private-beta") %in%
+    unlist(group_provenance, recursive = TRUE, use.names = FALSE)))
   expect_equal(first$status, "associational_group_contrast")
   expect_equal(first$contrasts, second$contrasts)
   expect_true(any(first$contrasts$outcome == "B" & first$contrasts$predictor == "A"))
-  expect_true(all(first$contrasts$reference == "A"))
+  expect_true(all(first$contrasts$reference == "cohort-private-alpha"))
   expect_true(any(first$contrasts$available))
   expect_true(any(is.finite(first$contrasts$difference)))
   expect_true(all(c("null_low", "null_high", "n_group", "n_reference") %in% names(first$contrasts)))

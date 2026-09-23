@@ -228,7 +228,8 @@ fit_states <- function(model, data, seed = 1L, draws = 0L, iterations = 15L,
     as.data.frame(locked), missing_policy, cluster_ids = all_cluster_ids)
   cluster_column <- if (length(cluster) == 1L && is.character(cluster) &&
       cluster %in% names(input_data)) cluster else NULL
-  fit_provenance <- .cssem_provenance_record("fit_states", fit_call,
+  fit_provenance <- .cssem_provenance_record("fit_states",
+    .cssem_provenance_call(fit_call, c("data", "split", "cluster", "design")),
     settings = list(model = .cssem_provenance_model_specification(model), seed = seed,
       draws = draws, iterations = iterations, tolerance = tolerance, quadrature = quadrature,
       diagnostics = diagnostics, preset = preset, missing_policy = missing_policy,

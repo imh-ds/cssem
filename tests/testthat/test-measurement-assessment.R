@@ -58,13 +58,15 @@ test_that("measurement assessment reports scale-aware validity diagnostics", {
   assessment <- measurement_assessment(fit)
 
   expect_s3_class(assessment, "cssem_measurement_assessment")
+  expect_cssem_provenance(assessment, "measurement_assessment", "fit_states")
   expect_true(all(c("construct", "eap_reliability", "descriptive_convergent_r2",
     "ave", "ave_reason") %in% names(assessment$constructs)))
   expect_true(all(is.na(assessment$constructs$ave)))
   expect_true(all(grepl("not defined", assessment$constructs$ave_reason, fixed = TRUE)))
   expect_true(all(c("construct_a", "construct_b", "htmt", "method", "interpretation") %in% names(assessment$validity)))
   expect_true(any(assessment$validity$method == "descriptive_spearman_item_correlations"))
-  expect_true(all(grepl("descriptive", assessment$validity$interpretation, fixed = TRUE)))
+  expect_true(all(grepl("descriptive", assessment$validity$interpretation,
+    ignore.case = TRUE)))
   expect_true(is.data.frame(assessment$item_score_correlations))
   expect_true(is.data.frame(assessment$collinearity))
 })

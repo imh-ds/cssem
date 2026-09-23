@@ -110,6 +110,7 @@
 #'   a `methodology` description.
 #' @export
 measurement_assessment <- function(fit, construct = NULL) {
+  assessment_call <- match.call()
   .measurement_check_fit(fit)
   if (is.null(fit$data)) stop("measurement_assessment() requires a fit that retains its training data; refit with fit_states().", call. = FALSE)
   constructs <- names(fit$full_encoders)
@@ -135,7 +136,7 @@ measurement_assessment <- function(fit, construct = NULL) {
       posterior_information = if (is.finite(median_sd)) 1 / (median_sd^2 + 1e-12) else NA_real_,
       stringsAsFactors = FALSE)
   })
-  structure(list(constructs = do.call(rbind, rows),
+  result <- structure(list(constructs = do.call(rbind, rows),
     validity = .measurement_validity_pairs(fit, constructs),
     item_score_correlations = item_correlations,
     collinearity = .measurement_collinearity(fit, constructs),
@@ -146,6 +147,16 @@ measurement_assessment <- function(fit, construct = NULL) {
       ave = "Unavailable because the CS-SEM encoder does not estimate CFA loadings or communalities",
       collinearity = "OLS VIF on locked construct states")),
     class = "cssem_measurement_assessment")
+  fit_provenance <- fit$provenance_record
+  input <- if (!is.null(fit_provenance)) fit_provenance$input else
+    .cssem_provenance_input_summary(fit$data,
+      retained_rows = if (is.null(fit$row_ids)) seq_len(nrow(fit$data)) else as.integer(fit$row_ids))
+  result$provenance_record <- .cssem_provenance_record("measurement_assessment",
+    .cssem_provenance_call(assessment_call, "fit"),
+    settings = list(constructs = as.character(constructs)), input = input,
+    parent = if (is.null(fit_provenance)) list() else list(fit = fit_provenance),
+    packages = "stats")
+  result
 }
 
 #' @export

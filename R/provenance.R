@@ -32,6 +32,20 @@
   settings[intersect(names(settings), allowed)]
 }
 
+.cssem_provenance_call <- function(call, omit = character()) {
+  if (!is.call(call)) return(call)
+  if (!is.character(omit) || anyNA(omit))
+    stop("omit must contain argument names to remove from the provenance call.", call. = FALSE)
+  parts <- as.list(call)
+  if (length(parts) < 2L) return(call)
+  arg_names <- names(parts)
+  if (is.null(arg_names)) arg_names <- rep("", length(parts))
+  for (i in seq.int(2L, length(parts)))
+    if (arg_names[[i]] %in% omit) parts[[i]] <- "<omitted>"
+  names(parts) <- arg_names
+  as.call(parts)
+}
+
 .cssem_provenance_input_summary <- function(data = NULL, retained_rows = NULL,
                                             split_ids = NULL) {
   if (is.null(data)) {

@@ -369,7 +369,8 @@ bootstrap_model <- function(fit, statistic, reps = 200L, level = .95, seed = 1L,
   fit_provenance <- fit$provenance_record
   input <- if (!is.null(fit_provenance)) fit_provenance$input else
     .cssem_provenance_input_summary(fit$data)
-  result$provenance_record <- .cssem_provenance_record("bootstrap_model", bootstrap_call,
+  result$provenance_record <- .cssem_provenance_record("bootstrap_model",
+    .cssem_provenance_call(bootstrap_call, c("fit", "statistic", "resume", "cluster")),
     settings = list(reps = reps, level = level, seed = seed, refit = refit,
       workers = workers, resample = resample, progress = progress,
       statistic = paste(deparse(substitute(statistic)), collapse = " "),

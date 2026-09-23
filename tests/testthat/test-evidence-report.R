@@ -29,6 +29,7 @@ test_that("evidence report composes constructs, effects, and causal claims", {
   p <- .evidence_pipeline()
   report <- evidence_report(p$association, fit = p$fit, routing = p$routing)
   expect_s3_class(report, "evidence_report")
+  expect_cssem_provenance(report, "evidence_report", "associate")
   expect_equal(nrow(report$constructs), 3L)
   expect_true(all(c("path", "shape", "estimate", "causal_status", "verdict") %in% names(report$effects)))
   # Causal status is routed in, not hardcoded associational.
@@ -77,6 +78,12 @@ test_that("without routing, all effect edges are associational and optional sect
   expect_true(all(report$effects$causal_status == "associational"))
   expect_null(report$causal_claims)
   expect_null(report$constructs)
+
+  legacy_association <- p$association
+  legacy_association$provenance_record <- NULL
+  legacy_report <- evidence_report(legacy_association)
+  legacy_provenance <- expect_cssem_provenance(legacy_report, "evidence_report")
+  expect_length(legacy_provenance$parent, 0L)
 })
 
 test_that("interventional-mediation claims appear in the causal-claims section", {

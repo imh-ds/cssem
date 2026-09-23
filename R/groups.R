@@ -31,6 +31,21 @@
   list(values = values, labels = labels, row_ids = retained)
 }
 
+.group_provenance_settings <- function(group, resolved, reference) {
+  source <- if (is.character(group) && length(group) == 1L)
+    list(type = "column", column = group) else
+    list(type = "vector", length = as.integer(length(group)))
+  list(source = source, n_rows = as.integer(length(resolved$values)),
+    n_groups = as.integer(length(resolved$labels)),
+    reference_index = as.integer(match(reference, resolved$labels)))
+}
+
+.group_provenance_call <- function(call, group, reference) {
+  omit <- "reference"
+  if (!(is.character(group) && length(group) == 1L)) omit <- c(omit, "group")
+  .cssem_provenance_call(call, omit)
+}
+
 .group_metadata <- function(values, labels, min_group_size) {
   n <- table(factor(values, levels = labels))
   small <- as.integer(n) < min_group_size
@@ -164,6 +179,7 @@
 #' @export
 measurement_invariance <- function(fit, group, reference = NULL, min_group_size = 20L,
                                     level = .95, tolerance = .10) {
+  invariance_call <- match.call()
   .preserve_seed()
   .measurement_check_fit(fit)
   .group_validate_controls(reference, min_group_size, level, tolerance)
@@ -186,13 +202,25 @@ measurement_invariance <- function(fit, group, reference = NULL, min_group_size 
   }))
   parameters <- .group_parameter_rows(fit, resolved)
   contrasts <- .group_parameter_contrasts(parameters, reference, tolerance)
-  structure(list(groups = metadata, reference = reference, constructs = score_rows,
+  result <- structure(list(groups = metadata, reference = reference, constructs = score_rows,
     item_parameters = parameters, item_contrasts = contrasts, level = level,
     tolerance = tolerance, status = "diagnostic_common_anchor",
     limitations = c("Parameters are conditional diagnostics on the pooled common-anchor score, not jointly estimated multi-group parameters.",
       "Threshold and discrimination flags are descriptive and are not calibrated ordinal DIF tests.",
       "Formal configural, metric, and scalar invariance labels require a future equality-constrained multi-group estimator.")),
     class = "cssem_measurement_invariance")
+  fit_provenance <- fit$provenance_record
+  input <- if (!is.null(fit_provenance)) fit_provenance$input else {
+    source_data <- if (!is.null(fit$input_data)) fit$input_data else fit$data
+    .cssem_provenance_input_summary(source_data, retained_rows = resolved$row_ids)
+  }
+  result$provenance_record <- .cssem_provenance_record("measurement_invariance",
+    .group_provenance_call(invariance_call, group, reference),
+    settings = c(.group_provenance_settings(group, resolved, reference),
+      list(min_group_size = as.integer(min_group_size), level = level, tolerance = tolerance)),
+    input = input, parent = if (is.null(fit_provenance)) list() else list(fit = fit_provenance),
+    packages = "MASS")
+  result
 }
 
 #' @export
@@ -269,6 +297,7 @@ print.cssem_measurement_invariance <- function(x, ...) {
 #' @export
 group_comparison <- function(association, group, reference = NULL, permutations = 999L,
                               seed = 1L, min_group_size = 20L, level = .95) {
+  comparison_call <- match.call()
   .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association object.", call. = FALSE)
   if (length(permutations) != 1L || !is.numeric(permutations) || !is.finite(permutations) ||
@@ -321,13 +350,30 @@ group_comparison <- function(association, group, reference = NULL, permutations 
       }, stringsAsFactors = FALSE)
   }
   contrasts <- if (length(rows)) do.call(rbind, rows) else data.frame()
-  structure(list(groups = metadata, reference = reference, group_effects = group_effects,
+  result <- structure(list(groups = metadata, reference = reference, group_effects = group_effects,
     contrasts = contrasts, permutation_settings = list(permutations = as.integer(permutations), seed = seed, level = level),
     status = "associational_group_contrast",
     limitations = c("Structural contrasts use pooled locked construct states and retain the association's selected shapes.",
       "Permutation p-values are label-randomization diagnostics, not causal interaction tests.",
       "Nonlinear edges have no single scalar path contrast and are reported as unavailable.")),
     class = "cssem_group_comparison")
+  association_provenance <- association$provenance_record
+  input <- if (!is.null(association_provenance)) association_provenance$input else {
+    fit <- association$fit
+    source_data <- if (!is.null(fit$input_data)) fit$input_data else fit$data
+    source_rows <- if (!is.null(association$row_ids)) as.integer(association$row_ids) else
+      if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else NULL
+    .cssem_provenance_input_summary(source_data, retained_rows = source_rows)
+  }
+  result$provenance_record <- .cssem_provenance_record("group_comparison",
+    .group_provenance_call(comparison_call, group, reference),
+    settings = c(.group_provenance_settings(group, resolved, reference),
+      list(permutations = as.integer(permutations), seed = as.integer(seed),
+        min_group_size = as.integer(min_group_size), level = level)),
+    input = input,
+    parent = if (is.null(association_provenance)) list() else list(association = association_provenance),
+    packages = "stats")
+  result
 }
 
 #' @export

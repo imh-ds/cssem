@@ -370,7 +370,8 @@ predict.cssem_association <- function(object, newdata, outcomes = NULL,
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
       type = type, support = support)), class = c("cssem_prediction", "list"))
   association_provenance <- object$provenance_record
-  result$provenance_record <- .cssem_provenance_record("predict", prediction_call,
+  result$provenance_record <- .cssem_provenance_record("predict",
+    .cssem_provenance_call(prediction_call, c("object", "newdata")),
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
       type = type, support_constructs = names(support)),
     input = .cssem_provenance_input_summary(newdata, retained_rows = seq_len(nrow(newdata))),
@@ -499,7 +500,8 @@ prediction_assessment <- function(association, newdata, outcomes = NULL,
     settings = list(outcomes = outcomes, mode = mode, missing_policy = missing_policy,
       baseline = baseline)), class = c("cssem_prediction_assessment", "list"))
   association_provenance <- association$provenance_record
-  result$provenance_record <- .cssem_provenance_record("prediction_assessment", assessment_call,
+  result$provenance_record <- .cssem_provenance_record("prediction_assessment",
+    .cssem_provenance_call(assessment_call, c("association", "newdata")),
     settings = result$settings,
     input = .cssem_provenance_input_summary(newdata, retained_rows = seq_len(nrow(newdata))),
     parent = if (is.null(association_provenance)) list() else list(association = association_provenance))

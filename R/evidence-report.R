@@ -139,6 +139,7 @@
 #' #   causal = list(causal_indirect_effect(association, "Trust", "Loyalty", adjust = "Quality")))
 #' @export
 evidence_report <- function(association, fit = NULL, routing = NULL, causal = list()) {
+  report_call <- match.call()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   if (!is.null(fit) && !inherits(fit, "fit_states")) stop("fit must be a fit_states.", call. = FALSE)
   if (!is.null(routing) && !inherits(routing, "cssem_routing")) stop("routing must be a cssem_routing.", call. = FALSE)
@@ -146,11 +147,33 @@ evidence_report <- function(association, fit = NULL, routing = NULL, causal = li
   if (length(causal) && !all(vapply(causal, inherits, logical(1), "causal_effect") | vapply(causal, inherits, logical(1), "causal_indirect_effect")))
     stop("causal must be a list of causal_effect or causal_indirect_effect objects.", call. = FALSE)
 
-  structure(list(
+  result <- structure(list(
     constructs = if (!is.null(fit)) .evidence_constructs(fit) else NULL,
     effects = .evidence_effects(association, routing),
     causal_claims = .evidence_causal_claims(routing, causal),
     status = "reported"), class = "evidence_report")
+  parents <- list()
+  association_provenance <- association$provenance_record
+  fit_provenance <- if (is.null(fit)) NULL else fit$provenance_record
+  if (inherits(association_provenance, "cssem_provenance"))
+    parents$association <- association_provenance
+  if (inherits(fit_provenance, "cssem_provenance"))
+    parents$fit <- fit_provenance
+  for (i in seq_along(causal)) {
+    record <- causal[[i]]$provenance_record
+    if (inherits(record, "cssem_provenance")) parents[[paste0("causal_", i)]] <- record
+  }
+  input <- if (!is.null(association_provenance$input)) association_provenance$input else
+    if (!is.null(fit_provenance$input)) fit_provenance$input else .cssem_provenance_input_summary()
+  result$provenance_record <- .cssem_provenance_record("evidence_report",
+    .cssem_provenance_call(report_call, c("association", "fit", "routing", "causal")),
+    settings = list(fit_included = !is.null(fit), routing_included = !is.null(routing),
+      explicit_causal_claim_n = as.integer(length(causal)),
+      explicit_causal_types = unique(vapply(causal, function(effect) class(effect)[[1L]], character(1))),
+      routed_causal_claim_n = if (is.null(routing)) 0L else
+        as.integer(length(routing$causal_effects))),
+    input = input, parent = parents, packages = "stats")
+  result
 }
 
 #' Print the unified CS-SEM evidence report

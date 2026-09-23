@@ -137,7 +137,8 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
     second <- .comparison_remap_constructs(second, alignment)
     result <- compare_outer(first, second, metrics = metrics, reps = reps, seed = seed)
     result$alignment <- alignment
-    result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+    result$provenance_record <- .comparison_provenance_record("compare_outer",
+      .cssem_provenance_call(comparison_call, c("first", "second", "alignment")),
       first, second, list(metrics = metrics, reps = reps, seed = seed,
         alignment = .comparison_provenance_alignment(alignment)))
     return(result)
@@ -164,7 +165,8 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
       alignment = alignment, status = "complete",
       limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
       class = c("cssem_model_comparison", "list"))
-    result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+    result$provenance_record <- .comparison_provenance_record("compare_outer",
+      .cssem_provenance_call(comparison_call, c("first", "second", "alignment")),
       first, second, list(metrics = metrics, reps = reps, seed = seed,
         alignment = .comparison_provenance_alignment(alignment)))
     return(result)
@@ -195,7 +197,8 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
     intervals = intervals, draws = draws, metrics = metrics, reps = reps, seed = seed,
     status = "complete", limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
     class = c("cssem_model_comparison", "list"))
-  result$provenance_record <- .comparison_provenance_record("compare_outer", comparison_call,
+  result$provenance_record <- .comparison_provenance_record("compare_outer",
+    .cssem_provenance_call(comparison_call, c("first", "second", "alignment")),
     first, second, list(metrics = metrics, reps = reps, seed = seed, alignment = alignment))
   result
 }
@@ -235,7 +238,7 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
 #' @export
 compare_models <- function(model_a, structure_a, model_b, structure_b, data, splits,
                            seed = 1L, args_a = list(), args_b = list(), alignment = NULL, ...) {
-  compare_models_call <- match.call()
+  compare_models_call <- match.call(expand.dots = FALSE)
   if (!inherits(model_a, "cssem_model") || !inherits(model_b, "cssem_model"))
     stop("model_a and model_b must be cssem_model objects.", call. = FALSE)
   if (!inherits(structure_a, "cssem_structure") || !inherits(structure_b, "cssem_structure"))
@@ -257,7 +260,10 @@ compare_models <- function(model_a, structure_a, model_b, structure_b, data, spl
   if (inherits(second$provenance_record, "cssem_provenance")) parents$second <- second$provenance_record
   input <- if (!is.null(first$provenance_record$input)) first$provenance_record$input else
     .cssem_provenance_input_summary(data, split_ids = list(outer_split = seq_len(nrow(data))))
-  result$provenance_record <- .cssem_provenance_record("compare_models", compare_models_call,
+  result$provenance_record <- .cssem_provenance_record("compare_models",
+    .cssem_provenance_call(compare_models_call,
+      c("model_a", "structure_a", "model_b", "structure_b", "data", "splits",
+        "args_a", "args_b", "alignment", "...")),
     settings = list(model_a = .cssem_provenance_model_specification(model_a),
       structure_a = .cssem_provenance_structure_specification(structure_a),
       model_b = .cssem_provenance_model_specification(model_b),

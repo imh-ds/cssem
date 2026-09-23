@@ -348,7 +348,8 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
   }
   cluster_column <- if (length(cluster) == 1L && is.character(cluster) &&
       cluster %in% names(data)) cluster else NULL
-  outer_provenance <- .cssem_provenance_record("validate_outer", outer_call,
+  outer_provenance <- .cssem_provenance_record("validate_outer",
+    .cssem_provenance_call(outer_call, c("data", "splits", "cluster", "design")),
     settings = list(model = .cssem_provenance_model_specification(model),
       structure = .cssem_provenance_structure_specification(structure),
       split = list(method = splits$method, folds = splits$folds, seed = splits$seed,

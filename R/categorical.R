@@ -120,7 +120,8 @@ marginal_contrast <- function(association, outcome, predictor, values,
     level = level, seed = seed, interval_status = interval_status),
     class = c("cssem_marginal_contrast", "list"))
   association_provenance <- association$provenance_record
-  output$provenance_record <- .cssem_provenance_record("marginal_contrast", contrast_call,
+  output$provenance_record <- .cssem_provenance_record("marginal_contrast",
+    .cssem_provenance_call(contrast_call, c("association", "newdata")),
     settings = list(outcome = outcome, predictor = predictor, values = as.numeric(values),
       reps = reps, level = level, seed = seed,
       input_source = if (is.null(newdata)) "association_scores" else "newdata_locked_scores"),
