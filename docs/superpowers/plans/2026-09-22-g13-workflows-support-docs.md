@@ -171,16 +171,22 @@ git commit -m "docs: publish CS-SEM capability evidence table"
 - Consumes: public API signatures, G13 vignette, capabilities table, deprecated wrappers, and support-envelope definitions.
 - Produces: matching release/version statements; a scale/standardization explanation; selector and estimand descriptions; correction and support-envelope limits; and a deprecated-wrapper-to-current-function migration table.
 
-- [ ] **Step 1: Inspect current names and selectors** in `NAMESPACE`, `R/model.R`, `R/structure.R`, `R/fit.R`, and `R/validation.R`; use `DESCRIPTION` as the release-version source and read `R/deprecated.R` for every public migration pair.
-- [ ] **Step 2: Update README and method specification** against those APIs. Set the release label to the DESCRIPTION version, explain scale standardization/transforms as implemented, describe selector choices and estimands, and remove historical instructions presented as the current workflow.
-- [ ] **Step 3: Create `docs/migration.md`** with each public deprecated function and its preferred replacement; preserve the wrappers themselves. Link the README to this page and to `docs/capabilities.md`; state that the supported envelope describes evidence for named scenarios/metrics, not an individual-study guarantee.
-- [ ] **Step 4: Parse affected Rd files with `tools::checkRd()`, render the vignette again, compare capability statuses with source/tests/artifacts, search for stale version strings using `rg -n 'v0\.[0-9]' README.md docs`, and run `git diff --check`.**
-- [ ] **Step 5: Commit the aligned method and migration documentation.**
+- [x] **Step 1: Inspect current names and selectors** in `NAMESPACE`, `R/model.R`, `R/structure.R`, `R/fit.R`, and `R/validation.R`; use `DESCRIPTION` as the release-version source and read `R/deprecated.R` for every public migration pair.
+- [x] **Step 2: Update README and method specification** against those APIs. Set the release label to the DESCRIPTION version, explain scale standardization/transforms as implemented, describe selector choices and estimands, and remove historical instructions presented as the current workflow.
+- [x] **Step 3: Create `docs/migration.md`** with each public deprecated function and its preferred replacement; preserve the wrappers themselves. Link the README to this page and to `docs/capabilities.md`; state that the supported envelope describes evidence for named scenarios/metrics, not an individual-study guarantee.
+- [x] **Step 4: Parse affected Rd files with `tools::checkRd()`, render the vignette again, compare capability statuses with source/tests/artifacts, search for stale version strings using `rg -n 'v0\.[0-9]' README.md docs`, and run `git diff --check`.**
+- [x] **Step 5: Commit the aligned method and migration documentation.**
 
 ```bash
 git add README.md docs/method-spec.md docs/associational-structure.md docs/migration.md man
 git commit -m "docs: align method limits and migration guidance"
 ```
+
+Ruling: the migration inventory contains all 39 functions that call
+`.Deprecated()` across the current source. All 120 Rd files parse and pass
+`tools::checkRd()`, and the workflow vignette rendered successfully. The
+version scan shows v0.5.0 in current user documentation; older version labels
+remain in explicitly historical validation and bug-history documents.
 
 ## Final verification and tracking
 
@@ -190,3 +196,18 @@ After all three G13 plans are implemented:
 2. Render `vignettes/cssem-workflow.Rmd` and run `R CMD build .` with suggested vignette packages available.
 3. Parse Rd files, run `git diff --check`, and perform `R CMD check` where the local environment permits it.
 4. Update the G13 row and section in `docs/gaps.md` with scoped status, acceptance evidence, and every implementation/documentation commit ID; commit that tracking update separately.
+
+Ruling: the vignette rendered and `R CMD build --no-manual` completed. All 120
+Rd files passed `tools::parse_Rd()` and `tools::checkRd()`, and
+`git diff --check` passed. The complete test suite ran with the package loaded
+and reported six failures outside this documentation-only step: causal
+mediation's expected path count (7 instead of 2), an unsupported `info`
+argument to testthat `expect_lt()`, a mediation truth comparison that differs
+in names/attributes, a numerical-diagnostics class/row-name comparison, and
+two summary-extractor availability/basis assertions. One comparator test was
+skipped because optional `seminr` is unavailable. `R CMD check` installed the
+package successfully but stopped at DESCRIPTION metadata checking after R
+startup reported unavailable `C.UTF-8` locales; it also noted the existing
+hidden `.superpowers` directory and unavailable optional `lavaan`, `seminr`,
+and `roxygen2` packages. No estimator or test code was changed in this docs
+step.

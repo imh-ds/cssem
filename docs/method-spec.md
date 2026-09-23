@@ -1,95 +1,109 @@
-# CS-SEM v0.3 method contract
+# CS-SEM v0.5.0 method contract
 
-CS-SEM v0.1 estimates **theory-declared manifestation constructs** only. Each
-construct is one-dimensional and is represented by an out-of-fold construct
-state. A construct declaration specifies ordered indicators, their observed
-scales (`ordinal` or `continuous`), and their direction (`key`, -1 or 1).
+CS-SEM estimates cross-fitted construct states for theory-declared,
+one-dimensional manifestation constructs, then models declared structural
+relationships on those locked scores. Its structural layer is associational by
+default. A public causal estimand is a separate workflow with explicit
+adjustment and temporal-order declarations; those declarations do not establish
+that causal identification assumptions hold.
 
-For ordinal and binary items, the measurement decoder is a monotone,
-regularized graded-response model: `P(X <= c | z) = logistic(tau[c] - a z)`,
-where `a > 0` and thresholds are ordered. Continuous items use a
-linear-Gaussian decoder: `X = intercept + slope * z + N(0, sigma^2)`. Both
-item types are estimated by the same marginal-ML/EM procedure over a shared
-standard-normal quadrature grid: at each E-step, an item's contribution to
-the respondent-by-node posterior is its graded-response category
-log-probability (ordinal) or its Gaussian log-density (continuous), summed
-across items in log-space; at each M-step, ordinal item parameters are
-updated by BFGS on the posterior-weighted graded-response likelihood and
-continuous item parameters by closed-form posterior-weighted least squares.
-An all-ordinal construct therefore runs the identical estimator it always
-has; a construct built entirely from continuous items, or mixing ordinal and
-continuous items, gets the same posterior-based EAP scoring and reliability
-as an all-ordinal one, rather than a separate weaker path. Missing item
-responses contribute no likelihood term. Ordinal indicators must carry
-whole-number category codes; a non-integer value errors rather than being
-silently truncated. Scores are standardized and positive keys make larger
-states correspond to larger item responses.
+## Measurement declarations and scores
 
-A `manifest()` declaration bypasses the measurement model entirely for a
-single observed column that is not itself a multi-item construct (a control
-variable such as age, or a deliberately single-item measure). Its locked
-score is the column's own (by default standardized) value, computed
-out-of-fold from training-fold statistics only, exactly like every other
-construct's cross-fitted score. Its reliability is asserted rather than
-estimated -- `1` by default (treated as measurement-error-free), or an
-externally supplied value (e.g. a published test-retest reliability for a
-single-item scale) that `associate()`'s errors-in-variables correction
-consumes exactly as it would a measured construct's estimated reliability.
+Use `specify_measurement()` with `ordinal()`, `continuous()`, `mixed_items()`,
+or `manifest()` declarations. Each estimated construct must have at least two
+unique indicators; an indicator may belong to one construct only. A manifest
+declaration passes one observed column directly into the structural model and
+does not fit a measurement encoder.
 
-`fit_states()` uses K-fold cross-fitting. Every returned locked score is
-predicted by an encoder trained without that observation. Full-data encoders
-are retained only for `score_states()` on new records. The API rejects missing,
-extra, or reordered scoring columns rather than aligning them silently.
+Ordinal indicators use ordered whole-number category codes. Their measurement
+likelihood is graded-response; continuous indicators use a linear-Gaussian
+item likelihood. `mixed_items()` combines these item types within one
+construct, and the encoder fits them together on a common latent grid rather
+than inferring a scale from observed values. Keys of `1` and `-1` orient items
+before estimation. The fit returns out-of-fold posterior-mean scores; by
+default, construct scores are standardized. Manifest columns are standardized
+by default as well; `manifest(..., standardize = FALSE)` preserves their
+observed units. A manifest reliability is an assertion supplied by the user
+(default `1`), not an estimate from the single column.
 
-Version 0.3 reports held-out decoder log loss/RMSE, fold stability, item
-warnings, exploratory leave-one-item-out residual dependence, and construct
-redundancy. Residual dependence is returned as a diagnostic table, not an
-automatic warning, until the simulation study calibrates its false-positive
-rate.
+`fit_states()` cross-fits the measurement encoder: each respondent's locked
+score comes from an encoder trained without that respondent's fold. Full-data
+encoders support scoring new records. The default `missing_policy = "partial"`
+uses each observed item and omits missing item likelihood terms; `"listwise"`
+excludes incomplete rows, and `"error"` rejects them. Structural complete-case
+handling is a separate step. `sample_accounting()` reports the affected rows
+and counts. `retain_data = FALSE` omits retained training frames and raw
+row-aligned cluster labels while leaving score-based analysis, provenance,
+scoring, and prediction available. Bootstrap refits and row-dependent
+measurement diagnostics need the original rows and therefore require
+`retain_data = TRUE`.
 
-The structural extension is deliberately associational. A `cssem_structure`
-declares locked-state predictors and may declare edge-level shape policies via
-`cssem_effect()`. `associate()` cross-validates linear, constrained
-monotone, and low-complexity smooth candidates one declared edge at a time,
-then reports temporal and unrestricted shadow-model specification gaps and an
-effect evidence ledger. These effects are not causal claims and do not provide
-mediation, adjustment, or treatment-effect estimates. See
-`docs/associational-structure.md`.
+Per-respondent posterior widths and latent-state draws are exposed as
+experimental research outputs. They are not calibrated confidence intervals
+and are not part of the release-validation evidence. Likewise,
+`respondent_weighting = "information"` is experimental and is not a survey
+weighting method.
 
-Measurement uncertainty is now propagated rather than discarded. The marginal
-graded-response model retains each respondent's out-of-fold posterior, from
-which `fit_states()` reports a per-construct marginal reliability
-(`fit$reliability`) and a per-respondent posterior SD
-(`fit$score_posterior_sd`). Locked construct states carry measurement error, so
-naive structural slopes among them are attenuated exactly as composite and PLS
-scores are. For linear and monotone edges, `associate()` applies a
-classical (Fuller) errors-in-variables correction that subtracts the predictor
-error covariance `diag((1 - reliability) * var)` before solving the structural
-normal equations, recovering the disattenuated slope. A percentile bootstrap
-(`eiv_bootstrap`) reports its sampling interval. Smooth edges are reported but
-not yet corrected. The correction requires a reliability estimate; it is applied
-only when one is available (CS-SEM derives it from the posterior), so score-only
-pipelines report the naive slope unchanged. Latent-state bags are now real
-posterior draws (plausible values), replacing the earlier fixed-variance
-placeholder.
+## Structural selection and effect summaries
 
-Per-respondent measurement information is reported through
-`respondent_information()` and the Construct Card, exposing wide-posterior
-(for example careless) respondents that covariance- and composite-based methods
-cannot flag. An experimental inverse-variance `respondent_weighting` option in
-`associate()` is off by default: because posterior width is
-score-dependent, weighting induces range restriction and did not reduce
-structural point-estimate bias in validation, so it is excluded from
-confirmatory estimation.
+`specify_structure()` declares one formula per outcome. Undeclared shape
+markers default to `auto`, which compares a linear term, constrained monotone
+increasing/decreasing terms, and natural splines with the requested degrees of
+freedom (3 and 4 by default). `auto_monotone()` compares only linear and the two
+monotone directions. `linear()`, `monotone_increasing()`,
+`monotone_decreasing()`, and `smooth()` constrain the candidates for that
+declared edge. These names are formula markers interpreted by
+`specify_structure()`; they are not standalone model functions. At most one
+nonlinear edge is retained per outcome. Curvature is tested against the linear
+baseline, and repeated cross-validation and a parsimony rule help choose among
+predictively similar candidates. This is a selection procedure, not a causal
+test or a general search over every possible model.
 
-The v0.4 validation manifests add behaviorally realistic structural shapes
-(saturating plateau, threshold, and concave diminishing returns) and
-measurement-stress scenarios (low reliability, careless responding, and
-floor-effect skew). These exercise the disattenuation and shape-recovery
-machinery on the kinds of survey and behavioral data CS-SEM targets; the v0.3
-release gates are unchanged because they select scenarios by name.
+Formula `A:B` terms are explicit product interactions. They are included only
+when declared; shape markers cannot wrap an interaction. The selector does not
+discover unlisted interactions, latent interactions, cycles, or feedback.
+Declared outcome families are Gaussian by default, with optional binomial and
+ordinal structural outcomes. Categorical outcomes currently support only
+linear main effects and do not support errors-in-variables correction,
+information weighting, or constrained paths.
 
-Latent uncertainty draws remain experimental research aids in v0.3. They are
-not calibrated confidence intervals, are excluded from the release-validation
-story, and must not be reported as confirmatory uncertainty until coverage
-validation is complete.
+`associate()` reports selected shapes, predictive effect evidence, and
+temporal/unrestricted shallow-tree shadow comparisons. Shadow gaps measure
+relative predictive performance under the declared comparison; neither the
+gaps nor the selected arrows establish causal direction. For eligible Gaussian
+linear, monotone, and product terms, a reliability-based errors-in-variables
+correction is available when reliability is available. It uses a stabilized
+predictor-error covariance adjustment; reliability floors or covariance
+shrinkage can affect estimates, and the correction is not an accuracy
+guarantee. Smooth edges are not corrected. Optional bootstrap intervals
+condition on selected shapes unless a workflow explicitly repeats selection.
+
+The package also provides separately named associational indirect effects,
+conditional effects, and causal estimands. Associational path decomposition
+does not become causal by being called mediation. Causal estimands require
+their documented design declarations, and software cannot verify consistency,
+positivity, no unmeasured confounding, correct measurement, or the substantive
+adequacy of an adjustment set from the data alone.
+
+## Evidence and boundaries
+
+The v0.5.0 release artifact records recovery for named simulation scenarios.
+`supported_envelope()` returns the thresholds, job counts, convergence, and
+release-gate status from that checked-in artifact. The validated ordinal
+measurement envelope is narrower than the set of implemented scale
+declarations: one-dimensional ordinal blocks with at least four indicators,
+sample size at least 200, loading at least 0.70, and at most 10% item
+missingness. Cross-loadings, strong construct overlap, sparse categories, and
+local dependence remain exploratory conditions. Structural and mediation
+validation artifacts likewise describe only their registered scenarios and
+metrics. They are not universal guarantees, sample-size rules, power analyses,
+or evidence for an untested study design. See the [capabilities and evidence
+table](capabilities.md) and checked-in
+[`validation_results`](../tests/internal/validation_results/).
+
+CS-SEM is not a global covariance-structure SEM. It does not fit covariance
+matrices or report chi-square, CFI/TLI, RMSEA, or SRMR. Formative and
+higher-order constructs, cross-loadings, correlated item errors, and
+simultaneous feedback models are outside the current estimator. Comparator
+engines are dependency-light validation proxies, not replacements for a full
+`lavaan` covariance SEM or production `seminr` PLS-SEM implementation.

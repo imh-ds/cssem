@@ -1,115 +1,77 @@
 # CS-SEM
 
-CS-SEM v0.4.0 is a research release of cross-fitted construct-state
-measurement plus a narrow associational structural layer. It estimates
-theory-declared, one-dimensional manifestation constructs from ordinal, binary,
-and continuous indicators, locks those construct states with cross-fitting, and
-fits theory-declared **associational** linear, constrained monotone, or
-low-complexity smooth effects on the locked scores. It does **not** assert
-causal effects by default; causal estimands are available only under explicitly
-declared adjustment sets and temporal order. It does not fit formative
-constructs or global SEM fit indices.
-
-The public model contract is deliberately language-neutral: a construct has a
-name, ordered indicator names, scale declarations, and item keys. The R API
-uses a list specification that can be serialized and reproduced by a future
-Python implementation.
+CS-SEM v0.5.0 is a research package for cross-fitted construct-state
+measurement and a theory-declared structural layer. It estimates
+one-dimensional manifestation constructs from ordinal, continuous, or mixed
+items, then selects supported structural shapes using the resulting locked
+scores. Structural relationships are associational by default.
 
 ```r
 model <- specify_measurement(
-  trust = ordinal("t1", "t2", "t3", keys = c(1, 1, -1)),
+  Trust = mixed_items(
+    ordinal("trust_1", "trust_2", keys = c(1, -1)),
+    continuous("trust_duration")
+  ),
+  Loyalty = ordinal("loyalty_1", "loyalty_2"),
+  Age = manifest("age"),
   folds = 5
 )
-fit <- fit_states(model, survey_data, seed = 42)
-construct_card(fit, "trust")
-```
+fit <- fit_states(model, survey_data, seed = 42, retain_data = FALSE)
 
-```r
-structure <- specify_structure(loyalty ~ trust)
-association <- associate(fit, structure)
-specification_gap(association)
-```
-
-Defined contrasts use stable parameter IDs and one joint resample for every
-referenced term. The default fixed-selection interval is conditional on the
-selected structural shapes; `selection = "repeat"` reruns shape selection and
-records changed shape signatures.
-
-```r
-spec <- contrast_spec(list(
-  path_difference = "edge:loyalty~trust:naive - edge:loyalty~quality:naive"
-))
-contrast(association, spec, reps = 999, seed = 42)
-```
-
-Competing theories can be compared only on identical outer partitions and
-held-out targets. `compare_outer()` checks row IDs, target availability, score
-bases, and metric scope before reporting paired RMSE/MAE/R-squared deltas.
-`compare_models()` runs both specifications on one caller-supplied split object.
-An explicit named construct alignment map is required for renamed measurement
-declarations; no latent scale is inferred from names.
-
-The optional `cssem_constraint()` contract is limited to selected linear
-locked-score edges and deterministic pooled least squares. It reports rank and
-conditioning diagnostics and rejects EIV correction, information weighting,
-nonlinear or interaction edges, measurement equality, and ordinal structural
-outcomes. These workflows do not add covariance-SEM likelihood, AIC/BIC,
-likelihood-ratio tests, or global fit statistics.
-
-`specify_measurement()`/`specify_structure()` are friendlier front doors for
-[`cssem_model()`](man/cssem_model.Rd)/[`cssem_structure()`](man/cssem_structure.Rd)
-and resolve to the identical internal specification; both forms remain
-supported. `specify_structure()` declares outcomes with formulas
-(`Outcome ~ predictor1 + predictor2`, with `A:B` interaction syntax), and
-wraps a predictor in `linear()`, `auto_monotone()`, `monotone_increasing()`,
-`monotone_decreasing()`, or `smooth()` to declare a non-default shape policy
-for that edge — see `?specify_structure`.
-
-Structural reports include a temporally admissible shadow benchmark and an
-unrestricted same-wave network benchmark. Positive specification gaps mean the
-declared model predicts better than the corresponding shallow-tree benchmark;
-they do not establish causal direction.
-
-See `docs/method-spec.md` for the current measurement contract and
-`docs/validation-v02.md` for the v0.3 simulation validation protocol and
-release gates. Legacy benchmark helpers remain available for compatibility, but
-the primary validation workflow now uses the v0.3 measurement and structural
-validation suites directly.
-
-For a local v0.3 screening run, use:
-
-```r
-measurement <- validate_measurement(
-  measurement_manifest("screening"),
-  reps = 1,
-  seed = 2026
+structure <- specify_structure(
+  Loyalty ~ linear(Trust) + linear(Age),
+  order = c("Age", "Trust", "Loyalty")
 )
-structural <- validate_structure(
-  structural_manifest("screening"),
-  reps = 1,
-  seed = 3026
-)
-validation_report(measurement, structural)
+association <- associate(fit, structure, seed = 43)
+effect_ledger(association)
+cssem_provenance(association)
 ```
 
-CI keeps a tiny one-rep smoke run separate from the release workflow. Release
-artifacts are generated from confirmation runs and written into
-`tests/internal/validation_results/`, including an evidence-backed
-`supported_envelope.csv` summary. Comparator artifacts now distinguish
-measurement-state recovery from downstream association-preservation: use
-`comparator_validation.csv` for scenario-level rows, `comparator_summary.csv`
-for status-aware rollups, and `comparator_benchmark_matrix.csv` for the
-success-rate and success-only benchmark matrix across engines. Structural
-comparator artifacts use the same CS-SEM associational selector with different
-score engines to show where locked scores help with shape selection and
-shadow-gap diagnostics: use `structural_comparator_validation.csv`,
-`structural_comparator_summary.csv`, and
-`structural_comparator_benchmark_matrix.csv` for that benchmark family, plus
-`structural_comparator_coverage_adjusted_matrix.csv` when high structural fit
-must be interpreted together with partial score coverage. Latent
-uncertainty draws remain experimental research outputs; they are not part of
-the release-validated evidence story and must not be reported as calibrated
-inferential uncertainty. The dependency-light built-in comparators remain
-measurement and downstream task proxies rather than published CB-SEM or
-production PLS-SEM; use optional `lavaan` and `seminr` in the comparator
-validation workflow.
+`ordinal()` declares whole-number category codes; `continuous()` uses a
+linear-Gaussian item model; `mixed_items()` combines those declarations in one
+construct without inferring scales from observed values. Item keys reverse an
+indicator's direction before estimation. Cross-fitted construct scores are
+standardized by default. A `manifest()` covariate bypasses the item encoder and
+is standardized by default; use `standardize = FALSE` to retain its observed
+units. See the [workflow vignette](vignettes/cssem-workflow.Rmd) for a complete
+example including missingness, outer validation, prediction, and a carefully
+qualified optional causal estimand.
+
+The structural selector compares declared linear, monotone, and smooth shapes
+using repeated cross-validation. It retains at most one nonlinear edge per
+outcome. Formula interactions such as `A:B` are explicit product terms; the
+selector does not search for unlisted interactions. Shadow gaps compare the
+declared model with specified predictive benchmarks and do not establish
+causal direction. `associate()` also reports a reliability-based
+errors-in-variables correction for eligible linear, monotone, and product
+terms. Smooth-edge correction is unavailable, and stabilized correction is
+not an accuracy guarantee. Shape labels such as `linear()` and
+`auto_monotone()` are formula markers parsed by `specify_structure()`, not
+standalone callable functions.
+
+The `retain_data = FALSE` option omits training data frames and row-aligned
+cluster labels while keeping locked scores, encoders, row positions, sample
+accounting, and provenance. Scoring, association, and new-record prediction
+can continue from those stored results. Bootstrap refits and raw-item
+measurement diagnostics require a fit made with `retain_data = TRUE`.
+
+CS-SEM does not fit a global covariance-structure SEM. It does not report
+chi-square, CFI/TLI, RMSEA, or SRMR, and it does not currently fit formative or
+higher-order constructs, cross-loadings, correlated item errors, or simultaneous
+feedback models. These are method boundaries, not missing names for predictive
+metrics.
+
+The released ordinal measurement envelope and selector evidence cover named
+simulation scenarios. [`supported_envelope()`](man/supported_envelope.Rd) reports
+the thresholds, evaluated job counts, convergence, and release-gate status from
+the checked-in artifact; it is not a universal sample-size rule, a power
+analysis, or a guarantee for a new study. Latent-state uncertainty draws and
+information-based respondent weighting remain experimental. The package's
+dependency-light comparator engines are proxies, not full covariance SEM or
+production PLS-SEM implementations.
+
+See the [capabilities and evidence table](docs/capabilities.md),
+[method specification](docs/method-spec.md),
+[associational structural guide](docs/associational-structure.md), and
+[migration table](docs/migration.md). Release scenarios and outputs are under
+[`tests/internal/validation_results/`](tests/internal/validation_results/).
