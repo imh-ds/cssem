@@ -2,10 +2,9 @@
 # let a path be interpreted causally by default: a causal label requires a
 # declared adjustment set and temporal order, and every effect ships with
 # identification diagnostics and sensitivity analysis. The estimator is the
-# errors-in-variables adjusted coefficient (disattenuated and confounding
-# adjusted under a linear adjustment), which recovers the effect that naive
-# regression leaves confounded and adjusted regression leaves attenuated.
-# Flexible (nonlinear) confounder adjustment is a later extension.
+# errors-in-variables adjusted coefficient or, for flexible estimands, a
+# cross-fitted nuisance estimator. Optional DAG and assumption declarations add
+# a backdoor audit; neither these checks nor support proxies verify assumptions.
 
 # Cinelli-Hazlett robustness value: the minimum share of residual variance in
 # both treatment and outcome that an unmeasured confounder would need to explain
@@ -39,6 +38,11 @@
     residual_variance = residual_variance, treatment_variance = treatment_variance)
 }
 
+.causal_rmse <- function(x) {
+  if (!length(x) || any(!is.finite(x))) return(NA_real_)
+  sqrt(mean(x^2))
+}
+
 # Cross-fitted partially-linear DML: flexible spline nuisances remove nonlinear
 # confounding (which a linear adjustment cannot), and the orthogonal score yields
 # an analytic interval. Estimated on the denoised construct states; not
@@ -60,20 +64,24 @@
   x_residual <- x_residual[keep]; y_residual <- y_residual[keep]; m <- length(x_residual)
   identification <- .flexible_identification(scores, treatment,
     { residual <- rep(NA_real_, n); residual[keep] <- x_residual; residual })
+  nuisance_diagnostics <- list(method = "cross_fitted_spline_nuisance",
+    treatment_rmse = .causal_rmse(x_residual), outcome_rmse = .causal_rmse(y_residual),
+    folds = length(unique(folds)), evaluated_n = m, spline_df = spline_df)
   denominator <- sum(x_residual^2)
   invalid <- m < 2L || !is.finite(denominator) || denominator <=
     .Machine$double.eps * max(1, sum(y_residual^2))
   if (invalid) return(list(estimate = NA_real_, se = NA_real_, ci_low = NA_real_,
     ci_high = NA_real_, df = m - spline_df * length(adjust) - 2L,
     identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
-    stable = FALSE))
+    stable = FALSE, nuisance_diagnostics = nuisance_diagnostics))
   theta <- sum(x_residual * y_residual) / denominator
   score <- x_residual * (y_residual - theta * x_residual)
   se <- sqrt(mean(score^2) / mean(x_residual^2)^2 / m)
   stable <- is.finite(theta) && is.finite(se) && identification$strength >= .10
   list(estimate = theta, se = se, ci_low = theta - 1.96 * se, ci_high = theta + 1.96 * se,
     df = m - spline_df * length(adjust) - 2L, identification_strength = identification$strength,
-    treatment_r2 = identification$treatment_r2, stable = stable)
+    treatment_r2 = identification$treatment_r2, stable = stable,
+    nuisance_diagnostics = nuisance_diagnostics)
 }
 
 # Cross-fitted doubly-robust average marginal effect (average derivative):
@@ -92,6 +100,7 @@
   formula_x <- stats::as.formula(paste(treatment, "~", confounders))
   score <- rep(NA_real_, n)
   x_residual <- rep(NA_real_, n)
+  outcome_residual <- rep(NA_real_, n)
   for (fold in sort(unique(folds))) {
     train <- folds != fold; test <- folds == fold
     model_y <- stats::lm(formula_y, scores[train, , drop = FALSE])
@@ -105,21 +114,27 @@
     high[[treatment]] <- high[[treatment]] + step; low[[treatment]] <- low[[treatment]] - step
     derivative <- (stats::predict(model_y, high) - stats::predict(model_y, low)) / (2 * step)
     fitted_y <- stats::predict(model_y, scores[test, , drop = FALSE])
+    outcome_residual[test] <- scores[[outcome]][test] - fitted_y
     riesz <- (scores[[treatment]][test] - predicted_x) / residual_variance
     score[test] <- derivative + riesz * (scores[[outcome]][test] - fitted_y)
   }
   identification <- .flexible_identification(scores, treatment, x_residual)
-  score <- score[is.finite(score)]; m <- length(score)
+  keep <- is.finite(score) & is.finite(x_residual) & is.finite(outcome_residual)
+  score <- score[keep]; m <- length(score)
+  nuisance_diagnostics <- list(method = "cross_fitted_spline_nuisance",
+    treatment_rmse = .causal_rmse(x_residual[keep]),
+    outcome_rmse = .causal_rmse(outcome_residual[keep]),
+    folds = length(unique(folds)), evaluated_n = m, spline_df = spline_df)
   if (m < 2L) return(list(estimate = NA_real_, se = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
     df = m - spline_df * (length(adjust) + 1L) - 1L,
     identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
-    stable = FALSE))
+    stable = FALSE, nuisance_diagnostics = nuisance_diagnostics))
   estimate <- mean(score); se <- stats::sd(score) / sqrt(m)
   stable <- is.finite(estimate) && is.finite(se) && identification$strength >= .10
   list(estimate = estimate, se = se, ci_low = estimate - 1.96 * se, ci_high = estimate + 1.96 * se,
        df = m - spline_df * (length(adjust) + 1L) - 1L,
        identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
-       stable = stable)
+       stable = stable, nuisance_diagnostics = nuisance_diagnostics)
 }
 
 #' Estimate a declared causal effect on locked construct states
@@ -166,7 +181,12 @@
 #' @param design Optional [causal_design()] for graph and assumption auditing.
 #'   When supplied, a causal label additionally requires an admissible backdoor
 #'   design and all required assumptions to be explicitly declared assumed.
-#' @return An object of class `causal_effect`.
+#' @return An object of class `causal_effect`. It includes an optional
+#'   `design_audit`, an `overlap_diagnostic` with a continuous-treatment
+#'   residual-variance support proxy, and `nuisance_diagnostics` (cross-fitted
+#'   RMSE for flexible estimands; linear fit quality for adjusted linear).
+#'   The support proxy is not a positivity test, and declared assumptions are
+#'   not verified by the function.
 #' @examples
 #' # causal_effect(association, "Satisfaction", "Loyalty",
 #' #   adjust = c("Trust", "PriorLoyalty"),
@@ -231,6 +251,14 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   treatment_r2 <- if (length(adjust)) summary(stats::lm(stats::reformulate(adjust, treatment), scores))$r.squared else 0
   outcome_r2 <- if (length(adjust)) summary(stats::lm(stats::reformulate(adjust, outcome), scores))$r.squared else 0
   identification_strength <- 1 - treatment_r2
+  treatment_nuisance <- if (length(adjust)) stats::lm(stats::reformulate(adjust, treatment), scores) else
+    stats::lm(stats::reformulate(character(0), treatment), scores)
+  outcome_nuisance <- stats::lm(stats::reformulate(c(treatment, adjust), outcome), scores)
+  nuisance_diagnostics <- list(method = "linear_adjustment",
+    adjustment_treatment_r2 = treatment_r2, adjustment_outcome_r2 = outcome_r2,
+    outcome_model_r2 = summary(outcome_nuisance)$r.squared,
+    treatment_rmse = .causal_rmse(stats::residuals(treatment_nuisance)),
+    outcome_rmse = .causal_rmse(stats::residuals(outcome_nuisance)), evaluated_n = nrow(scores))
 
   if (flexible) {
     folds <- association$folds
@@ -244,6 +272,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     adjusted_effect <- fit_flexible$estimate; interval <- c(fit_flexible$ci_low, fit_flexible$ci_high)
     identification_strength <- fit_flexible$identification_strength
     treatment_r2 <- fit_flexible$treatment_r2
+    nuisance_diagnostics <- fit_flexible$nuisance_diagnostics
     disattenuated <- FALSE; stable <- isTRUE(fit_flexible$stable)
     robustness_value <- .robustness_value(fit_flexible$estimate / fit_flexible$se, fit_flexible$df)
     reliability_sensitivity <- NULL
@@ -292,6 +321,13 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   has_order <- !is.null(temporal_order) || !is.null(design)
   estimand_stable <- !flexible || isTRUE(stable)
   design_admissible <- is.null(design) || isTRUE(design_audit$causal_admissible)
+  overlap_status <- if (!is.finite(identification_strength) || identification_strength < .10) "weak" else
+    if (identification_strength < .20) "limited" else "adequate"
+  overlap_diagnostic <- list(
+    method = if (flexible) "cross_fitted_residual_variance_ratio" else
+      "linear_adjustment_residual_variance_ratio",
+    residual_variance_ratio = identification_strength, status = overlap_status,
+    scope = "Continuous-treatment residual variation is a support proxy, not a positivity proof.")
   label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable && design_admissible) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
@@ -303,6 +339,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     bootstrap = eiv_bootstrap, n = nrow(scores), temporal_order_declared = has_order,
     identification_strength = identification_strength, treatment_r2 = treatment_r2, outcome_r2 = outcome_r2,
     robustness_value = robustness_value, reliability_sensitivity = reliability_sensitivity,
+    overlap_diagnostic = overlap_diagnostic, nuisance_diagnostics = nuisance_diagnostics,
     design_audit = design_audit, label = label, status = label), class = "causal_effect")
   result$provenance_record <- .cssem_provenance_association_result("causal_effect", causal_call,
     settings = list(treatment = treatment, outcome = outcome, adjust = as.character(adjust),
@@ -349,6 +386,13 @@ print.causal_effect <- function(x, ...) {
   cat(sprintf("  %s%s  (%s)\n", final_label, format_effect(x$adjusted_effect, x$ci_low, x$ci_high), basis))
   cat("\n  identification strength ", sprintf("%.2f", x$identification_strength),
     " (residual treatment variation after adjustment)\n", sep = "")
+  if (!is.null(x$overlap_diagnostic))
+    cat(sprintf("  support proxy            %s  (%s; not a positivity proof)\n",
+      x$overlap_diagnostic$status, x$overlap_diagnostic$method))
+  if (!is.null(x$nuisance_diagnostics))
+    cat(sprintf("  nuisance diagnostics     %s  (treatment RMSE %.3f; outcome RMSE %.3f)\n",
+      x$nuisance_diagnostics$method, x$nuisance_diagnostics$treatment_rmse,
+      x$nuisance_diagnostics$outcome_rmse))
   if (is.finite(x$robustness_value)) cat(sprintf("  robustness value        %.2f  (an unmeasured confounder explaining %.0f%% of residual variance in both treatment and outcome would null the effect)\n",
     x$robustness_value, 100 * x$robustness_value))
   if (x$identification_strength < .10) cat("  WARNING: treatment is largely explained by the adjustment set; the effect is weakly identified.\n")

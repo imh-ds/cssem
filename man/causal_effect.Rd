@@ -63,7 +63,12 @@ When supplied, a causal label additionally requires an admissible backdoor
 design and all required assumptions to be explicitly declared assumed.}
 }
 \value{
-An object of class \code{causal_effect}.
+An object of class \code{causal_effect}. It includes an optional
+\code{design_audit}, an \code{overlap_diagnostic} with a continuous-treatment
+residual-variance support proxy, and \code{nuisance_diagnostics} (cross-fitted
+RMSE for flexible estimands; linear fit quality for adjusted linear). The
+support proxy is not a positivity test, and declared assumptions are not
+verified by the function.
 }
 \description{
 Estimates the effect of a \code{treatment} construct on an \code{outcome} construct

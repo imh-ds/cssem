@@ -60,6 +60,8 @@ test_that("causal mediation requires a valid graph and mediation assumptions", {
     temporal_order = c("C", "X", "M", "Y"), design = design)
   expect_identical(effect$label, "causal_under_assumptions")
   expect_true(effect$design_audit$causal_admissible)
+  expect_identical(effect$overlap_diagnostic$method, "linear_adjustment_residual_variance_ratio")
+  expect_identical(effect$nuisance_diagnostics$method, "stagewise_linear_r2")
 
   assumptions$no_exposure_induced_mediator_outcome_confounding <- "not_assessed"
   unassessed_design <- causal_design(edges, treatment = "X", outcome = "Y",

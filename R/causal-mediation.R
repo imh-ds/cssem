@@ -58,9 +58,17 @@
   path_constructs <- unique(c(x, mediators, y, adjust))
   values <- if (is.null(reliability)) NA_real_ else reliability[intersect(path_constructs, names(reliability))]
   min_reliability <- if (all(is.na(values))) NA_real_ else min(values, na.rm = TRUE)
+  overlap_status <- if (!is.finite(identification_strength) || identification_strength < .10) "weak" else
+    if (identification_strength < .20) "limited" else "adequate"
   list(identification_strength = identification_strength, treatment_r2 = treatment_r2,
     outcome_r2 = outcome_r2, mediator_r2_min = if (all(is.na(mediator_r2))) NA_real_ else min(mediator_r2, na.rm = TRUE),
-    robustness_value = robustness_value, min_path_reliability = min_reliability)
+    robustness_value = robustness_value, min_path_reliability = min_reliability,
+    overlap_diagnostic = list(method = "linear_adjustment_residual_variance_ratio",
+      residual_variance_ratio = identification_strength, status = overlap_status,
+      scope = "Continuous-treatment residual variation is a support proxy, not a positivity proof."),
+    nuisance_diagnostics = list(method = "stagewise_linear_r2", outcome_r2 = outcome_r2,
+      mediator_r2_min = if (all(is.na(mediator_r2))) NA_real_ else min(mediator_r2, na.rm = TRUE),
+      evaluated_mediators = sum(is.finite(mediator_r2))))
 }
 
 # Validate the order used to earn a causal mediation label against both the
@@ -143,7 +151,10 @@
 #'   auditing. When supplied, a causal label requires an admissible backdoor
 #'   design, all required assumptions, and causal-DAG edges for the analyzed
 #'   treatment-to-outcome paths.
-#' @return An object of class `causal_indirect_effect`.
+#' @return An object of class `causal_indirect_effect`. It includes an optional
+#'   `design_audit`, a continuous-treatment residual-variance support proxy,
+#'   and `stagewise_linear_r2` nuisance diagnostics. The support proxy is not a
+#'   positivity test, and declared assumptions are not verified by the function.
 #' @examples
 #' # causal_indirect_effect(association, x = "Satisfaction", y = "Loyalty",
 #' #   adjust = "Trust", temporal_order = c("Trust", "Satisfaction", "Commitment", "Loyalty"))
@@ -292,6 +303,10 @@ print.causal_indirect_effect <- function(x, ...) {
 
   cat("\n  Causal admissibility panel:\n")
   cat(sprintf("    identification strength  %.2f  (residual treatment variation after adjustment)\n", x$identification_strength))
+  if (!is.null(x$overlap_diagnostic))
+    cat(sprintf("    support proxy            %s  (not a positivity proof)\n", x$overlap_diagnostic$status))
+  if (!is.null(x$nuisance_diagnostics))
+    cat(sprintf("    nuisance diagnostics     %s\n", x$nuisance_diagnostics$method))
   cat(sprintf("    outcome model R2         %.2f\n", x$outcome_r2))
   if (is.finite(x$mediator_r2_min)) cat(sprintf("    mediator model R2 (min)  %.2f\n", x$mediator_r2_min))
   if (is.finite(x$robustness_value)) cat(sprintf("    robustness value (b-path)%.2f  (an unmeasured mediator-outcome confounder explaining %.0f%% of residual variance in both would null the weakest indirect edge)\n",

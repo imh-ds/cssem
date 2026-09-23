@@ -61,6 +61,9 @@ test_that("the DML estimand removes nonlinear confounding a linear adjustment le
   # Analytic orthogonal-score interval.
   expect_true(is.finite(dml$ci_low) && is.finite(dml$ci_high) && dml$ci_low < dml$ci_high)
   expect_true(is.finite(dml$robustness_value) && dml$robustness_value > 0)
+  expect_identical(dml$overlap_diagnostic$method, "cross_fitted_residual_variance_ratio")
+  expect_true(is.finite(dml$nuisance_diagnostics$treatment_rmse))
+  expect_true(is.finite(dml$nuisance_diagnostics$outcome_rmse))
   expect_output(print(dml), "nonlinear confounding")
 })
 
@@ -168,6 +171,9 @@ test_that("a causal effect requires a valid declared design when one is supplied
     temporal_order = c("C", "X", "Y"), design = valid_design)
   expect_identical(valid$label, "causal_under_assumptions")
   expect_true(valid$design_audit$causal_admissible)
+  expect_identical(valid$overlap_diagnostic$method, "linear_adjustment_residual_variance_ratio")
+  expect_identical(valid$nuisance_diagnostics$method, "linear_adjustment")
+  expect_match(valid$overlap_diagnostic$scope, "not a positivity proof")
 
   invalid_design <- causal_design(
     data.frame(from = c("C", "C", "U", "U", "X"),

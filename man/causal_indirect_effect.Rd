@@ -53,7 +53,10 @@ design, all required assumptions, and causal-DAG edges for the analyzed
 treatment-to-outcome paths.}
 }
 \value{
-An object of class \code{causal_indirect_effect}.
+An object of class \code{causal_indirect_effect}. It includes an optional
+\code{design_audit}, a continuous-treatment residual-variance support proxy,
+and \code{stagewise_linear_r2} nuisance diagnostics. The support proxy is not a
+positivity test, and declared assumptions are not verified by the function.
 }
 \description{
 Elevates the disattenuated mediation decomposition of \code{\link[=indirect_effect]{indirect_effect()}} to a
