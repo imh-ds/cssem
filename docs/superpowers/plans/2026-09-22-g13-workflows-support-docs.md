@@ -40,9 +40,9 @@
 - Consumes: exported measurement, fit, missing-data, structural, evidence, prediction, outer-validation, provenance, and optional causal APIs.
 - Produces: an HTML package vignette whose evaluated code can be built from the source package when `knitr` and `rmarkdown` are installed.
 
-- [ ] **Step 1: Create the vignette scaffold** with `\VignetteIndexEntry{A CS-SEM analysis workflow}`, `\VignetteEngine{knitr::rmarkdown}`, setup chunk, and a deterministic data generator using a fixed seed and modest sample size.
-- [ ] **Step 2: Add `knitr` and `rmarkdown` under `Suggests` and set `VignetteBuilder: knitr`** without adding either package to `Imports`.
-- [ ] **Step 3: Add and evaluate the following deterministic workflow** using only package exports. Follow the causal call with prose stating that declared adjustment and temporal order do not verify no unmeasured confounding.
+- [x] **Step 1: Create the vignette scaffold** with `\VignetteIndexEntry{A CS-SEM analysis workflow}`, `\VignetteEngine{knitr::rmarkdown}`, setup chunk, and a deterministic data generator using a fixed seed and modest sample size.
+- [x] **Step 2: Add `knitr` and `rmarkdown` under `Suggests` and set `VignetteBuilder: knitr`** without adding either package to `Imports`.
+- [x] **Step 3: Add and evaluate the following deterministic workflow** using only package exports. Follow the causal call with prose stating that declared adjustment and temporal order do not verify no unmeasured confounding.
 
 ```r
 item5 <- function(x) pmin(pmax(as.integer(round(x) + 3L), 1L), 5L)
@@ -100,12 +100,14 @@ causal_effect(association, treatment = "Trust", outcome = "Loyalty",
 ```
 
 All executable chunks stay evaluated; use `warning=FALSE` only on the fitting chunk if the deterministic low-iteration example emits its expected convergence warning, and retain explanatory text that tells readers how to increase `iterations`.
-- [ ] **Step 4: Render the vignette** and confirm every executable chunk succeeds.
+- [x] **Step 4: Render the vignette** and confirm every executable chunk succeeds.
 
 Run: `Rscript -e "pkgload::load_all('.'); rmarkdown::render('vignettes/cssem-workflow.Rmd', output_file = 'cssem-workflow.html', output_dir = tempdir(), quiet = TRUE)"`
 Expected: render exits successfully into a temporary directory without leaving generated HTML in `vignettes/`.
 
-- [ ] **Step 5: Commit the runnable workflow.**
+- [x] **Step 5: Commit the runnable workflow.**
+
+Ruling: Pandoc was not on `PATH`, but the RStudio-bundled Pandoc 3.4 was available. The render command selected that directory with `rmarkdown::find_pandoc()`; no package download was needed. The first render revealed a capitalization mismatch between the YAML title and vignette index title, which was corrected and rerendered successfully.
 
 ```bash
 git add DESCRIPTION vignettes/cssem-workflow.Rmd

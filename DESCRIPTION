@@ -27,11 +27,14 @@ License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Suggests:
+    knitr,
     lavaan,
+    rmarkdown,
     seminr,
     testthat (>= 3.0.0),
     roxygen2,
     pkgload
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
 RoxygenNote: 7.3.2

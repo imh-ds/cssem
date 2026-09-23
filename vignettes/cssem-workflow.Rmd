@@ -1,0 +1,134 @@
+---
+title: "A CS-SEM analysis workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{A CS-SEM analysis workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(cssem)
+
+item5 <- function(x) pmin(pmax(as.integer(round(x) + 3L), 1L), 5L)
+make_survey_data <- function(n, seed, add_missing = FALSE) {
+  set.seed(seed)
+  trust_state <- stats::rnorm(n)
+  age <- stats::rnorm(n, mean = 40, sd = 8)
+  loyalty_state <- .45 * trust_state + .02 * age + stats::rnorm(n)
+  data <- data.frame(
+    trust_1 = item5(trust_state + stats::rnorm(n, sd = .6)),
+    trust_2 = item5(trust_state + stats::rnorm(n, sd = .7)),
+    trust_time = trust_state + stats::rnorm(n, sd = .5),
+    loyalty_1 = item5(loyalty_state + stats::rnorm(n, sd = .6)),
+    loyalty_2 = item5(loyalty_state + stats::rnorm(n, sd = .7)),
+    age = age
+  )
+  if (add_missing) data$trust_2[seq(5L, n, by = 19L)] <- NA_integer_
+  data
+}
+```
+
+This vignette walks through a small, deterministic study from scale declarations
+to prediction and support checks. It uses simulated records so it can run without
+network access. The sample size and resampling counts are deliberately modest;
+use the study's full design and stronger convergence settings for substantive
+analysis.
+
+## Declare scales and inspect sample coverage
+
+`mixed_items()` combines existing ordinal and continuous item declarations; it
+does not infer scales from the observed values. `partial` missingness lets each
+observed indicator contribute to the respondent's measurement posterior.
+
+```{r fit, warning=FALSE}
+survey_data <- make_survey_data(120L, 2026L, add_missing = TRUE)
+new_data <- make_survey_data(30L, 2027L)
+model <- specify_measurement(
+  Trust = mixed_items(ordinal("trust_1", "trust_2"), continuous("trust_time")),
+  Loyalty = ordinal("loyalty_1", "loyalty_2"),
+  Age = manifest("age"), folds = 3
+)
+fit <- fit_states(model, survey_data, seed = 23, iterations = 6,
+  diagnostics = FALSE, missing_policy = "partial", retain_data = FALSE)
+sample_accounting(fit)
+```
+
+The fit keeps locked construct scores and encoders but omits the training data
+frames. `sample_accounting()` preserves row positions and counts. Functions that
+need original item rows, such as measurement assessment and bootstrap refits,
+require a fit made with `retain_data = TRUE`. Increase `iterations` when the
+measurement engine reports that a construct reached its iteration cap; a
+suppressed warning in this compact example does not imply convergence.
+
+The provenance record keeps the call, resolved options, software versions,
+schema, row positions, and split metadata without embedding observations:
+
+```{r provenance}
+cssem_provenance(fit)
+```
+
+## Fit and inspect the associational structure
+
+Construct states are standardized scores. The declared paths below are
+associational predictive relationships, not automatically causal effects.
+
+```{r association}
+structure <- specify_structure(
+  Loyalty ~ linear(Trust) + linear(Age),
+  order = c("Age", "Trust", "Loyalty")
+)
+association <- associate(fit, structure, structural_repeats = 1,
+  shadow_scope = "temporal", seed = 24)
+effect_ledger(association)
+cssem_provenance(association)
+```
+
+## Contrasts and new-record prediction
+
+The marginal contrast compares the expected outcome at two locked-score values.
+The interval is conditional on the selected structural shape. Prediction scores
+the new records with the fitted measurement encoders and reports the structural
+outcome on the locked-score scale.
+
+```{r prediction}
+contrast <- marginal_contrast(association, "Loyalty", "Trust", values = c(-1, 1),
+  reps = 40, seed = 27)
+contrast
+cssem_provenance(contrast)
+predict(association, new_data, outcomes = "Loyalty")
+```
+
+## Check held-out performance
+
+Outer validation refits measurement and structural selection on each training
+partition. Its `outer_test` metrics refer to held-out records; internal selector
+metrics remain separately labeled and must not be presented as held-out results.
+
+```{r outer-validation}
+splits <- make_splits(survey_data, method = "random", folds = 3, seed = 25)
+outer <- validate_outer(model, structure, survey_data, splits, seed = 26,
+  iterations = 6, diagnostics = FALSE,
+  structural_args = list(structural_repeats = 1, shadow_scope = "temporal"))
+outer
+```
+
+## Optional causal estimand
+
+This call demonstrates the package's declared adjusted-linear estimand. Its
+interpretation requires a defensible temporal order, an adequate adjustment set,
+consistency, positivity, and no unmeasured confounding. The software checks some
+structural and temporal-order constraints, but it cannot verify those study
+assumptions from the data or from the declarations. The result label is not
+evidence that the assumptions hold.
+
+```{r causal}
+causal_effect(association, treatment = "Trust", outcome = "Loyalty",
+  adjust = "Age", estimand = "adjusted_linear", disattenuate = FALSE,
+  temporal_order = c("Age", "Trust", "Loyalty"))
+```
+
+For the estimator's current evidence and explicit boundaries, see
+[`capabilities.md`](../docs/capabilities.md) and the
+[`method specification`](../docs/method-spec.md).
