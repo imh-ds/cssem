@@ -12,6 +12,7 @@ test_that("causal_effect decomposes confounding and attenuation", {
   effect <- causal_effect(association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "Y"), eiv_bootstrap = 60, seed = 11)
   expect_s3_class(effect, "causal_effect")
+  expect_cssem_provenance(effect, "causal_effect")
   # Adjustment removes upward confounding.
   expect_gt(effect$unadjusted, effect$adjusted_effect)
   # Disattenuation increases the adjusted effect relative to the attenuated one.
@@ -19,6 +20,18 @@ test_that("causal_effect decomposes confounding and attenuation", {
   expect_true(is.finite(effect$robustness_value) && effect$robustness_value > 0)
   expect_equal(nrow(effect$reliability_sensitivity), 6L)
   expect_true(is.finite(effect$ci_low) && is.finite(effect$ci_high))
+})
+
+test_that("causal effect provenance links its fitted association", {
+  data <- simulate_states(n = 48, seed = 731, missing = 0)
+  model <- specify_measurement(A = ordinal("a1", "a2"),
+    B = ordinal("b1", "b2"), folds = 3)
+  fit <- fit_states(model, data, seed = 732, iterations = 1, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(B ~ linear(A)),
+    structural_repeats = 1, seed = 733)
+  effect <- causal_effect(association, "A", "B")
+  provenance <- expect_cssem_provenance(effect, "causal_effect", "associate")
+  expect_identical(provenance$parent$association$operation, "associate")
 })
 
 .causal_nonlinear_fixture <- function(n = 4000, seed = 7) {

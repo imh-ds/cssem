@@ -22,6 +22,7 @@ test_that("interventional mediation recovers the indirect effect composites atte
   cm <- causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("C", "X", "M", "Y"))
   expect_s3_class(cm, "causal_indirect_effect")
+  expect_cssem_provenance(cm, "causal_indirect_effect")
   indirect <- cm$summary
   disattenuated <- indirect$disattenuated_effect[indirect$component == "indirect_total"]
   naive <- indirect$naive_effect[indirect$component == "indirect_total"]

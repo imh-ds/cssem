@@ -24,6 +24,7 @@ test_that("conditional_indirect_effect reports conditional effects and the index
   association <- associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
   mm <- conditional_indirect_effect(association, "X", "Y", "W", eiv_bootstrap = 100L, seed = 2)
   expect_s3_class(mm, "conditional_indirect_effect")
+  expect_cssem_provenance(mm, "conditional_indirect_effect", "associate")
   expect_equal(nrow(mm$conditional), 3L)
   expect_true(all(c("indirect", "ci_low", "ci_high") %in% names(mm$conditional)))
   # Indirect effect strengthens with the moderator: positive index, CI above zero.
@@ -51,6 +52,7 @@ test_that("conditional_slopes reports conditional slopes and a Johnson-Neyman re
   association <- associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")
   ss <- conditional_slopes(association, "Y", "M", "W", eiv_bootstrap = 100L, seed = 2)
   expect_s3_class(ss, "conditional_slopes")
+  expect_cssem_provenance(ss, "conditional_slopes", "associate")
   expect_equal(nrow(ss$slopes), 3L)
   expect_true(all(c("slope", "ci_low", "ci_high") %in% names(ss$slopes)))
   # The slope of M on Y increases with the moderator (positive interaction).

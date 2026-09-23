@@ -143,6 +143,7 @@
 causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
                                    temporal_order = NULL, estimand = c("interventional"),
                                    disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  causal_mediation_call <- match.call()
   .preserve_seed()
   estimand <- match.arg(estimand)
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
@@ -207,10 +208,17 @@ causal_indirect_effect <- function(association, x, y, adjust, mediators = NULL,
   has_order <- !is.null(temporal_order)
   label <- if (has_order && panel$identification_strength >= .10) "causal_under_assumptions" else "adjusted_association"
 
-  structure(c(core, list(x = x, y = y, adjust = adjust, mediators = mediators, estimand = estimand,
+  result <- structure(c(core, list(x = x, y = y, adjust = adjust, mediators = mediators, estimand = estimand,
     n = nrow(scores), delta = delta, disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap,
     temporal_order_declared = has_order, label = label, status = label), panel),
     class = "causal_indirect_effect")
+  result$provenance_record <- .cssem_provenance_association_result("causal_indirect_effect",
+    causal_mediation_call,
+    settings = list(x = x, y = y, adjust = as.character(adjust), mediators = as.character(mediators),
+      temporal_order = temporal_order, estimand = estimand,
+      disattenuate = isTRUE(disattenuate), eiv_bootstrap = eiv_bootstrap,
+      delta = delta, seed = seed), association = association, packages = "MASS")
+  result
 }
 
 #' Print an interventional CS-SEM mediation decomposition

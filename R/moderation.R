@@ -134,6 +134,7 @@
 #' @export
 conditional_slopes <- function(association, outcome, predictor, moderator, levels = c(-1, 0, 1),
                                 disattenuate = TRUE, eiv_bootstrap = 0L, johnson_neyman = TRUE, seed = 1L) {
+  slopes_call <- match.call()
   .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
@@ -185,9 +186,15 @@ conditional_slopes <- function(association, outcome, predictor, moderator, level
       interval_basis = "percentile_bootstrap")
   }
 
-  structure(list(association = association, outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
+  result <- structure(list(association = association, outcome = outcome, predictor = predictor, moderator = moderator, levels = levels,
     slopes = slopes, interaction = interaction, disattenuated = disattenuated, bootstrap = eiv_bootstrap,
     johnson_neyman = jn, status = "associational"), class = "conditional_slopes")
+  result$provenance_record <- .cssem_provenance_association_result("conditional_slopes", slopes_call,
+    settings = list(outcome = outcome, predictor = predictor, moderator = moderator,
+      levels = as.numeric(levels), disattenuate = isTRUE(disattenuate),
+      eiv_bootstrap = eiv_bootstrap, johnson_neyman = isTRUE(johnson_neyman), seed = seed),
+    association = association, packages = "MASS")
+  result
 }
 
 #' Print conditional (simple) slopes
@@ -252,6 +259,7 @@ print.conditional_slopes <- function(x, ...) {
 #' @export
 conditional_indirect_effect <- function(association, x, y, moderator, levels = c(-1, 0, 1),
                                       disattenuate = TRUE, eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  moderated_mediation_call <- match.call()
   .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
@@ -316,9 +324,15 @@ conditional_indirect_effect <- function(association, x, y, moderator, levels = c
                      if (is.null(intervals)) NULL else intervals$dis_index, index_use_dis)
   )
 
-  structure(list(association = association, x = x, y = y, moderator = moderator, levels = levels, conditional = conditional, index = index,
+  result <- structure(list(association = association, x = x, y = y, moderator = moderator, levels = levels, conditional = conditional, index = index,
     n = nrow(scores), disattenuated = disattenuated, bootstrap = eiv_bootstrap,
     min_reliability = min_reliability, status = "associational"), class = "conditional_indirect_effect")
+  result$provenance_record <- .cssem_provenance_association_result("conditional_indirect_effect",
+    moderated_mediation_call,
+    settings = list(x = x, y = y, moderator = moderator, levels = as.numeric(levels),
+      disattenuate = isTRUE(disattenuate), eiv_bootstrap = eiv_bootstrap,
+      delta = delta, seed = seed), association = association, packages = "MASS")
+  result
 }
 
 #' Print a moderated mediation decomposition

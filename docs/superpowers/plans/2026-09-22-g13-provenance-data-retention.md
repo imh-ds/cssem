@@ -265,11 +265,13 @@ git commit -m "feat: record provenance for diagnostic results"
 - Consumes: association provenance from Task 2.
 - Produces: records for `indirect_effect`, `causal_effect`, `causal_indirect_effect`, `conditional_slopes`, and `conditional_indirect_effect`.
 
-- [ ] **Step 1: Add failing `expect_cssem_provenance()` assertions** to existing tests on `effect`, `cm`, `med`, `ss`, and `mm`, checking operations `causal_effect`, `causal_indirect_effect`, `indirect_effect`, `conditional_slopes`, and `conditional_indirect_effect` respectively. These existing fixtures often construct association objects directly, so assert the named `association` parent only when present. Add one small real `fit_states()` → `associate()` → `causal_effect()` integration test and assert that it links the stored association provenance.
-- [ ] **Step 2: Run the four owning test files** and confirm the new assertions fail because these result constructors lack provenance.
-- [ ] **Step 3: Attach records containing the declared estimand, adjustments, temporal-order declaration, reliability/correction settings, bootstrap settings, and association parent.** Never encode the output label as proof that causal assumptions are true.
-- [ ] **Step 4: Run the four owning test files and `test-provenance.R`.**
-- [ ] **Step 5: Commit this result family.**
+- [x] **Step 1: Add failing `expect_cssem_provenance()` assertions** to existing tests on `effect`, `cm`, `med`, `ss`, and `mm`, checking operations `causal_effect`, `causal_indirect_effect`, `indirect_effect`, `conditional_slopes`, and `conditional_indirect_effect` respectively. These existing fixtures often construct association objects directly, so assert the named `association` parent only when present. Add one small real `fit_states()` → `associate()` → `causal_effect()` integration test and assert that it links the stored association provenance.
+- [x] **Step 2: Run a representative new real causal integration test** and confirm the provenance assertions fail before implementation.
+- [x] **Step 3: Attach records containing the declared estimand, adjustments, temporal-order declaration, reliability/correction settings, bootstrap settings, and association parent.** Never encode the output label as proof that causal assumptions are true.
+- [x] **Step 4: Run the four owning test files and `test-provenance.R`.** The provenance-specific test passed (23 assertions); all changed provenance assertions passed, and the moderation file passed (60 assertions). The causal, causal-mediation, and mediation files each had one unrelated existing assertion failure: unsupported `info` argument in `expect_lt()`, a path-specific row count mismatch, and an analytic-truth names/attributes mismatch, respectively.
+- [x] **Step 5: Commit this result family.**
+
+Ruling: only the new real causal integration test was used as the red test before implementation; the four complete owner files were run after implementation. Their three unrelated failures are retained as verification caveats and were not expanded into this provenance change.
 
 ```bash
 git add R/causal.R R/causal-mediation.R R/mediation.R R/moderation.R tests/testthat/test-causal.R tests/testthat/test-causal-mediation.R tests/testthat/test-mediation.R tests/testthat/test-moderation.R

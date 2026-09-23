@@ -360,6 +360,7 @@
 #' @export
 indirect_effect <- function(association, x, y, mediators = NULL, disattenuate = TRUE,
                             eiv_bootstrap = 0L, delta = 1, seed = 1L) {
+  mediation_call <- match.call()
   .preserve_seed()
   if (!inherits(association, "cssem_association")) stop("association must be a cssem_association.", call. = FALSE)
   scores <- association$scores
@@ -391,10 +392,15 @@ indirect_effect <- function(association, x, y, mediators = NULL, disattenuate = 
     if (!nrow(core$path_specific)) stop("No mediating path passes only through the requested mediators.", call. = FALSE)
   }
 
-  structure(c(core, list(association = association, x = x, y = y, mediators = mediators,
+  result <- structure(c(core, list(association = association, x = x, y = y, mediators = mediators,
     n = nrow(scores), delta = delta,
     disattenuated = !is.null(reliability), bootstrap = eiv_bootstrap, status = "associational")),
     class = "indirect_effect")
+  result$provenance_record <- .cssem_provenance_association_result("indirect_effect", mediation_call,
+    settings = list(x = x, y = y, mediators = if (is.null(mediators)) NULL else as.character(mediators),
+      disattenuate = isTRUE(disattenuate), eiv_bootstrap = eiv_bootstrap,
+      delta = delta, seed = seed), association = association, packages = "MASS")
+  result
 }
 
 #' Return a tidy mediation effect ledger

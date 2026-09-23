@@ -175,6 +175,7 @@ test_that("public indirect_effect runs end to end through the real pipeline", {
   association <- associate(fit, generated$structure, structural_repeats = 2L, seed = 5, shadow_scope = "temporal")
   med <- indirect_effect(association, "Trust", "Loyalty", eiv_bootstrap = 50L, seed = 5)
   expect_s3_class(med, "indirect_effect")
+  expect_cssem_provenance(med, "indirect_effect", "associate")
   # Trust -> Quality -> Loyalty is the declared mediating path.
   expect_true(nrow(med$path_specific) >= 1L)
   expect_true(all(c("total", "direct", "indirect_total") %in% med$summary$component))

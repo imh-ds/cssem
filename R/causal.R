@@ -175,6 +175,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
                                 estimand = c("adjusted_linear", "adjusted_dml", "adjusted_ame"),
                                 temporal_order = NULL, disattenuate = TRUE, eiv_bootstrap = 0L,
                                 reliability_grid = c(.5, .6, .7, .8, .9, 1), spline_df = 5L, seed = 1L) {
+  causal_call <- match.call()
   .preserve_seed()
   estimand <- match.arg(estimand)
   flexible <- estimand %in% c("adjusted_dml", "adjusted_ame")
@@ -270,7 +271,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
 
-  structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
+  result <- structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
     association = association,
     claim_type = claim_type, adjusted_mediators = adjusted_mediators,
     unadjusted = unadjusted, adjusted_naive = adjusted_naive, adjusted_effect = adjusted_effect,
@@ -279,6 +280,13 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     identification_strength = identification_strength, treatment_r2 = treatment_r2, outcome_r2 = outcome_r2,
     robustness_value = robustness_value, reliability_sensitivity = reliability_sensitivity,
     label = label, status = label), class = "causal_effect")
+  result$provenance_record <- .cssem_provenance_association_result("causal_effect", causal_call,
+    settings = list(treatment = treatment, outcome = outcome, adjust = as.character(adjust),
+      estimand = estimand, temporal_order = temporal_order, disattenuate = isTRUE(disattenuate),
+      eiv_bootstrap = eiv_bootstrap, reliability_grid = as.numeric(reliability_grid),
+      spline_df = spline_df, seed = seed), association = association,
+    packages = c("MASS", "splines"))
+  result
 }
 
 #' Print a declared causal effect

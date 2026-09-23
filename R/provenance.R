@@ -46,6 +46,31 @@
   as.call(parts)
 }
 
+.cssem_provenance_association_result <- function(operation, call, settings, association,
+                                                 packages = character()) {
+  association_record <- association$provenance_record
+  parent <- if (inherits(association_record, "cssem_provenance"))
+    list(association = association_record) else list()
+  input <- if (!is.null(association_record$input)) association_record$input else {
+    fit <- association$fit
+    fit_record <- if (is.null(fit)) NULL else fit$provenance_record
+    if (!is.null(fit_record$input)) fit_record$input else {
+      source_data <- if (!is.null(fit$input_data)) fit$input_data else fit$data
+      row_ids <- if (!is.null(association$row_ids)) as.integer(association$row_ids) else
+        if (!is.null(fit$row_ids)) as.integer(fit$row_ids) else NULL
+      if (is.data.frame(source_data)) {
+        .cssem_provenance_input_summary(source_data, retained_rows = row_ids)
+      } else if (is.data.frame(association$scores)) {
+        summary <- .cssem_provenance_input_summary(association$scores)
+        summary$source <- "locked_scores"
+        summary
+      } else .cssem_provenance_input_summary()
+    }
+  }
+  .cssem_provenance_record(operation, .cssem_provenance_call(call, "association"),
+    settings = settings, input = input, parent = parent, packages = packages)
+}
+
 .cssem_provenance_input_summary <- function(data = NULL, retained_rows = NULL,
                                             split_ids = NULL) {
   if (is.null(data)) {
