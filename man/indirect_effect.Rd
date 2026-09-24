@@ -47,7 +47,12 @@ components, plus one path-specific indirect effect for every directed path
 from \code{x} to \code{y} declared in the association's structure. Single, parallel, and
 serial mediation are handled uniformly: effects are obtained by simulating an
 \code{x} shift and propagating it through the fitted construct-level effect models,
-so the decomposition is correct for nonlinear edges, not only linear paths.
+so nonlinear edges are handled, not only linear paths. Each shifted mediator
+is propagated at its fitted conditional mean; when a downstream model is
+nonlinear in that mediator, this plug-in approximation does not average over
+the mediator's residual distribution and can differ from the interventional
+effect. For linear (and additive-linear) mediator-outcome models the two
+coincide.
 }
 \details{
 Linear and monotone edges are disattenuated with the same errors-in-variables

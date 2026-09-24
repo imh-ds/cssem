@@ -136,7 +136,10 @@
 #' causal-admissibility panel. A `causal_under_assumptions` label additionally
 #' requires a declared `temporal_order`; otherwise the effect is reported as an
 #' adjusted association. Exposure-induced mediator-outcome confounding and
-#' mediator interactions are not yet modeled.
+#' mediator interactions are not yet modeled. Mediators are propagated at their
+#' fitted conditional means, so an outcome model that is nonlinear in a mediator
+#' yields a plug-in approximation rather than an integral over the mediator's
+#' residual distribution.
 #' An optional causal design adds a backdoor audit, checks that every analyzed
 #' treatment-to-outcome path is represented by causal DAG arrows, and requires
 #' an explicit status for exposure-induced mediator-outcome confounding. These

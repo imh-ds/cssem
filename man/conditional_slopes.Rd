@@ -46,8 +46,9 @@ Reports the slope of \code{predictor} on \code{outcome} at levels of a \code{mod
 (\code{slope(w) = b_predictor + b_interaction * w}), with bootstrap intervals and a
 Johnson-Neyman region: the range of the moderator over which the conditional
 slope is distinguishable from zero. The moderator must appear in a declared
-\code{predictor}-by-\code{moderator} interaction on the outcome. The focal main effect is
-disattenuated; the interaction term is treated as observed.
+\code{predictor}-by-\code{moderator} interaction on the outcome. The focal main effect
+and interaction term are disattenuated; the interaction uses the product of
+the constituent construct reliabilities.
 }
 \examples{
 # conditional_slopes(association, "Y", "M", "W", eiv_bootstrap = 500)

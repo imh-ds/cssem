@@ -47,7 +47,7 @@ intervals. Zero (default) omits intervals.}
 
 \item{seed}{Bootstrap seed.}
 
-\item{design}{Optional \code{\link{causal_design}()} for graph and mediation-assumption
+\item{design}{Optional \code{\link[=causal_design]{causal_design()}} for graph and mediation-assumption
 auditing. When supplied, a causal label requires an admissible backdoor
 design, all required assumptions, and causal-DAG edges for the analyzed
 treatment-to-outcome paths.}
@@ -76,7 +76,14 @@ treatment (a post-treatment adjustment would bias the effect), and reports a
 causal-admissibility panel. A \code{causal_under_assumptions} label additionally
 requires a declared \code{temporal_order}; otherwise the effect is reported as an
 adjusted association. Exposure-induced mediator-outcome confounding and
-mediator interactions are not yet modeled.
+mediator interactions are not yet modeled. Mediators are propagated at their
+fitted conditional means, so an outcome model that is nonlinear in a mediator
+yields a plug-in approximation rather than an integral over the mediator's
+residual distribution.
+An optional causal design adds a backdoor audit, checks that every analyzed
+treatment-to-outcome path is represented by causal DAG arrows, and requires
+an explicit status for exposure-induced mediator-outcome confounding. These
+declarations are assumptions; the function cannot verify them from data.
 }
 \examples{
 # causal_indirect_effect(association, x = "Satisfaction", y = "Loyalty",
