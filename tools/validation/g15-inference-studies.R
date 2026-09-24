@@ -3,6 +3,7 @@
 # used by Rscript (set R_LIBS_USER when the package is installed locally):
 #   Rscript tools/validation/g15-inference-studies.R --tier=screening
 #   Rscript tools/validation/g15-inference-studies.R --tier=confirmation
+#   Rscript tools/validation/g15-inference-studies.R --tier=confirmation --shard=1 --shards=20
 # Confirmation is intentionally a long run (500 outer x 199 inner replicates).
 
 if (!file.exists("DESCRIPTION")) {
@@ -16,7 +17,8 @@ if (!"study_spec" %in% getNamespaceExports("cssem")) {
 }
 
 .g15_parse_args <- function(args) {
-  values <- list(tier = "screening", reps = NULL, inner_reps = NULL, workers = 1L)
+  values <- list(tier = "screening", reps = NULL, inner_reps = NULL,
+    workers = 1L, shard = 1L, shards = 1L)
   for (arg in args) {
     pieces <- strsplit(sub("^--", "", arg), "=", fixed = TRUE)[[1L]]
     if (length(pieces) != 2L || !pieces[[1L]] %in% names(values))
@@ -30,17 +32,25 @@ if (!"study_spec" %in% getNamespaceExports("cssem")) {
   values$reps <- as.integer(if (is.null(values$reps)) defaults[["reps"]] else values$reps)
   values$inner_reps <- as.integer(if (is.null(values$inner_reps)) defaults[["inner_reps"]] else values$inner_reps)
   values$workers <- as.integer(values$workers)
-  if (anyNA(c(values$reps, values$inner_reps, values$workers)) ||
-      any(c(values$reps, values$inner_reps, values$workers) < 1L))
-    stop("reps, inner_reps, and workers must be positive integers.", call. = FALSE)
+  values$shard <- as.integer(values$shard)
+  values$shards <- as.integer(values$shards)
+  if (anyNA(c(values$reps, values$inner_reps, values$workers,
+      values$shard, values$shards)) ||
+      any(c(values$reps, values$inner_reps, values$workers,
+        values$shard, values$shards) < 1L))
+    stop("reps, inner_reps, workers, shard, and shards must be positive integers.", call. = FALSE)
+  if (values$shard > values$shards) stop("shard must be between 1 and shards.", call. = FALSE)
+  if (values$shards > 1L && values$tier != "confirmation")
+    stop("only the confirmation tier can be sharded.", call. = FALSE)
   values
 }
 
 .g15_config <- .g15_parse_args(commandArgs(trailingOnly = TRUE))
 .g15_parent_pid <- Sys.getpid()
-.g15_output_dir <- file.path("tests", "internal", "validation_results")
+.g15_output_dir <- Sys.getenv("CSSEM_G15_OUTDIR",
+  unset = file.path("tests", "internal", "validation_results"))
 dir.create(.g15_output_dir, recursive = TRUE, showWarnings = FALSE)
-.g15_run_id <- as.character(.g15_parent_pid)
+.g15_run_id <- sprintf("%d-shard-%02d", .g15_parent_pid, .g15_config$shard)
 Sys.setenv(CSSEM_G15_RUN_ID = .g15_run_id,
   CSSEM_G15_INNER_REPS = .g15_config$inner_reps,
   CSSEM_G15_LEVEL = .95,
@@ -209,7 +219,8 @@ Sys.setenv(CSSEM_G15_RUN_ID = .g15_run_id,
     repeat_successful = audit$repeat_successful,
     repeat_selection_changes = audit$repeat_selection_changes,
     stringsAsFactors = FALSE)
-  audit_dir <- file.path(getwd(), "tests", "internal", "validation_results")
+  audit_dir <- Sys.getenv("CSSEM_G15_OUTDIR",
+    unset = file.path(getwd(), "tests", "internal", "validation_results"))
   dir.create(audit_dir, recursive = TRUE, showWarnings = FALSE)
   run_id <- Sys.getenv("CSSEM_G15_RUN_ID", unset = "unknown")
   audit_path <- file.path(audit_dir, sprintf("g15-inference-audit-%s-%d.csv",
@@ -236,6 +247,34 @@ Sys.setenv(CSSEM_G15_RUN_ID = .g15_run_id,
       coverage_tolerance = .g15_thresholds$coverage_tolerance,
       unconditional_failure_max = .g15_thresholds$unconditional_failure_max,
       minimum_inner_bootstrap_success = .g15_thresholds$minimum_inner_bootstrap_success))
+  if (.g15_config$shards > 1L) {
+    simulate_shard <- getFromNamespace(".study_simulate_shard", "cssem")
+    simulation <- simulate_shard(spec, reps = .g15_config$reps,
+      seed = .g15_seed, workers = .g15_config$workers,
+      shard = .g15_config$shard, shards = .g15_config$shards)
+    audit_paths <- list.files(.g15_output_dir, pattern = sprintf(
+      "^g15-inference-audit-%s-[0-9]+\\.csv$", .g15_run_id), full.names = TRUE)
+    audit_table <- if (length(audit_paths)) do.call(rbind, lapply(audit_paths,
+      utils::read.csv, stringsAsFactors = FALSE)) else data.frame()
+    if (length(audit_paths)) unlink(audit_paths)
+    shard_path <- file.path(.g15_output_dir, sprintf(
+      "g15-inference-confirmation-shard-%02d.rds", .g15_config$shard))
+    provenance <- list(
+      R_version = R.version.string,
+      cssem_version = as.character(utils::packageVersion("cssem")),
+      RNGkind = RNGkind(),
+      operating_system = unname(Sys.info()[["sysname"]]),
+      workers_requested = .g15_config$workers
+    )
+    saveRDS(list(simulation = simulation, diagnostics = audit_table,
+      provenance = provenance), shard_path)
+    message(sprintf("Saved confirmation shard %d/%d: %d outer replications per scenario, %d inner draws, %d workers.",
+      .g15_config$shard, .g15_config$shards, .g15_config$reps,
+      .g15_config$inner_reps, .g15_config$workers))
+    message(sprintf("Shard artifact: %s", shard_path))
+    return(invisible(shard_path))
+  }
+
   simulation <- cssem::simulate_study(spec, reps = .g15_config$reps,
     seed = .g15_seed, workers = .g15_config$workers)
   summary <- cssem::summarize_study(simulation)
