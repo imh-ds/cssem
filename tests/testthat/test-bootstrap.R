@@ -139,3 +139,25 @@ test_that("cluster bootstrap is deterministic and supports measurement refits", 
   expect_true(all(first$replicates$status == "success"))
   expect_true(any(grepl("cluster_resampling_only", capture.output(print(first)), fixed = TRUE)))
 })
+
+test_that("row-bootstrap measurement refits keep duplicated rows in one fold", {
+  # Regression: row resampling with refit = "measurement" drew fresh random
+  # folds on the resampled data, so copies of one respondent landed in
+  # different measurement folds and were scored by encoders trained on a
+  # copy of themselves.
+  set.seed(62)
+  n <- 90
+  z <- rnorm(n)
+  item <- function() pmin(pmax(round(z + rnorm(n)) + 3, 1), 5)
+  data <- data.frame(a1 = item(), a2 = item(), a3 = item())
+  fit <- fit_states(specify_measurement(A = ordinal("a1", "a2", "a3"), folds = 3),
+    data, seed = 4, iterations = 2, diagnostics = FALSE)
+  statistic <- function(context) {
+    if (context$replicate == 0L) return(c(split_rows = 0))
+    c(split_rows = sum(tapply(context$fit$folds, context$indices,
+      function(folds) length(unique(folds)) > 1L)))
+  }
+  boot <- suppressWarnings(bootstrap_model(fit, statistic, reps = 3, seed = 5, refit = "measurement"))
+  expect_equal(boot$successful_replicates, 3L)
+  expect_true(all(boot$draws[, "split_rows"] == 0))
+})

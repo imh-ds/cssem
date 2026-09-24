@@ -126,13 +126,17 @@
     scores <- fit$locked_scores[indices, , drop = FALSE]
   } else {
     refit_spec <- .bootstrap_measurement_split(fit, indices, settings)
+    # Without cluster labels, group a row bootstrap's duplicates by source
+    # row so no respondent's copy is scored by an encoder trained on another
+    # copy of the same respondent.
+    refit_groups <- if (is.null(source_cluster_ids)) paste0("row_", indices) else source_cluster_ids
     scored_fit <- do.call(.fit_states_quiet, c(list(
       model = refit_spec$model, data = raw, seed = seed, draws = 0L,
       iterations = settings$iterations, tolerance = settings$tolerance,
       quadrature = settings$quadrature, diagnostics = FALSE,
       preset = settings$preset, missing_policy = settings$missing_policy,
       split = refit_spec$split,
-      cluster = source_cluster_ids, design = settings$design), list()))
+      cluster = refit_groups, design = settings$design), list()))
     scores <- scored_fit$locked_scores
   }
   list(fit = scored_fit, scores = scores, data = raw, indices = indices,
