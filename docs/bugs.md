@@ -543,12 +543,21 @@ with the same `active` edge set as the shifted arm. This removes the observed-
 versus-fitted mediator substitution from the finite-difference contrast and is
 used by ordinary, conditional, causal, and bootstrap mediation paths. The fix
 does not claim that conditional-mean propagation integrates nonlinear mediator
-residuals; that methodological limitation remains documented in A10.
+residuals. That methodological limitation is now stated in the
+`indirect_effect()` and `causal_indirect_effect()` help pages (`55f13df`), and
+the A10 validation target is built to detect it.
 
-**Regression checks:** zero-shift consistency before division; convergence to a
-finite derivative as `delta` shrinks; analytic linear products; independently
-computed nonlinear intervention contrasts with noisy mediators. Include both
-moderation and causal wrappers, and regenerate affected validation outputs.
+**Regression checks:** the focused test compares the decomposition with the
+same-active-set finite difference, so it guards the baseline but is not an
+independent correctness check. Independent nonlinear coverage comes from the A10
+residual-preserving target (`da7a1e1`), whose cubic-outcome test shows the
+plug-in engine departs from the analytic contrast. Still outstanding:
+convergence as `delta` shrinks, moderation- and causal-wrapper cases, and
+regeneration of affected validation outputs.
+
+**Review note:** in a nonlinear outcome model the direct effect is evaluated at
+observed mediators while the total uses fitted mediators, so `total - direct`
+mixes the two bases. This is part of the same conditional-mean limitation.
 
 ### [x] A2. Causal mediation accepts contradictory temporal declarations — fixed in `eba96d5`
 
@@ -573,9 +582,20 @@ caller order with the canonical order used by propagation. Contradictions now
 error before a causal label can be assigned. The valid canonical-order case
 continues to return `causal_under_assumptions`.
 
-**Regression checks:** reject a mediator preceding treatment, a mediator after
-outcome, an adjuster following treatment, and conflicts with the structure;
-retain valid parallel and serial orders.
+**Follow-up (`d04b72c`):** the canonical comparison was too strict when the
+structure had no explicit `order`. The derived order lists parentless constructs
+in data-column order, so with columns `X, C, M, Y` the correct declaration
+`C, X, M, Y` was rejected as contradicting the structure, and `X, C, M, Y` was
+rejected for adjusting after treatment. No order passed, so a causal label was
+unreachable for a valid design. An explicit structure order is still matched
+exactly; a derived order now binds only through declared ancestry. Propagation
+depends on nothing else.
+
+**Regression checks:** the tests reject a mediator preceding treatment, a
+mediator after outcome, an adjuster following treatment, and a conflict with the
+structure. A derived-order structure accepts `C, X, M, Y` with a causal label and
+still rejects a mediator before treatment. Valid parallel and serial orders are
+not yet covered by a dedicated test.
 
 ### [x] A3. A mediator subset bypasses adjustment checks for included paths — fixed in `dc21536`
 
@@ -598,9 +618,11 @@ selection. The admissibility panel uses the same all-path scope as the causal
 core, so a display subset cannot weaken the gate or understate diagnostics.
 
 **Regression checks:** the above structure now errors because `C` is not a
-declared predictor of `M2`; adding `C` to `M2` permits the call. The focused
-test confirms the valid result retains both declared paths; the source-level
-probe confirms the panel describes the same all-path estimand.
+declared predictor of `M2`; adding `C` to `M2` permits the call. Total, direct,
+and indirect effects and the admissibility panel cover both declared paths.
+Since `02c4617`, the returned `path_specific` table is filtered to the selected
+`mediators`, matching `indirect_effect()`, so the valid `mediators = "M1"` call
+shows only the `M1` path row. The focused test asserts that single row.
 
 ### [x] A4. Flexible causal identification uses a linear treatment diagnostic — fixed in `39b777f`, label gate tightened in `6e15296`
 
@@ -690,6 +712,9 @@ behavior is preserved.
 numeric-string fractional inputs; valid integer codes and missing values still
 score. Existing factor-label and unseen-category checks remain in place.
 
+**Review note (open, low):** whole-number codes outside the integer range (for
+example `3e10`) still become `NA` in `as.integer()` with only a coercion warning.
+
 ### [x] A7. Continuous and manifest factors silently become level positions — fixed in `89e9215`
 
 **Where:** [R/encoder.R:35](../R/encoder.R#L35), shared numeric conversion used by `.prepare_item()`,
@@ -716,6 +741,11 @@ scoring.
 values; nonnumeric labels, malformed strings, and non-finite values error; valid
 numeric controls and manifest scoring remain unchanged.
 
+**Review note (policy decision):** character inputs containing `""` or the
+literal string `"NA"` now raise an error in continuous and manifest columns
+instead of becoming missing values. Keep this strict contract, or treat those
+two strings as missing, deliberately.
+
 ### [x] A8. Interaction corrections disappear from structural reports — fixed in `612fe88`
 
 **Where:** [R/structure.R:556](../R/structure.R#L556), `.corrected_effects()`;
@@ -741,7 +771,9 @@ interaction term, rather than a universal validity guarantee.
 **Regression checks:** the structural interaction estimate and interval are
 finite and match `.eiv_coefficients()`, and the reported interaction reliability
 equals the constituent product. Existing moderation tests continue to cover
-simple slopes and swapped interaction names.
+simple slopes and swapped interaction names. The `conditional_slopes()` help
+page was regenerated in `55f13df`; it previously still said the interaction
+term was treated as observed.
 
 ### [x] A9. Weak causal effects print the wrong reason for their label — fixed in `e4de3b4`
 
@@ -764,7 +796,12 @@ undeclared effect retains the no-temporal-order explanation.
 **Regression checks:** declared-but-weak, undeclared, and adequately identified
 cases print the actual reason consistently with routing and reporting.
 
-### [x] A10. Mediation validation shares its oracle with the estimator — fixed in `b35754b`
+**Review note (open, low):** a flexible estimand can be labeled
+`adjusted_association` because its estimate or standard error is non-finite
+while strength is at least `.10`. It then prints "weak identification" with a
+strength that is not weak.
+
+### [x] A10. Mediation validation shares its oracle with the estimator — fixed in `b35754b`, corrected in `7b57d6c` and `da7a1e1`
 
 **Where:** [R/mediation-validation.R:138](../R/mediation-validation.R#L138),
 `.mediation_truth()`; [R/moderation-validation.R:16](../R/moderation-validation.R#L16),
@@ -780,23 +817,50 @@ establishes consistent definitions, not independent methodological correctness.
 **Resolution:** linear mediation validation now computes an independent
 latent-state target from separately fitted edge coefficients and directed-path
 products. Moderated mediation uses a separately fitted interaction model for
-the conditional indirect effect. Smooth mediation uses a separately
-implemented intervention integration path. The former propagation results are
-retained as explicitly named sample oracles, and each validation result now
-reports both bias against the independent target and error against that sample
-oracle.
+the conditional indirect effect. The former propagation results are retained as
+explicitly named sample oracles, and each validation result reports both bias
+against the independent target and error against that sample oracle.
+
+**Follow-up review:** the original patch had three defects.
+
+- Its analytic-truth test failed on metadata alone: an unnamed vector that kept
+  its `method` attribute was compared with a named one. The assertion was fixed
+  in `7b57d6c`.
+- The smooth "intervention integral" was neither reachable nor independent.
+  `.mediation_structure()` treated `edge_shape = "smooth"` as `auto`, so the
+  target fitted linear models and reproduced the sample oracle to every digit.
+  Its propagation also repeated the engine's conditional-mean plug-in, so it
+  could not detect that approximation.
+- The moderated target used `else if`, silently dropping the a-path interaction
+  whenever both paths were moderated.
+
+In `da7a1e1`, the smooth structure declares smooth edge policies. The nonlinear
+target keeps each unit's structural residual: a shifted node is its fitted value
+at the shifted inputs plus its own residual. That is the unit counterfactual of
+an additive-noise model, averaged over the empirical residual distribution. The
+moderated target multiplies both conditional path slopes.
 
 **Regression checks:** analytic path products are compared with independently
-fit linear models; the smooth branch returns an independently integrated target;
-moderated interaction products are checked at each moderator level; and the
-validation outputs expose the target method, sample oracle, and both error
-bases. Source probes cover noisy latent mediation, nonlinear integration, and
-moderated interaction data.
+fitted linear models. On a cubic-outcome mediation, the residual-preserving
+target stays within 10% of the analytic contrast (observed 1.36 vs 1.42), while
+the plug-in engine is more than 25% off (0.84). This demonstrates that the target
+can detect the conditional-mean limitation. Moderated conditional effects are
+checked at each moderator level, including a structure with both paths
+moderated. The validation outputs expose the target method, sample oracle, and
+both error bases.
+
+**Scope:** the validation grids still generate only linear latent data, so no
+current grid exercises the nonlinear target. The targets are sample-level
+quantities fitted on latent states, not population parameters.
 
 ## Follow-up priorities
 
 A1–A10 are patched, but their focused tests should remain part of release
-verification. Carry forward H3/H4's disclosures. The repository's
+verification. The follow-up review (`7b57d6c`, `d04b72c`, `da7a1e1`, `55f13df`)
+corrected A2 and A10 and documented the conditional-mean mediation limitation.
+It left the low-severity notes under A6, A7, and A9 open, along with the
+outstanding A1 checks. A nonlinear mediation data-generating scenario is still
+needed before the residual-preserving target validates anything in the grids. Carry forward H3/H4's disclosures. The repository's
 method notes also need synchronization with the current selector (Holm-adjusted
 curvature testing and the relative-gain floor), but were not edited here.
 
