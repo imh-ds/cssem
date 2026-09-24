@@ -14,7 +14,10 @@ validate_causal_design(design, adjust = NULL,
 set stored in \code{design}.}
 
 \item{estimand}{Either \code{"effect"} or \code{"mediation"}. Mediation also requires
-\code{no_exposure_induced_mediator_outcome_confounding} to be declared assumed.}
+\code{no_exposure_induced_mediator_outcome_confounding} to be declared assumed,
+and each mediator on a causal treatment-to-outcome path to be d-separated
+from the outcome given the treatment, the adjustment set, and upstream mediators
+(the \code{mediator_outcome_backdoor} check).}
 }
 \value{
 An object of class \code{causal_design_audit} with graph checks, assumption

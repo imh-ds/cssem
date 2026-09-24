@@ -11,4 +11,4 @@
 \item{alignment}{Optional named construct map or observed-row alignment data frame.}
 }
 \value{A \code{cssem_model_comparison} object with paired per-partition differences and intervals.}
-\description{Comparisons require identical partition row IDs, observations, score bases, target availability, and held-out metric scope unless an explicit alignment is supplied. The function does not compare likelihood, AIC/BIC, or global fit.}
+\description{Comparisons require identical partition row IDs, observations, outcome score bases (the indicators and scales of each compared outcome), target availability, and held-out metric scope unless an explicit alignment is supplied; the compared models' predictor sets may differ. The partition-bootstrap interval treats overlapping outer partitions as independent, so it is reported with \code{interval_status = "descriptive_uncalibrated"} rather than as a calibrated confidence interval. The function does not compare likelihood, AIC/BIC, or global fit.}
