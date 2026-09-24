@@ -103,9 +103,8 @@
   seen
 }
 
-.causal_backdoor_separated <- function(design, adjust) {
-  treatment <- design$treatment
-  outcome <- design$outcome
+.causal_backdoor_separated <- function(design, adjust, treatment = design$treatment,
+                                       outcome = design$outcome) {
   # The backdoor graph removes all arrows out of treatment before checking
   # d-separation. Associational links are not interpreted as DAG arrows.
   causal <- design$edges[design$edges$type == "causal" &
@@ -137,6 +136,25 @@
     frontier <- c(frontier, setdiff(adjacency[[current]], c(visited, conditioned)))
   }
   !outcome %in% visited
+}
+
+# Mediation additionally needs each mediator-outcome relation to be
+# unconfounded given the treatment, the adjustment set, and the mediators that
+# precede it on a causal path. Mediators are the causal-DAG nodes lying on a
+# directed treatment -> outcome path. Returns the mediators with an open
+# backdoor path to the outcome.
+.causal_mediator_open_backdoors <- function(design, adjust) {
+  treatment <- design$treatment; outcome <- design$outcome
+  mediators <- setdiff(intersect(.causal_descendants(design$edges, treatment),
+    .causal_ancestors(design$edges, outcome)), c(treatment, outcome))
+  open <- character(0)
+  for (mediator in mediators) {
+    upstream <- intersect(setdiff(.causal_ancestors(design$edges, mediator), mediator), mediators)
+    conditioned <- unique(c(treatment, adjust, upstream))
+    if (!.causal_backdoor_separated(design, conditioned, treatment = mediator, outcome = outcome))
+      open <- c(open, mediator)
+  }
+  open
 }
 
 #' Declare a causal graph, adjustment set, and identification assumptions
@@ -226,7 +244,10 @@ causal_design <- function(edges, treatment, outcome, adjust = character(0),
 #' @param adjust Optional alternative adjustment set to audit. Defaults to the
 #'   set stored in design.
 #' @param estimand Either "effect" or "mediation". Mediation also requires
-#'   no_exposure_induced_mediator_outcome_confounding to be declared assumed.
+#'   no_exposure_induced_mediator_outcome_confounding to be declared assumed,
+#'   and each mediator on a causal treatment -> outcome path to be d-separated
+#'   from the outcome given the treatment, the adjustment set, and upstream
+#'   mediators.
 #' @return An object of class causal_design_audit with graph checks, assumption
 #'   states, and separate valid and causal_admissible results.
 #' @examples
@@ -252,16 +273,26 @@ validate_causal_design <- function(design, adjust = NULL, estimand = c("effect",
   assumption_rows <- assumptions[match(required_assumptions, assumptions$assumption), , drop = FALSE]
   assumption_rows$required_for <- estimand
   assumption_rows$passed <- assumption_rows$status == "assumed"
+  mediation <- identical(estimand, "mediation")
+  open_mediators <- if (mediation) .causal_mediator_open_backdoors(design, adjust) else character(0)
+  mediator_blocked <- !length(open_mediators)
 
   checks <- data.frame(
     check = c("acyclic_causal_graph", "no_post_treatment_adjustment", "backdoor_adjustment",
+      if (mediation) "mediator_outcome_backdoor",
       paste0(required_assumptions, "_assumption")),
-    passed = c(TRUE, no_post_treatment, backdoor_blocked, assumption_rows$passed),
+    passed = c(TRUE, no_post_treatment, backdoor_blocked, if (mediation) mediator_blocked,
+      assumption_rows$passed),
     details = c("Causal edges are acyclic; associational links are excluded from DAG traversal.",
       if (no_post_treatment) "No adjusted construct is a descendant of treatment." else
         sprintf("Post-treatment adjustment detected: %s.", paste(intersect(adjust, descendants), collapse = ", ")),
       if (backdoor_blocked) "The adjustment set d-separates treatment and outcome in the backdoor graph." else
         "An open backdoor path remains under the declared causal DAG.",
+      if (mediation) {
+        if (mediator_blocked) "Every mediator-outcome relation is d-separated given treatment, adjustment, and upstream mediators." else
+          sprintf("Open mediator-outcome backdoor path under the declared causal DAG for: %s.",
+            paste(open_mediators, collapse = ", "))
+      },
       vapply(seq_len(nrow(assumption_rows)), function(i) {
         status <- assumption_rows$status[[i]]
         if (status == "assumed") "Declared assumed; not verified by data." else
@@ -269,7 +300,7 @@ validate_causal_design <- function(design, adjust = NULL, estimand = c("effect",
       }, character(1))),
     stringsAsFactors = FALSE)
   valid <- checks$passed[checks$check == "acyclic_causal_graph"]
-  adjustment_valid <- no_post_treatment && backdoor_blocked
+  adjustment_valid <- no_post_treatment && backdoor_blocked && mediator_blocked
   structure(list(valid = valid, causal_admissible = valid && adjustment_valid && all(assumption_rows$passed),
     adjustment_valid = adjustment_valid,
     estimand = estimand, treatment = design$treatment, outcome = design$outcome,

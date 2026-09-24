@@ -98,3 +98,28 @@ test_that("causal design requires an acyclic causal graph and explicit assumptio
   expect_false(audit$causal_admissible)
   expect_true(all(audit$assumptions$status == "not_assessed"))
 })
+
+test_that("mediation audits require blocked mediator-outcome backdoors", {
+  # Regression: the mediation audit checked only the treatment-outcome
+  # backdoor, so a declared U -> M, U -> Y confounder left unadjusted still
+  # produced a causal-admissible design.
+  assumed <- stats::setNames(rep(list("assumed"), 6), c("consistency",
+    "no_unmeasured_confounding", "positivity", "measurement_validity",
+    "temporal_order", "no_exposure_induced_mediator_outcome_confounding"))
+  edges <- data.frame(from = c("C", "C", "C", "X", "X", "M", "U", "U"),
+    to = c("X", "M", "Y", "M", "Y", "Y", "M", "Y"))
+  confounded <- validate_causal_design(causal_design(edges, "X", "Y", adjust = "C",
+    assumptions = assumed), estimand = "mediation")
+  expect_false(confounded$checks$passed[confounded$checks$check == "mediator_outcome_backdoor"])
+  expect_false(confounded$causal_admissible)
+  expect_true(validate_causal_design(causal_design(edges, "X", "Y", adjust = "C",
+    assumptions = assumed))$causal_admissible)
+
+  blocked <- validate_causal_design(causal_design(edges, "X", "Y", adjust = c("C", "U"),
+    assumptions = assumed), estimand = "mediation")
+  expect_true(blocked$causal_admissible)
+
+  serial <- data.frame(from = c("C", "C", "X", "M1", "M2", "X"), to = c("X", "Y", "M1", "M2", "Y", "Y"))
+  expect_true(validate_causal_design(causal_design(serial, "X", "Y", adjust = "C",
+    assumptions = assumed), estimand = "mediation")$causal_admissible)
+})
