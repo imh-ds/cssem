@@ -70,3 +70,20 @@ test_that("measurement assessment reports scale-aware validity diagnostics", {
   expect_true(is.data.frame(assessment$item_score_correlations))
   expect_true(is.data.frame(assessment$collinearity))
 })
+
+test_that("reverse-keyed category counts stay attached to their raw labels", {
+  # Regression: counts were tabulated on reverse-keyed codes but labelled with
+  # the raw category order, so each label showed its mirror category's count.
+  set.seed(27)
+  n <- 160L
+  z <- stats::rnorm(n)
+  item <- function(sign) as.integer(cut(sign * .8 * z + stats::rnorm(n, sd = .6), c(-Inf, -.8, 0, .8, Inf)))
+  data <- data.frame(a1 = item(-1), a2 = item(1), a3 = item(1))
+  data$a1[data$a1 == 1L][1:15] <- 2L
+  fit <- fit_states(specify_measurement(A = ordinal(c("a1", "a2", "a3"), keys = c(-1, 1, 1)), folds = 3L),
+    data, seed = 1L, iterations = 4L, diagnostics = FALSE)
+  parameters <- measurement_parameters(fit, "A")
+  reported <- parameters$category_counts[parameters$item == "a1"][[1L]]
+  expected <- paste(paste(1:4, tabulate(data$a1, nbins = 4L), sep = ":"), collapse = " | ")
+  expect_identical(reported, expected)
+})

@@ -23,6 +23,8 @@
       prepared <- .prepare_item(raw, scale, encoder$keys[[index]], encoder$levels[[index]])
       codes <- prepared$y; k <- length(encoder$levels[[index]])
       counts <- tabulate(codes[!is.na(codes)], nbins = k)
+      # Reverse-keyed codes run opposite to the stored raw labels.
+      if (isTRUE(encoder$keys[[index]] < 0)) counts <- rev(counts)
       labels <- encoder$levels[[index]]
       category_support <- paste(as.character(labels), collapse = " | ")
       category_counts <- paste(paste(as.character(labels), counts, sep = ":"), collapse = " | ")
