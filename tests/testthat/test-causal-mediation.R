@@ -77,6 +77,27 @@ test_that("causal mediation rejects temporal orders that contradict the structur
   fixture <- .causal_mediation_fixture(n = 2000)
   expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
     temporal_order = c("M", "X", "Y", "C")), "contradicts")
+  expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "M", "X", "Y")), "contradicts")
+  expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "Y", "M")), "contradicts")
+  expect_error(causal_indirect_effect(fixture$association, "X", "Y", adjust = "C",
+    temporal_order = c("X", "C", "M", "Y")), "contradicts|precede the treatment")
+})
+
+test_that("a derived structure order binds only through graph ancestry", {
+  # Regression: without an explicit structure order, the derived order breaks
+  # ties between parentless constructs by column position. Requiring the
+  # caller's order to match that tie-break made a causal label unreachable.
+  fixture <- .causal_mediation_fixture(n = 2000)
+  association <- fixture$association
+  association$scores <- association$scores[, c("X", "C", "M", "Y")]
+  association$structure <- cssem_structure(list(M = c("X", "C"), Y = c("X", "M", "C")))
+  accepted <- causal_indirect_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "X", "M", "Y"))
+  expect_identical(accepted$label, "causal_under_assumptions")
+  expect_error(causal_indirect_effect(association, "X", "Y", adjust = "C",
+    temporal_order = c("C", "M", "X", "Y")), "contradicts")
 })
 
 test_that("the admissibility panel is populated", {

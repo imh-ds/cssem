@@ -89,11 +89,22 @@
   if (!all(required %in% temporal_order))
     stop("temporal_order must contain the treatment, outcome, every directed-path mediator, and adjust constructs.", call. = FALSE)
 
-  canonical <- .resolve_temporal_order(structure, all_names)
-  shared <- canonical[canonical %in% temporal_order]
-  supplied_shared <- temporal_order[temporal_order %in% canonical]
-  if (!identical(shared, supplied_shared))
-    stop("temporal_order contradicts the declared structure order.", call. = FALSE)
+  if (!is.null(structure$order)) {
+    canonical <- .resolve_temporal_order(structure, all_names)
+    shared <- canonical[canonical %in% temporal_order]
+    supplied_shared <- temporal_order[temporal_order %in% canonical]
+    if (!identical(shared, supplied_shared))
+      stop("temporal_order contradicts the declared structure order.", call. = FALSE)
+  } else {
+    # A derived order breaks ties between unrelated constructs by column
+    # position, which carries no temporal meaning. Only the graph's ancestry is
+    # binding, and propagation depends on nothing else.
+    for (node in temporal_order) {
+      later <- intersect(.descendants(structure, node), temporal_order)
+      if (any(match(later, temporal_order) <= match(node, temporal_order)))
+        stop("temporal_order contradicts the declared structure order.", call. = FALSE)
+    }
+  }
 
   for (path in paths) {
     path_positions <- match(path, temporal_order)
