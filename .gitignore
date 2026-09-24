@@ -18,8 +18,7 @@
 /tests/internal/measurement_fit.rds
 /tests/internal/locked_scores.rds
 /tests/internal/associational_structure.rds
-/tests/internal/validation_results/
-!/tests/internal/validation_results/
+/tests/internal/validation_results/*
 !/tests/internal/validation_results/g15-inference-coverage.csv
 /revdep/
 
