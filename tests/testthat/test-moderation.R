@@ -113,6 +113,25 @@ test_that("moderated mediation validation uses an independent interaction truth"
     tolerance = 1e-10)
 })
 
+test_that("moderated mediation truth applies a- and b-path interactions together", {
+  # Regression: an else-if applied only the b-path interaction when both
+  # paths were moderated, silently dropping the a-path moderation.
+  set.seed(5001)
+  n <- 1500
+  X <- stats::rnorm(n); W <- stats::rnorm(n)
+  M <- .5 * X + .1 * W + .3 * X * W + stats::rnorm(n, sd = .5)
+  Y <- .2 * X + .4 * M + .1 * W + .3 * M * W + stats::rnorm(n, sd = .5)
+  latent <- data.frame(X = X, W = W, M = M, Y = Y)
+  structure <- cssem:::.build_structure(list(M = c("X", "W", "X:W"), Y = c("X", "M", "W", "M:W")),
+    order = c("X", "W", "M", "Y"))
+  truth <- cssem:::.moderated_mediation_truth(latent, structure, "W", c(-1, 0, 1))
+  mediator <- stats::coef(stats::lm(M ~ X + W + X:W, latent))
+  outcome <- stats::coef(stats::lm(Y ~ X + M + W + M:W, latent))
+  values <- cssem:::.moderator_values(latent, "W", c(-1, 0, 1))
+  expected <- (mediator[["X"]] + mediator[["X:W"]] * values) * (outcome[["M"]] + outcome[["M:W"]] * values)
+  expect_equal(truth$conditional, unname(expected), tolerance = 1e-10)
+})
+
 test_that("conditional indirect effects match analytic moderated mediation", {
   fx <- .moderation_fixture()
   association <- associate(fx$fit, fx$structure, structural_repeats = 2L, seed = 2, shadow_scope = "temporal")

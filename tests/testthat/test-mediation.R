@@ -211,10 +211,32 @@ test_that("mediation validation uses an independent analytic truth", {
   expect_equal(c(truth[["total"]], truth[["direct"]], truth[["indirect_total"]]),
     c(direct + a * b, direct, a * b), tolerance = 1e-10)
 
-  smooth <- cssem:::.mediation_truth(latent, cssem:::.mediation_structure("single", "smooth"),
-    method = "intervention_integral")
-  expect_identical(attr(smooth, "method"), "intervention_integral")
-  expect_true(all(is.finite(smooth)))
+})
+
+test_that("the nonlinear mediation truth integrates mediator residuals", {
+  # Regression: the smooth target re-implemented the engine's conditional-mean
+  # propagation, so it could not detect that approximation. With a cubic
+  # outcome, E[f(M)] differs from f(E[M | X]); the residual-preserving target
+  # must track the analytic contrast while the plug-in engine does not.
+  set.seed(4028)
+  n <- 3000
+  X <- stats::rnorm(n); M <- X + stats::rnorm(n, sd = .8)
+  Y <- .3 * M^3 + stats::rnorm(n, sd = .5)
+  latent <- data.frame(X = X, M = M, Y = Y)
+  structure <- cssem:::.mediation_structure("single", "smooth")
+  expect_identical(structure$effects$Y$M$shape, "smooth")
+  delta <- .05
+  truth <- cssem:::.mediation_truth(latent, structure, method = "intervention_integral", delta = delta)
+  analytic <- mean(.3 * ((M + delta)^3 - M^3)) / delta
+  models <- list(X = NULL,
+    M = cssem:::.fit_shape_model(latent, "M", c(X = "smooth_df3")),
+    Y = cssem:::.fit_shape_model(latent, "Y", c(X = "smooth_df3", M = "smooth_df3")))
+  plug_in <- cssem:::.decompose_effects(models, latent, c("X", "M", "Y"), "X", "Y",
+    cssem:::.structure_paths(structure, "X", "Y"), delta)$total
+
+  expect_identical(attr(truth, "method"), "intervention_integral")
+  expect_lt(abs(truth[["total"]] - analytic) / analytic, .10)
+  expect_gt(abs(plug_in - analytic) / analytic, .25)
 })
 
 test_that("mediation benchmark scores every engine against the latent truth", {

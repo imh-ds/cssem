@@ -34,11 +34,13 @@
   a_interaction <- interaction(names(structure$effects[[mediator]]), x, moderator)
   a <- unname(mediator_coefficients[[x]]); b <- unname(outcome_coefficients[[mediator]])
   values <- .moderator_values(latent, moderator, levels)
-  if (!is.na(b_interaction)) {
-    conditional <- a * (b + unname(outcome_coefficients[[b_interaction]]) * values)
-  } else if (!is.na(a_interaction)) {
-    conditional <- (a + unname(mediator_coefficients[[a_interaction]]) * values) * b
-  } else stop("No declared interaction changes the mediated path.", call. = FALSE)
+  if (is.na(a_interaction) && is.na(b_interaction))
+    stop("No declared interaction changes the mediated path.", call. = FALSE)
+  # Either path, or both, may be moderated; the conditional indirect effect is
+  # the product of the two conditional path slopes.
+  a_conditional <- a + if (is.na(a_interaction)) 0 else unname(mediator_coefficients[[a_interaction]]) * values
+  b_conditional <- b + if (is.na(b_interaction)) 0 else unname(outcome_coefficients[[b_interaction]]) * values
+  conditional <- a_conditional * b_conditional
   out <- list(conditional = conditional,
     index = .moderated_index(conditional, levels, .safe_scale(latent[[moderator]])))
   attr(out, "method") <- "analytic_interaction"

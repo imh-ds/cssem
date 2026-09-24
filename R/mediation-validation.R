@@ -8,10 +8,11 @@
 # Build the declared mediation structure, optionally fixing every edge to a
 # linear shape policy. Declaring linear edges reflects confirmatory mediation
 # practice and keeps whole-chain disattenuation available (no edge can be
-# auto-selected as smooth), which also speeds the bootstrap refits.
+# auto-selected as smooth), which also speeds the bootstrap refits. A smooth
+# policy declares every edge smooth, which the nonlinear validation target uses.
 .mediation_structure <- function(scenario, edge_shape = "auto") {
   edge <- function(predictors) {
-    if (identical(edge_shape, "linear")) stats::setNames(lapply(predictors, function(p) .build_effect("linear")), predictors) else predictors
+    if (edge_shape %in% c("linear", "smooth")) stats::setNames(lapply(predictors, function(p) .build_effect(edge_shape)), predictors) else predictors
   }
   switch(scenario,
     single = .build_structure(list(M = edge("X"), Y = edge(c("X", "M"))), order = c("X", "M", "Y")),
@@ -103,27 +104,39 @@
   stats::setNames(summary$naive_effect, summary$component)[c("total", "direct", "indirect_total")]
 }
 
-# Independently integrate a nonlinear structural model under a shift in x. The
-# active-edge traversal is local to this validation helper: nodes with no
-# active incoming edge retain their observed latent value, and both intervention
-# arms are built from the same latent records. This deliberately does not call
+# Independently integrate a nonlinear structural model under a shift in x. Each
+# unit keeps its own structural residual (latent value minus fitted value), so
+# a shifted node is its fitted value at the shifted inputs plus that residual:
+# the unit-level counterfactual of an additive-noise model, averaged over the
+# empirical residual distribution. The package engine instead propagates
+# fitted conditional means, which differs whenever a downstream model is
+# nonlinear in a mediator, so the two cannot share that approximation. Nodes
+# with no active incoming edge keep their latent value, and the zero-shift arm
+# reproduces the latent records exactly. This deliberately does not call
 # .propagate_y(), .mediation_effect(), or .cssem_mediation_core().
 .intervention_mediation_truth <- function(latent, structure, models, x, y, delta = 1) {
   order <- .resolve_temporal_order(structure, names(latent))
   all_edges <- .model_edges(models)
+  model_inputs <- function(model) unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+  residuals <- lapply(stats::setNames(names(models), names(models)), function(node) {
+    model <- models[[node]]
+    if (is.null(model)) return(NULL)
+    inputs <- latent[, model_inputs(model), drop = FALSE]
+    latent[[node]] - .predict_shape_model(model, inputs)
+  })
   propagate <- function(shift, active) {
     frame <- latent
     frame[[x]] <- latent[[x]] + shift
     for (node in order) {
       model <- models[[node]]
       if (is.null(model) || identical(node, x)) next
-      constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+      constructs <- model_inputs(model)
       incoming <- vapply(constructs, function(construct) .edge(construct, node) %in% active, logical(1))
       if (!any(incoming)) next
       inputs <- as.data.frame(stats::setNames(lapply(constructs, function(construct)
         if (.edge(construct, node) %in% active) frame[[construct]] else latent[[construct]]), constructs),
         stringsAsFactors = FALSE)
-      frame[[node]] <- .predict_shape_model(model, inputs)
+      frame[[node]] <- .predict_shape_model(model, inputs) + residuals[[node]]
     }
     frame[[y]]
   }
@@ -138,7 +151,8 @@
 
 # Build fixed-shape models only for the independent nonlinear validation path.
 .mediation_truth <- function(latent, structure, x = names(latent)[[1L]],
-                             y = names(latent)[[length(names(latent))]], method = "analytic_linear") {
+                             y = names(latent)[[length(names(latent))]], method = "analytic_linear",
+                             delta = 1) {
   if (!identical(method, "intervention_integral"))
     return(.linear_mediation_truth(latent, structure, x, y))
   models <- stats::setNames(vector("list", length(latent)), names(latent))
@@ -150,7 +164,7 @@
     }, character(1)), predictors)
     models[[outcome]] <- .fit_shape_model(latent, outcome, shapes)
   }
-  .intervention_mediation_truth(latent, structure, models, x, y)
+  .intervention_mediation_truth(latent, structure, models, x, y, delta)
 }
 
 .mediation_validation_one <- function(job) {
