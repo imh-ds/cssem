@@ -80,6 +80,114 @@
   jobs
 }
 
+.study_run_jobs <- function(spec, jobs, estimands, workers) {
+  run_job <- function(job) .study_run_one(job, spec, estimands)
+  rows <- .validation_map(jobs, run_job, workers)
+  output <- do.call(rbind, rows)
+  rownames(output) <- NULL
+  output
+}
+
+.study_simulate_shard <- function(spec, reps, seed = 1L, workers = 1L,
+                                  shard = 1L, shards = 1L) {
+  .preserve_seed()
+  if (!inherits(spec, "cssem_study_spec")) {
+    stop("spec must be a cssem_study_spec created by study_spec().", call. = FALSE)
+  }
+  reps <- .study_scalar_integer(reps, "reps")
+  seed <- .study_scalar_integer(seed, "seed", minimum = 0L)
+  workers <- .study_scalar_integer(workers, "workers")
+  shard <- .study_scalar_integer(shard, "shard")
+  shards <- .study_scalar_integer(shards, "shards")
+  if (shard > shards) stop("shard must be between 1 and shards.", call. = FALSE)
+
+  truth <- .study_truth_values(spec)
+  jobs <- .study_build_jobs(spec, reps, seed, truth)
+  if (shards > length(jobs)) {
+    stop("shards cannot exceed the number of scheduled replications.", call. = FALSE)
+  }
+  job_ids <- seq_along(jobs)
+  selected <- job_ids[((job_ids - 1L) %% shards) + 1L == shard]
+  replications <- .study_run_jobs(spec, jobs[selected], truth$estimands, workers)
+  structure(list(
+    replications = replications,
+    scenarios = spec$scenarios,
+    sample_sizes = spec$sample_sizes,
+    reps = reps,
+    seed = seed,
+    workers = workers,
+    metadata = spec$metadata,
+    callback_labels = spec$callback_labels,
+    estimands = truth$estimands,
+    shard = shard,
+    shards = shards
+  ), class = "cssem_study_shard")
+}
+
+.study_combine_shards <- function(shards) {
+  if (!is.list(shards) || !length(shards) ||
+      !all(vapply(shards, inherits, logical(1), "cssem_study_shard"))) {
+    stop("shards must be a non-empty list of cssem_study_shard objects.", call. = FALSE)
+  }
+  first <- shards[[1L]]
+  same_design <- vapply(shards, function(shard) {
+    identical(shard$scenarios, first$scenarios) &&
+      identical(shard$sample_sizes, first$sample_sizes) &&
+      identical(shard$reps, first$reps) && identical(shard$seed, first$seed) &&
+      identical(shard$metadata, first$metadata) &&
+      identical(shard$callback_labels, first$callback_labels) &&
+      identical(shard$estimands, first$estimands) &&
+      identical(shard$shards, first$shards)
+  }, logical(1))
+  if (!all(same_design)) {
+    stop("all study shards must have the same design and seed settings.", call. = FALSE)
+  }
+  shard_ids <- vapply(shards, `[[`, integer(1), "shard")
+  expected_shards <- seq_len(first$shards)
+  if (anyDuplicated(shard_ids)) stop("shard identifiers must be unique.", call. = FALSE)
+  if (!setequal(shard_ids, expected_shards)) {
+    stop("the shard set must contain every shard exactly once.", call. = FALSE)
+  }
+  shards <- shards[match(expected_shards, shard_ids)]
+  replications <- do.call(rbind, lapply(shards, `[[`, "replications"))
+  rows <- c("scenario", "n", "replication", "estimand")
+  expected <- expand.grid(
+    scenario = as.character(first$scenarios$scenario),
+    n = first$sample_sizes,
+    replication = seq_len(first$reps),
+    estimand = first$estimands,
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  order_keys <- function(data) order(
+    match(data$scenario, as.character(first$scenarios$scenario)),
+    match(data$n, first$sample_sizes), data$replication,
+    match(data$estimand, first$estimands))
+  expected <- expected[order_keys(expected), rows, drop = FALSE]
+  observed <- replications[order_keys(replications), rows, drop = FALSE]
+  rownames(expected) <- NULL
+  rownames(observed) <- NULL
+  if (nrow(observed) != nrow(expected) || anyDuplicated(observed) ||
+      !identical(observed, expected)) {
+    stop("study shards do not contain each scheduled replication and estimand exactly once.",
+      call. = FALSE)
+  }
+  rownames(replications) <- NULL
+  simulation <- structure(list(
+    replications = replications[order_keys(replications), , drop = FALSE],
+    scenarios = first$scenarios,
+    sample_sizes = first$sample_sizes,
+    reps = first$reps,
+    seed = first$seed,
+    workers = sum(vapply(shards, `[[`, integer(1), "workers")),
+    metadata = first$metadata,
+    callback_labels = first$callback_labels
+  ), class = "cssem_simulation")
+  .study_validate_simulation(simulation)
+  rownames(simulation$replications) <- NULL
+  simulation
+}
+
 .study_failed_rows <- function(job, stage, message, estimands) {
   data.frame(
     scenario = rep(job$scenario_id, length(estimands)),
@@ -262,10 +370,9 @@ simulate_study <- function(spec, reps, seed = 1L, workers = 1L) {
 
   truth <- .study_truth_values(spec)
   jobs <- .study_build_jobs(spec, reps, seed, truth)
-  run_job <- function(job) .study_run_one(job, spec, truth$estimands)
-  rows <- .validation_map(jobs, run_job, workers)
+  rows <- .study_run_jobs(spec, jobs, truth$estimands, workers)
   structure(list(
-    replications = do.call(rbind, rows),
+    replications = rows,
     scenarios = spec$scenarios,
     sample_sizes = spec$sample_sizes,
     reps = reps,

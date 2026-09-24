@@ -175,6 +175,38 @@ test_that("simulate_study schedules the grid and attaches sample-size-specific t
   expect_equal(fixture$calls$analyze, 8L)
 })
 
+test_that("study shards preserve the full-study seeds and recombine exactly", {
+  spec <- make_study_spec()$spec
+  full <- simulate_study(spec, reps = 3L, seed = 918L)
+  run_shard <- getFromNamespace(".study_simulate_shard", "cssem")
+  combine_shards <- getFromNamespace(".study_combine_shards", "cssem")
+  shards <- lapply(1:5, function(shard) run_shard(spec, reps = 3L,
+    seed = 918L, workers = 1L, shard = shard, shards = 5L))
+
+  combined <- combine_shards(shards)
+  expect_s3_class(combined, "cssem_simulation")
+  expect_identical(combined$replications, full$replications)
+  expect_identical(summarize_study(combined)$metrics,
+    summarize_study(full)$metrics)
+  expect_identical(combine_shards(rev(shards))$replications,
+    full$replications)
+})
+
+test_that("study shard recombination rejects missing and duplicate shards", {
+  spec <- make_study_spec()$spec
+  run_shard <- getFromNamespace(".study_simulate_shard", "cssem")
+  combine_shards <- getFromNamespace(".study_combine_shards", "cssem")
+  shards <- lapply(1:2, function(shard) run_shard(spec, reps = 1L,
+    seed = 918L, workers = 1L, shard = shard, shards = 2L))
+
+  expect_error(combine_shards(shards[1L]), "every shard")
+  expect_error(combine_shards(c(shards, shards[1L])), "identifiers must be unique")
+  expect_error(run_shard(spec, reps = 1L, seed = 918L,
+    workers = 1L, shard = 0L, shards = 2L), "shard")
+  expect_error(run_shard(spec, reps = 1L, seed = 918L,
+    workers = 1L, shard = 3L, shards = 2L), "shard")
+})
+
 test_that("simulate_study retains errors, partial output, and unavailable intervals", {
   spec <- make_failure_study_spec()
   set.seed(808L)
