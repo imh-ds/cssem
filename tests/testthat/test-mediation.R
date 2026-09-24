@@ -208,8 +208,8 @@ test_that("mediation validation uses an independent analytic truth", {
   b <- unname(stats::coef(outcome_fit)[["M"]])
   direct <- unname(stats::coef(outcome_fit)[["X"]])
   expect_identical(attr(truth, "method"), "analytic_linear")
-  expect_equal(unname(truth), c(total = direct + a * b, direct = direct, indirect_total = a * b),
-    tolerance = 1e-10)
+  expect_equal(c(truth[["total"]], truth[["direct"]], truth[["indirect_total"]]),
+    c(direct + a * b, direct, a * b), tolerance = 1e-10)
 
   smooth <- cssem:::.mediation_truth(latent, cssem:::.mediation_structure("single", "smooth"),
     method = "intervention_integral")
