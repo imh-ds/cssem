@@ -1,12 +1,12 @@
 # G15 simulation evidence for G4 inference
 
-**Status:** screening complete; the confirmation workflow has been dispatched
-on `main` and its shard matrix has started
+**Status:** the registered confirmation completed on `main`; all prespecified
+calibration gates passed for this study design
 ([run 35954818332](https://github.com/imh-ds/cssem/actions/runs/35954818332)).
-Final results are pending. A local confirmation attempt was stopped after
-1,064 of 2,000 outer-job audit rows. Those partial records were not summarized
-or used as evidence. No acceptance threshold will be retuned from the observed
-screening results.
+The separate sample-size planner remains gated by the G6 outer-metric coverage
+limitation. A local confirmation attempt was stopped after 1,064 of 2,000
+outer-job audit rows; those partial records were not summarized or used as
+evidence. No acceptance threshold was retuned from screening results.
 
 ## Registered design
 
@@ -99,18 +99,43 @@ estimate), so screening does not establish the registered coverage gate. It
 was used only to check the ledger, callback output, inner-draw availability,
 and shape-selection behavior before confirmation.
 
-The confirmation tier runs through the manually triggered GitHub Actions
+The confirmation tier ran through the manually triggered GitHub Actions
 workflow [G15 inference confirmation](../.github/workflows/g15-inference-confirmation.yaml).
 Its 20 shards each run a deterministic subset of the registered 500 outer
 replications and 199 inner draws per condition. The combine job checks that all
 20 shards arrived, runtime provenance agrees, and every scenario, sample size,
 replication, and estimand is present exactly once. It computes the study
-summary only after those checks pass. The previous local attempt reached 1,064
-outer-job audit rows, with 199/199 successful draws in both interval modes for
-those rows, but was stopped before the estimator ledger and summary were saved;
-the partial audits are excluded from the calibration results. Final bias,
-conditional/unconditional coverage, Monte Carlo intervals, failures, partial
-analyses, and availability remain pending the Actions run.
+summary only after those checks pass. Run 35954818332 completed successfully at
+2026-09-24 05:48 UTC on commit `4dbd2f9` (R 4.6.1, cssem 0.5.0, Linux,
+Mersenne-Twister/Inversion/Rejection, seed `150415`; 2 workers per shard).
+All 21 jobs succeeded. The raw ledger contains 8,000 unique rows: four
+estimands for each of 500 replications in each of four scenarios. The summary
+contains 2,000 outer-diagnostic rows. Every fixed- and repeated-selection
+interval had 199/199 successful inner draws; each of the 16
+scenario-by-estimand cells had 500/500 available intervals. There were no
+outer failures or partial analyses.
+
+| Scenario | Maximum absolute bias across estimands | Coverage range across estimands | Wilson interval envelope |
+| --- | ---: | ---: | ---: |
+| `rho0.40_linear` | 0.0092 | 0.950–0.958 | 0.927–0.972 |
+| `rho0.80_linear` | 0.0012 | 0.956–0.960 | 0.934–0.974 |
+| `rho0.40_curved` | 0.0022 | 0.940–0.946 | 0.916–0.963 |
+| `rho0.80_curved` | 0.0047 | 0.938 | 0.913–0.956 |
+
+All 16 Wilson coverage intervals fall inside the preregistered `[0.91, 0.99]`
+band. The largest absolute bias is `0.0092` (threshold `0.10`); all bias
+Monte Carlo t intervals also remain inside `[-0.10, 0.10]`. Outer failures
+were `0/500` in every scenario, with a Wilson upper bound of `0.0077` (threshold
+`0.05`). Thus every registered gate passed for these declared data-generating
+conditions and this locked-score bootstrap workflow. The incomplete local run
+remains excluded.
+
+These results support the stated scoped calibration only. They do not establish
+coverage for multi-item measurement refitting, estimated reliability, mediation,
+moderation, plausible-value draws, other shape families, or other generators.
+The study does not itself resolve G6's uncertainty method for
+sample-size-specific outer-validation metrics, so it does not unlock the
+sample-size planner.
 
 The screening runner writes ignored replication-level `.rds` files and a
 tracked aggregate CSV at

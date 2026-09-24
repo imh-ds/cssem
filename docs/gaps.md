@@ -16,9 +16,9 @@ its validated scope and remaining suite failures are recorded below. G14 now
 has a scoped causal-graph audit and an independent-truth validation runner;
 assumption verification and broader calibration remain limited. G15 now has a
 callback-based simulation and summary workflow plus a manually triggered,
-sharded Actions confirmation pipeline; its confirmation results are pending,
-and sample-size planning remains gated. The other unchecked entries are
-proposed work. Existing defect reproductions and fixes belong in
+sharded Actions confirmation pipeline; its registered scoped calibration gates
+passed, while sample-size planning remains gated. The other unchecked entries
+are proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -280,10 +280,13 @@ does not silently rerun shape selection or convert plausible-value draws into
 confidence intervals. The G15 screening tier ran 100 replications per
 condition with 50 fixed/repeated-selection bootstrap draws; absolute bias was
 `0.0001` to `0.0162` and observed coverage was `0.88` to `0.95`. Its Monte Carlo
-intervals are too wide to establish the registered coverage target, so it is
-only an operational screen; the 500-replication confirmation is running through
-the manual Actions workflow. Final results are pending, and the interrupted
-local attempt is excluded (see [`validation-g15.md`](validation-g15.md)).
+intervals were too wide to establish the registered coverage target, so it was
+only an operational screen. The registered 500-replication confirmation then
+passed all preregistered bias, coverage, failure, and bootstrap-availability
+gates for its four declared scenarios in GitHub Actions run
+[35954818332](https://github.com/imh-ds/cssem/actions/runs/35954818332).
+This remains scoped evidence, not universal calibration; the interrupted local
+attempt is excluded (see [`validation-g15.md`](validation-g15.md)).
 
 **Tracking commits:** `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370`.
 
@@ -1019,29 +1022,31 @@ callbacks permit users to express continuous, mixed, manifest, correlated,
 non-Gaussian, or missing-data scenarios, but each design and estimator must be
 implemented by the caller and independently validated.
 
-G4's predeclared reliability and shape-selection screening study has completed;
-its 100-replication results check runner behavior but do not establish
-calibration. The registered 500-replication confirmation is running in the
+G4's predeclared reliability and shape-selection screening study completed;
+its 100-replication results checked runner behavior but did not establish
+calibration. The registered 500-replication confirmation completed in the
 manual GitHub Actions workflow with deterministic shards and a completeness
-gate. An incomplete local attempt was stopped and excluded; final confirmation
-results are pending. See
-[`validation-g15.md`](validation-g15.md) for the independent targets,
-thresholds, scope, and current evidence.
+gate. All registered bias, coverage, failure, and bootstrap-availability gates
+passed for the four declared scenarios; the independent targets, numerical
+results, thresholds, scope, and run link are recorded in
+[`validation-g15.md`](validation-g15.md). The incomplete local attempt was
+stopped and excluded.
 
 The sample-size planner is **not implemented**. It remains gated on a defensible
 G6 uncertainty method for whole-pipeline outer metrics and adequate independent
 validation. Current outer-validation RMSE, MAE, and R-squared are point metrics;
 overlapping folds cannot be treated as independent interval observations.
 
-**Acceptance remaining:** run the Actions workflow and report whether each
-registered bias, coverage, failure, and inner-bootstrap availability target
-passes with its Monte Carlo uncertainty. A future planner must recommend only
-tested sample sizes, include the assumed design and Monte Carlo uncertainty,
-and keep failed fits and unavailable intervals in the decision denominator.
+**Calibration acceptance:** satisfied for the registered four-scenario study:
+all bias, coverage, failure, and inner-bootstrap availability targets passed
+with their Monte Carlo uncertainty in Actions run `35954818332`. A future
+planner must recommend only tested sample sizes, include the assumed design and
+Monte Carlo uncertainty, and keep failed fits and unavailable intervals in the
+decision denominator. It remains gated on a defensible G6 uncertainty method.
 
 **Tracking commits:** `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`, `f9f984c`,
 `0620bbc`, `2ab7311`, `e4077fa`, `0abe9e8`, `50b6b7f`, `f3d13a0`,
-`72cf6ac`.
+`72cf6ac`, `4dbd2f9`.
 
 ### [ ] G16. Broader construct and structural classes: optional research
 
