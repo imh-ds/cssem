@@ -281,9 +281,9 @@ confidence intervals. The G15 screening tier ran 100 replications per
 condition with 50 fixed/repeated-selection bootstrap draws; absolute bias was
 `0.0001` to `0.0162` and observed coverage was `0.88` to `0.95`. Its Monte Carlo
 intervals are too wide to establish the registered coverage target, so it is
-only an operational screen; the 500-replication confirmation is ready as a
-manual Actions workflow and has not yet run there. The interrupted local attempt
-is excluded (see [`validation-g15.md`](validation-g15.md)).
+only an operational screen; the 500-replication confirmation is running through
+the manual Actions workflow. Final results are pending, and the interrupted
+local attempt is excluded (see [`validation-g15.md`](validation-g15.md)).
 
 **Tracking commits:** `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370`.
 
@@ -1021,10 +1021,10 @@ implemented by the caller and independently validated.
 
 G4's predeclared reliability and shape-selection screening study has completed;
 its 100-replication results check runner behavior but do not establish
-calibration. The registered 500-replication confirmation is ready as a manual
-GitHub Actions workflow with deterministic shards and a completeness gate. An
-incomplete local attempt was stopped and excluded; no confirmation results are
-available until the Actions run completes. See
+calibration. The registered 500-replication confirmation is running in the
+manual GitHub Actions workflow with deterministic shards and a completeness
+gate. An incomplete local attempt was stopped and excluded; final confirmation
+results are pending. See
 [`validation-g15.md`](validation-g15.md) for the independent targets,
 thresholds, scope, and current evidence.
 

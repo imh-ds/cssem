@@ -1,8 +1,10 @@
 # G15 simulation evidence for G4 inference
 
-**Status:** screening complete; the confirmation workflow is ready in GitHub
-Actions and awaits a run. A local confirmation attempt was stopped after
-1,064 of 2,000 outer-job audit rows; those partial records were not summarized
+**Status:** screening complete; the confirmation workflow has been dispatched
+on `main` and its shard matrix has started
+([run 35954818332](https://github.com/imh-ds/cssem/actions/runs/35954818332)).
+Final results are pending. A local confirmation attempt was stopped after
+1,064 of 2,000 outer-job audit rows. Those partial records were not summarized
 or used as evidence. No acceptance threshold will be retuned from the observed
 screening results.
 
@@ -97,8 +99,8 @@ estimate), so screening does not establish the registered coverage gate. It
 was used only to check the ledger, callback output, inner-draw availability,
 and shape-selection behavior before confirmation.
 
-The confirmation tier is configured as a manually triggered GitHub Actions
-workflow: [G15 inference confirmation](../.github/workflows/g15-inference-confirmation.yaml).
+The confirmation tier runs through the manually triggered GitHub Actions
+workflow [G15 inference confirmation](../.github/workflows/g15-inference-confirmation.yaml).
 Its 20 shards each run a deterministic subset of the registered 500 outer
 replications and 199 inner draws per condition. The combine job checks that all
 20 shards arrived, runtime provenance agrees, and every scenario, sample size,
