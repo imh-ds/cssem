@@ -271,7 +271,7 @@ expect_lt(abs(mean(beta) - .30), 4 / sqrt(120 * length(beta)))
 - Consumes: `validate_outer()` and the G15 callback interval contract.
 - Produces: a G6 gate record that either documents a justified, independently calibrated interval method for a declared outer metric or explicitly records that coverage is unavailable and the planner remains gated.
 
-- [ ] **Step 1: Assert the current G6 result contract.** Extend the first test in `tests/testthat/test-outer-validation.R` so `validate_outer()$test_metrics` exposes point `rmse`, `mae`, and `r_squared` but no confidence bounds. Do not add interval columns to `validate_outer()` as part of this task:
+- [x] **Step 1: Assert the current G6 result contract.** Extend the first test in `tests/testthat/test-outer-validation.R` so `validate_outer()$test_metrics` exposes point `rmse`, `mae`, and `r_squared` but no confidence bounds. Do not add interval columns to `validate_outer()` as part of this task:
 
 ```r
 expect_true(all(c("rmse", "mae", "r_squared") %in% names(result$test_metrics)))

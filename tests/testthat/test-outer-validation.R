@@ -7,6 +7,9 @@ test_that("outer validation separates training selection from test metrics", {
     structural_args = list(structural_repeats = 1L, shadow_scope = "temporal"))
   expect_s3_class(result, "cssem_outer_validation")
   expect_true(all(result$test_metrics$metric_scope == "outer_test"))
+  expect_true(all(c("rmse", "mae", "r_squared") %in% names(result$test_metrics)))
+  expect_length(intersect(c("lower", "upper", "conf_low", "conf_high"),
+    names(result$test_metrics)), 0L)
   expect_true(all(result$selection_metrics$metric_scope == "internal_selection"))
   expect_true(all(result$provenance$train_n > 0 & result$provenance$test_n > 0))
   expect_true(all(vapply(result$provenance$train_ids, function(x) length(x) > 0, logical(1))))
