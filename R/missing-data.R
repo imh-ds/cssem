@@ -165,10 +165,16 @@
     input_status <- .measurement_status(fit, seq_len(input_n), required)
     prior_only <- if (ncol(input_status)) apply(input_status == "prior_only", 1L, any) else rep(FALSE, input_n)
     excluded_measurement <- if (ncol(input_status)) apply(input_status == "excluded", 1L, any) else rep(FALSE, input_n)
+    required_observed <- if (ncol(input_status))
+      apply(input_status == "complete" | input_status == "partial", 1L, all) else rep(TRUE, input_n)
     status <- ifelse(!available, "excluded", ifelse(complete, "included", "excluded"))
+    # associate() applies one complete-case rule across every declared
+    # construct, so a row can be excluded here although this outcome's own
+    # constructs are observed.
     reason <- ifelse(!available & prior_only, "prior_only_measurement",
       ifelse(!available & excluded_measurement, "measurement_excluded",
-        ifelse(complete, "", "missing_score")))
+        ifelse(!available & required_observed, "other_declared_construct_incomplete",
+          ifelse(complete, "", "missing_score"))))
     rows[[outcome]] <- data.frame(stage = "structural", target = outcome,
       row_id = seq_len(input_n), row_name = input_names,
       indicators_observed = as.integer(observed_n), indicators_total = length(required),

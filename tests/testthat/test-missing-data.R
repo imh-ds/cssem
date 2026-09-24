@@ -165,3 +165,25 @@ test_that("association reliability excludes prior-only rows", {
   expect_equal(association$reliability[["A"]], expected, tolerance = 1e-10)
   expect_gt(association$reliability[["A"]], fit$reliability[["A"]])
 })
+
+test_that("structural ledgers name cross-outcome complete-case exclusions", {
+  # Regression: associate() excludes a row when any declared construct is
+  # incomplete, but the ledger for an unaffected outcome reported
+  # "missing_score" although that outcome's own scores were complete.
+  set.seed(73)
+  n <- 54L
+  data <- data.frame(a1 = sample(1:5, n, replace = TRUE), a2 = sample(1:5, n, replace = TRUE),
+    a3 = sample(1:5, n, replace = TRUE), x = rnorm(n), y = rnorm(n), z = rnorm(n))
+  data[5L, c("a1", "a2", "a3")] <- NA
+  fit <- fit_states(specify_measurement(A = ordinal("a1", "a2", "a3"), X = manifest("x"),
+    Y = manifest("y"), Z = manifest("z"), folds = 3L), data, seed = 4L,
+    iterations = 1L, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(Y ~ linear(X), Z ~ linear(A),
+    order = c("A", "X", "Y", "Z")), structural_repeats = 1L, shadow_scope = "temporal")
+  rows <- sample_accounting(association)$rows
+  row_y <- rows[rows$stage == "structural" & rows$target == "Y" & rows$row_id == 5L, , drop = FALSE]
+  row_z <- rows[rows$stage == "structural" & rows$target == "Z" & rows$row_id == 5L, , drop = FALSE]
+  expect_identical(row_y$status, "excluded")
+  expect_identical(row_y$reason, "other_declared_construct_incomplete")
+  expect_identical(row_z$reason, "prior_only_measurement")
+})
