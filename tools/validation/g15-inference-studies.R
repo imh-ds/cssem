@@ -1,5 +1,6 @@
 # G15/G4 calibration study for reliability and shape-selection uncertainty.
-# Run from the package root after installing/loading this working tree:
+# Run from the package root after installing this checkout into the library
+# used by Rscript (set R_LIBS_USER when the package is installed locally):
 #   Rscript tools/validation/g15-inference-studies.R --tier=screening
 #   Rscript tools/validation/g15-inference-studies.R --tier=confirmation
 # Confirmation is intentionally a long run (500 outer x 199 inner replicates).
@@ -8,7 +9,10 @@ if (!file.exists("DESCRIPTION")) {
   stop("Run this script from the cssem package root.", call. = FALSE)
 }
 if (!requireNamespace("cssem", quietly = TRUE)) {
-  stop("Install or load the current cssem package before running this study.", call. = FALSE)
+  stop("Install the current cssem checkout in the library used by Rscript before running this study.", call. = FALSE)
+}
+if (!"study_spec" %in% getNamespaceExports("cssem")) {
+  stop("The installed cssem package does not export study_spec(); install this checkout before running the study.", call. = FALSE)
 }
 
 .g15_parse_args <- function(args) {

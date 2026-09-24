@@ -1,5 +1,19 @@
 # cssem (development version)
 
+## Study-specific simulation workflow (2026-09-23)
+
+* Added `study_spec()`, `simulate_study()`, and `summarize_study()` for
+  reproducible callback-driven simulation studies with scenario/sample-size
+  grids, independent truth callbacks, deterministic sequential or PSOCK runs,
+  and retained failure/partial-result accounting. Summaries include bias, RMSE,
+  interval width and availability, conditional/unconditional coverage and
+  detection, convergence and failure rates, and Monte Carlo uncertainty.
+* Added a G4 reliability/shape-selection bootstrap validation study; its
+  confirmation tier is running. The sample-size planner remains gated because
+  G6 outer-validation metrics currently lack an independently calibrated
+  uncertainty method. Commits: `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`,
+  `f9f984c`, `0620bbc`.
+
 ## Causal assumptions and validation contract (2026-09-22)
 
 * Added typed causal-versus-associational graphs, machine-readable assumption
