@@ -136,3 +136,32 @@ test_that("unsupported survey design metadata is rejected explicitly", {
     "survey design"
   )
 })
+
+test_that("association reliability excludes prior-only rows", {
+  # Regression: fit-level reliability averaged over prior-only rows, whose
+  # posterior variance is the prior's, and the association passed that
+  # deflated value to mediation, causal, and moderation corrections although
+  # those rows are excluded from structural estimation.
+  set.seed(72)
+  n <- 360L
+  latent <- matrix(stats::rnorm(n * 2L), n, 2L)
+  item <- function(z) as.integer(cut(.8 * z + stats::rnorm(n, sd = .6), c(-Inf, -.8, 0, .8, Inf)))
+  data <- data.frame(a1 = item(latent[, 1]), a2 = item(latent[, 1]), a3 = item(latent[, 1]),
+    b1 = item(latent[, 2]), b2 = item(latent[, 2]), b3 = item(latent[, 2]))
+  model <- specify_measurement(A = ordinal("a1", "a2", "a3"), B = ordinal("b1", "b2", "b3"), folds = 3L)
+  structure <- specify_structure(B ~ linear(A), order = c("A", "B"))
+
+  complete_fit <- cssem:::.fit_states_quiet(model, data, seed = 3L, iterations = 4L, diagnostics = FALSE)
+  complete <- associate(complete_fit, structure, structural_repeats = 1L, seed = 1L)
+  expect_equal(unname(complete$reliability[c("A", "B")]),
+    unname(complete_fit$reliability[c("A", "B")]), tolerance = 1e-10)
+
+  data[1:60, c("a1", "a2", "a3")] <- NA
+  fit <- cssem:::.fit_states_quiet(model, data, seed = 3L, iterations = 4L, diagnostics = FALSE)
+  association <- associate(fit, structure, structural_repeats = 1L, seed = 1L)
+  retained <- as.integer(association$row_ids)
+  scores <- fit$locked_scores$A[retained]; variance <- fit$score_posterior_sd$A[retained]^2
+  expected <- stats::var(scores) / (stats::var(scores) + mean(variance))
+  expect_equal(association$reliability[["A"]], expected, tolerance = 1e-10)
+  expect_gt(association$reliability[["A"]], fit$reliability[["A"]])
+})

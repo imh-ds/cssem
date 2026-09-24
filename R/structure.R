@@ -1074,6 +1074,19 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
       # Blank those constructs' variances so the supplied reliability is the one
       # actually used (and the one reported).
       for (nm in intersect(overridden, names(posterior_var))) posterior_var[[nm]] <- NA_real_
+      # The fit-level reliability averages over every fitted row, including
+      # prior-only rows whose posterior variance is the prior's. Structural
+      # rows exclude those, so re-estimate reliability on the retained rows;
+      # this reliability also feeds the mediation, causal, and moderation
+      # corrections. With no exclusions it equals the fit-level value.
+      for (nm in setdiff(modeled, overridden)) {
+        variance <- posterior_var[[nm]]
+        if (!any(is.finite(variance))) next
+        signal <- stats::var(scores[[nm]], na.rm = TRUE)
+        error <- mean(variance, na.rm = TRUE)
+        if (is.finite(signal) && is.finite(error) && signal > 0)
+          reliability_vec[[nm]] <- signal / (signal + error)
+      }
     }
   }
   shadow_scope <- match.arg(shadow_scope); scopes <- if (shadow_scope == "both") c("temporal", "unrestricted") else shadow_scope
