@@ -286,6 +286,7 @@ make_worker_study_spec <- function() {
 }
 
 test_that("PSOCK workers preserve ordered results, RNG, and cleanup", {
+  skip_unless_installed_cssem_matches()
   spec <- make_worker_study_spec()
   set.seed(918L)
   prior_seed <- .Random.seed

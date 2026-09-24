@@ -54,5 +54,8 @@ test_that("structural diagnostics expose correction strength and conditioning", 
     "corrected_condition_number", "reliability_floor_applied") %in% names(structural)))
   expect_true(all(is.finite(structural$condition_number)))
   expect_true(all(structural$correction_strength >= 0 & structural$correction_strength <= 1))
-  expect_equal(unname(association$numerical_diagnostics), unname(structural))
+  # Compare values, not the subset's class and original row names.
+  stored <- as.data.frame(association$numerical_diagnostics); rownames(stored) <- NULL
+  reported <- structural; class(reported) <- "data.frame"; rownames(reported) <- NULL
+  expect_equal(stored, reported)
 })

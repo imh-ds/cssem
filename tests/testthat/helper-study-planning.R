@@ -48,3 +48,14 @@ make_design_fixture <- function(n = 1000L, seed = 502L) {
     manifest_control, latent_proxy, product_term, skewed_state,
     mcar_item, mar_item, stringsAsFactors = FALSE)
 }
+
+# PSOCK workers load the installed cssem, not the source under test. Under
+# pkgload/devtools a stale installed copy lacks newer internals, so parallel
+# tests are meaningful only when the installed version matches the source.
+skip_unless_installed_cssem_matches <- function() {
+  installed <- tryCatch(read.dcf(file.path(find.package("cssem", lib.loc = .libPaths()),
+    "DESCRIPTION"), fields = "Version")[[1L]], error = function(e) NA_character_)
+  loaded <- as.character(getNamespaceVersion("cssem"))
+  if (is.na(installed) || !identical(installed, loaded))
+    testthat::skip(sprintf("PSOCK workers need installed cssem %s (found %s).", loaded, installed))
+}
