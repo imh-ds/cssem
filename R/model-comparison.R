@@ -1,3 +1,9 @@
+# Outer partitions share training rows, so resampling their metric deltas is
+# not a calibrated interval method (see the G6 coverage gate in
+# docs/validation-g15.md); the interval is reported as descriptive only.
+.COMPARISON_LIMITATION <- paste("paired predictive held-out comparison only; no likelihood or global-fit comparison.",
+  "The partition-bootstrap interval treats overlapping outer partitions as independent and is descriptive, not calibrated.")
+
 .comparison_scalar_integer <- function(value, name, minimum = 1L) {
   if (length(value) != 1L || !is.numeric(value) || !is.finite(value) ||
       value != as.integer(value) || value < minimum)
@@ -83,6 +89,16 @@
   if (is.data.frame(out$test_metrics) && "outcome" %in% names(out$test_metrics)) out$test_metrics$outcome <- remap(out$test_metrics$outcome)
   if (is.data.frame(out$predictions) && "outcome" %in% names(out$predictions)) out$predictions$outcome <- remap(out$predictions$outcome)
   if (is.data.frame(out$selection_metrics) && "outcome" %in% names(out$selection_metrics)) out$selection_metrics$outcome <- remap(out$selection_metrics$outcome)
+  # Renaming the outcomes must rename the identities they are checked by;
+  # the stored outcome map lets both fingerprints be rebuilt under the new
+  # names while still comparing the underlying indicators and scales.
+  target_map <- out$settings$target_map
+  if (is.list(target_map) && length(target_map)) {
+    names(target_map) <- remap(names(target_map))
+    out$settings$target_map <- target_map
+    out$settings$target_fingerprint <- .outer_target_fingerprint(target_map)
+    out$settings$score_basis_fingerprint <- .outer_score_basis_fingerprint(target_map)
+  }
   if (!is.null(target_fingerprint)) out$settings$target_fingerprint <- target_fingerprint
   if (!is.null(score_basis_fingerprint)) out$settings$score_basis_fingerprint <- score_basis_fingerprint
   out
@@ -122,8 +138,12 @@
 #' Compare two outer-validation results on identical held-out partitions
 #'
 #' The comparison is predictive: it reports paired held-out metric deltas and
-#' a partition bootstrap interval. It does not compare likelihood, AIC/BIC,
-#' global fit, or latent-scale quantities.
+#' a partition bootstrap interval. Outer partitions share training rows, so
+#' that interval is descriptive (`interval_status = "descriptive_uncalibrated"`)
+#' rather than a calibrated confidence interval. It does not compare
+#' likelihood, AIC/BIC, global fit, or latent-scale quantities. Compared
+#' models must score each outcome from the same indicators and scales; their
+#' predictor sets may differ.
 #' @param first,second `cssem_outer_validation` results.
 #' @param metrics Held-out metrics among `rmse`, `mae`, and `r_squared`.
 #' @param reps Number of paired partition-bootstrap replicates.
@@ -158,12 +178,12 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
         ci_high = unname(stats::quantile(values, .975, names = FALSE)),
         direction = if (metric %in% c("rmse", "mae")) ifelse(mean(differences[[metric]]) < 0, "second_better", ifelse(mean(differences[[metric]]) > 0, "first_better", "tie")) else
           ifelse(mean(differences[[metric]]) > 0, "second_better", ifelse(mean(differences[[metric]]) < 0, "first_better", "tie")),
-        level = .95, stringsAsFactors = FALSE)
+        level = .95, interval_status = "descriptive_uncalibrated", stringsAsFactors = FALSE)
     }))
     result <- structure(list(first = first, second = second, differences = differences,
       intervals = intervals, draws = draws, metrics = metrics, reps = reps, seed = seed,
       alignment = alignment, status = "complete",
-      limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
+      limitation = .COMPARISON_LIMITATION),
       class = c("cssem_model_comparison", "list"))
     result$provenance_record <- .comparison_provenance_record("compare_outer",
       .cssem_provenance_call(comparison_call, c("first", "second", "alignment")),
@@ -191,11 +211,11 @@ compare_outer <- function(first, second, metrics = c("rmse", "mae", "r_squared")
       ci_high = unname(stats::quantile(values, probs[[2L]], names = FALSE)),
       direction = if (metric %in% c("rmse", "mae")) ifelse(mean(differences[[metric]]) < 0, "second_better", ifelse(mean(differences[[metric]]) > 0, "first_better", "tie")) else
         ifelse(mean(differences[[metric]]) > 0, "second_better", ifelse(mean(differences[[metric]]) < 0, "first_better", "tie")),
-      level = .95, stringsAsFactors = FALSE)
+      level = .95, interval_status = "descriptive_uncalibrated", stringsAsFactors = FALSE)
   }))
   result <- structure(list(first = first, second = second, differences = differences,
     intervals = intervals, draws = draws, metrics = metrics, reps = reps, seed = seed,
-    status = "complete", limitation = "paired predictive held-out comparison only; no likelihood or global-fit comparison"),
+    status = "complete", limitation = .COMPARISON_LIMITATION),
     class = c("cssem_model_comparison", "list"))
   result$provenance_record <- .comparison_provenance_record("compare_outer",
     .cssem_provenance_call(comparison_call, c("first", "second", "alignment")),

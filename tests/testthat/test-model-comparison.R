@@ -62,3 +62,46 @@ test_that("compare_models provenance records both outer-validation parents", {
   expect_true(all(vapply(provenance$parent,
     function(parent) identical(parent$operation, "validate_outer"), logical(1))))
 })
+
+test_that("compare_models compares competing predictor sets for one outcome", {
+  # Regression: the score-basis fingerprint covered every structural node, so
+  # two theories for the same outcome with different predictors were rejected
+  # as having "different score bases".
+  data <- simulate_states(n = 90, seed = 407, missing = 0)
+  model <- specify_measurement(A = ordinal("a1", "a2"), C = ordinal("a3", "a4"),
+    B = ordinal("b1", "b2"), folds = 3)
+  splits <- make_splits(data, method = "random", folds = 3, seed = 408)
+  result <- compare_models(model, specify_structure(B ~ linear(A), order = c("A", "C", "B")),
+    model, specify_structure(B ~ linear(A) + linear(C), order = c("A", "C", "B")),
+    data, splits, seed = 409, iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1, shadow_scope = "temporal"))
+  expect_s3_class(result, "cssem_model_comparison")
+  expect_true(all(result$intervals$interval_status == "descriptive_uncalibrated"))
+
+  other_outcome <- specify_measurement(A = ordinal("a1", "a2"), C = ordinal("a3", "a4"),
+    B = ordinal("b3", "b4"), folds = 3)
+  expect_error(compare_models(model, specify_structure(B ~ linear(A), order = c("A", "C", "B")),
+    other_outcome, specify_structure(B ~ linear(A), order = c("A", "C", "B")),
+    data, splits, seed = 409, iterations = 1, diagnostics = FALSE,
+    structural_args = list(structural_repeats = 1, shadow_scope = "temporal")),
+    "same observed indicators")
+})
+
+test_that("construct alignment renames the outcome identities it is checked by", {
+  # Regression: the character alignment renamed outcome rows but kept the
+  # target fingerprints built from the old names, so aligned outcomes with
+  # identical indicators were still rejected.
+  map <- function(outcome) stats::setNames(list(list(indicators = c("y1", "y2"),
+    scales = c("ordinal", "ordinal"))), outcome)
+  fixture <- function(outcome) {
+    result <- .comparison_fixture()
+    result$test_metrics$outcome <- outcome
+    result$settings$target_map <- map(outcome)
+    result$settings$target_fingerprint <- cssem:::.outer_target_fingerprint(map(outcome))
+    result$settings$score_basis_fingerprint <- cssem:::.outer_score_basis_fingerprint(map(outcome))
+    result
+  }
+  mapped <- compare_outer(fixture("Y"), fixture("Y_B"), alignment = c(Y_B = "Y"), reps = 10L)
+  expect_s3_class(mapped, "cssem_model_comparison")
+  expect_error(compare_outer(fixture("Y"), fixture("Y_B"), reps = 10L), "target")
+})

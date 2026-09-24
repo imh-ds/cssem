@@ -35,16 +35,28 @@
   paste0("n=", nrow(data), ";rows=", paste(row_ids, collapse = ","))
 }
 
-.outer_target_fingerprint <- function(model, structure) {
-  outcomes <- names(structure$effects)
-  indicators <- unique(unlist(lapply(outcomes, function(outcome) model$constructs[[outcome]]$indicators), use.names = FALSE))
-  paste(c(outcomes, indicators), collapse = "|")
+# Held-out comparison targets are the outcome construct states, so the
+# target and score-basis identities cover the outcome constructs only.
+# Competing theories may use different predictors; what must match is how
+# each compared outcome is measured and scored.
+.outer_target_map <- function(model, structure) {
+  outcomes <- sort(names(structure$effects))
+  stats::setNames(lapply(outcomes, function(outcome) {
+    spec <- model$constructs[[outcome]]
+    list(indicators = as.character(spec$indicators),
+      scales = rep(as.character(spec$scales), length.out = length(spec$indicators)))
+  }), outcomes)
 }
 
-.outer_score_basis_fingerprint <- function(model, structure) {
-  nodes <- unique(c(names(structure$effects), unlist(lapply(structure$effects,
-    function(edges) unlist(lapply(names(edges), .predictor_constructs), use.names = FALSE)), use.names = FALSE)))
-  paste(vapply(nodes, function(node) paste(c(node, model$constructs[[node]]$indicators), collapse = ":"), character(1)), collapse = "|")
+.outer_target_fingerprint <- function(map) {
+  map <- map[sort(names(map))]
+  paste(c(names(map), unique(unlist(lapply(map, `[[`, "indicators"), use.names = FALSE))), collapse = "|")
+}
+
+.outer_score_basis_fingerprint <- function(map) {
+  map <- map[sort(names(map))]
+  paste(vapply(names(map), function(outcome) paste(c(outcome, paste(map[[outcome]]$indicators,
+    map[[outcome]]$scales, sep = "/")), collapse = ":"), character(1)), collapse = "|")
 }
 
 .outer_prediction_metrics <- function(observed, predicted) {
@@ -374,8 +386,9 @@ validate_outer <- function(model, structure, data, splits, seed = 1L,
       cluster = cluster, design = design,
       split_fingerprint = .outer_split_fingerprint(splits),
       observation_fingerprint = .outer_observation_fingerprint(data),
-      target_fingerprint = .outer_target_fingerprint(model, structure),
-      score_basis_fingerprint = .outer_score_basis_fingerprint(model, structure)),
+      target_map = .outer_target_map(model, structure),
+      target_fingerprint = .outer_target_fingerprint(.outer_target_map(model, structure)),
+      score_basis_fingerprint = .outer_score_basis_fingerprint(.outer_target_map(model, structure))),
     status = status, provenance_record = outer_provenance),
     class = c("cssem_outer_validation", "list"))
 }
