@@ -92,6 +92,31 @@ correctness concerns.
 | G15 | P2 | Partial (core workflow implemented) | Study-specific simulation and sample-size planning | `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`, `f9f984c`, `0620bbc`, `2ab7311`, `e4077fa`, `0abe9e8`, `50b6b7f`, `f3d13a0`, `72cf6ac` |
 | G16 | P3 | Deliberate limits | Expanded construct and structural model classes |
 
+### Follow-up review fixes (2026-09-24)
+
+A follow-up review of G1–G15 used targeted source probes and a full test run.
+It found the defects below; each is fixed with a regression test. The G15
+confirmation was also rechecked from the Actions artifact for run
+`35954818332`. All 16 confirmation coverage Wilson intervals (0.913–0.974)
+fall inside the registered `[0.91, 0.99]` band, so its recorded gates stand.
+After these fixes the full test directory reports 254 tests with no failures
+or errors. One test is skipped: the PSOCK worker test, because the installed
+`cssem` predates the source.
+
+| Gap | Problem | Fix | Commit |
+| --- | --- | --- | --- |
+| G14 | The mediation audit checked only the treatment–outcome backdoor. A declared but unadjusted mediator–outcome confounder (`U -> M`, `U -> Y`) still gave a causal-admissible design and a `causal_under_assumptions` label (indirect 0.44 vs true 0.20). | Each mediator on a causal treatment-to-outcome path must be d-separated from the outcome given the treatment, the adjustment set, and upstream mediators (`mediator_outcome_backdoor` check). | `88501c3` |
+| G5 | Fit-level reliability averaged over prior-only rows. `associate()` passed that deflated value (0.71 vs 0.84 with 60 prior-only rows) to the mediation, causal, and moderation corrections, which over-corrected. | Association reliability is re-estimated from the retained rows' posterior variances. It equals the fit-level value when no rows are excluded. | `19661d1` |
+| G5 | `associate()` drops a row from every outcome when any declared construct is incomplete. The per-outcome ledger then reported `missing_score` for outcomes whose own constructs were observed, so exclusions are joint rather than per-outcome as described in G5. | Those rows now carry the reason `other_declared_construct_incomplete`. | `2d3a905` |
+| G10 | `compare_models()` built its score-basis fingerprint from every structural node, so competing theories for one outcome with different predictors were rejected. A character `alignment` renamed outcomes but kept fingerprints built from the old names. | Target and score-basis identities cover the compared outcomes' indicators and scales only, and are rebuilt when an alignment renames outcomes. | `edad0bf` |
+| G10 | `compare_outer()` reported a 95% partition-bootstrap interval over overlapping outer partitions, contradicting the G6/G15 finding that no calibrated interval exists for outer metrics. | The interval is labelled `interval_status = "descriptive_uncalibrated"` and documented as such. | `edad0bf`, `4a55011` |
+| G10 | `contrast()` bootstraps resampled every fitted row and dropped the sample ledger. Rows the point association excluded re-entered every replicate (400 draw rows vs 340 point rows). | Bootstraps resample the association's retained rows. | `200a31e` |
+| G10/G9 | Structural CV repeats after the first reshuffled rows individually. Duplicated bootstrap rows (under `selection = "repeat"`) or cluster members could straddle folds. | Repeats assign whole groups (bootstrap source rows, or cluster labels when present). | `200a31e` |
+| G4 | Row bootstraps with `refit = "measurement"` drew fresh random folds on the resampled data. Copies of one respondent (about 90 of 400 per replicate) were scored by encoders trained on another copy. | Row-bootstrap refits group duplicates by source row, as cluster mode already did. | `05d80fa` |
+| G1 | `confint()` ignored `level` and relabelled stored 95% bounds as any requested level. Selected smooth edges (`smooth_df*`) also got a generic unavailability reason instead of the fitted-curve explanation. | `confint()` defaults to the stored level and errors for any other level; the smooth-shape reason now matches. | `c7edc52` |
+| G2 | For reverse-keyed ordinal items, `measurement_parameters()` counted categories on reversed codes but labelled them in raw order, so each label showed its mirror category's count. | Counts are reordered to the raw labels. | `c27d1e0` |
+| Tests | The G13 record lists stale full-suite failures. Three remained: a numerical-diagnostics assertion comparing class and row-name metadata, a G1 fixture (`B = A^2`) that now selects a smooth shape, and a PSOCK study test that ran workers against an older installed `cssem`. | Assertions compare values and the G1 fixture pins a linear shape. The PSOCK test skips unless the installed `cssem` matches the source, as it does under `R CMD check`. | `c7edc52`, `a3f8d4d` |
+
 ## Proposed work
 
 ### [x] G1. Standard summaries, parameter tables, and R extractors
