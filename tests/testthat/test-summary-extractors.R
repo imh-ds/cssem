@@ -36,8 +36,10 @@ test_that("G1 extractors preserve unavailable uncertainty and OOF prediction lab
   n <- 50
   scores <- data.frame(A = seq_len(n), B = seq_len(n)^2)
   fit <- structure(list(locked_scores = scores, folds = rep(1:5, length.out = n)), class = "fit_states")
+  # B = A^2 is curved, so pin the edge to linear: this test is about scalar
+  # estimates whose uncertainty is unavailable, not about shape selection.
   association <- associate(fit, cssem_structure(list(B = "A"), order = c("A", "B")),
-    structural_repeats = 1L, seed = 2L)
+    structural_repeats = 1L, seed = 2L, fixed_shapes = list(B = c(A = "linear")))
 
   table <- parameter_table(association)
   expect_true(all(table$available))
@@ -47,6 +49,13 @@ test_that("G1 extractors preserve unavailable uncertainty and OOF prediction lab
   expect_true(all(nzchar(table$availability_reason)))
   expect_true(all(is.na(vcov(association))))
   expect_equal(ncol(confint(association)), 2L)
+  # Regression: stored intervals were relabelled as any requested level.
+  expect_error(confint(association, level = .5), "computed at level 0.95")
+  # Regression: selected smooth shapes are named smooth_df*, so the
+  # fitted-curve explanation never matched.
+  curved <- parameter_table(associate(fit, cssem_structure(list(B = "A"), order = c("A", "B")),
+    structural_repeats = 1L, seed = 2L))
+  expect_match(curved$availability_reason[!curved$available], "fitted curve")
   expect_identical(attr(fitted(association), "prediction_type"), "out_of_fold")
   expect_identical(attr(residuals(association), "prediction_type"), "out_of_fold")
   expect_equal(nrow(fitted(association)), n)

@@ -208,7 +208,8 @@ parameter_table.cssem_association <- function(x, ...) {
     family <- .structural_family(x$response_families[[row$outcome[[1L]]]])
     categorical <- family$family != "gaussian"
     shape <- as.character(row$shape[[1L]])
-    smooth_reason <- if (is.na(estimate) && shape %in% c("smooth", "spline", "monotone_increasing", "monotone_decreasing"))
+    smooth_reason <- if (is.na(estimate) && (grepl("^(smooth|spline)", shape) ||
+        shape %in% c("monotone_increasing", "monotone_decreasing")))
       "This selected nonlinear edge is represented by a fitted curve; no single scalar coefficient is defined." else NULL
     reason <- if (categorical && is.finite(estimate))
       "Categorical EIV correction is unsupported; the maximum-likelihood coefficient is reported." else if (!is.null(smooth_reason)) smooth_reason else if (is.finite(estimate) && !use_corrected && !is.finite(corrected))
@@ -495,13 +496,29 @@ vcov.conditional_indirect_effect <- function(object, ...) .cssem_unavailable_vco
   index
 }
 
+# Stored intervals are computed once at a fixed level; they cannot be
+# re-labelled as another level without recomputing them from draws that these
+# objects do not retain.
+.confint_check_level <- function(level, stored) {
+  level <- .bootstrap_validate_level(level)
+  if (!isTRUE(all.equal(level, stored)))
+    stop(sprintf("Stored intervals were computed at level %s; refit with that confidence level to obtain a %s interval.",
+      format(stored), format(level)), call. = FALSE)
+  level
+}
+
+.association_level <- function(object) if (is.null(object$level)) .95 else object$level
+
 #' @export
-confint.cssem_association <- function(object, parm, level = .95, ...) {
+confint.cssem_association <- function(object, parm, level = .association_level(object), ...) {
+  level <- .confint_check_level(level, .association_level(object))
   table <- parameter_table(object); parm <- .cssem_parameter_indices(table, if (missing(parm)) NULL else parm)
   out <- cbind(table$ci_low[parm], table$ci_high[parm]); colnames(out) <- c(paste0((1 - level) / 2 * 100, " %"), paste0((1 + level) / 2 * 100, " %")); rownames(out) <- paste(table$outcome[parm], table$predictor[parm], sep = "~"); out
 }
 
-.confint_from_table <- function(object, parm, level = .95) {
+# Mediation, moderation, and causal helpers report 95% percentile intervals.
+.confint_from_table <- function(object, parm, level = .95, stored = .95) {
+  level <- .confint_check_level(level, stored)
   table <- parameter_table(object); parm <- .cssem_parameter_indices(table, if (missing(parm)) NULL else parm)
   out <- cbind(table$ci_low[parm], table$ci_high[parm]); colnames(out) <- c(paste0((1 - level) / 2 * 100, " %"), paste0((1 + level) / 2 * 100, " %")); out
 }
