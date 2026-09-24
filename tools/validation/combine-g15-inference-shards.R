@@ -43,6 +43,12 @@ valid_part <- vapply(parts, function(part) {
     is.character(part$provenance$cssem_version) &&
     is.character(part$provenance$RNGkind) &&
     is.character(part$provenance$operating_system) &&
+    is.character(part$provenance$study_tier) &&
+    is.numeric(part$provenance$outer_reps) &&
+    is.numeric(part$provenance$inner_reps) &&
+    is.numeric(part$provenance$study_seed) &&
+    is.numeric(part$provenance$confidence_level) &&
+    is.numeric(part$provenance$minimum_inner_bootstrap_success) &&
     is.numeric(part$provenance$workers_requested)
 }, logical(1))
 if (!all(valid_part)) stop("A shard artifact has an invalid structure.", call. = FALSE)
@@ -62,7 +68,26 @@ simulation <- getFromNamespace(".study_combine_shards", "cssem")(
 if (simulation$reps != expected_reps || simulation$seed != expected_seed ||
     !identical(as.character(simulation$scenarios$scenario),
       c("rho0.40_linear", "rho0.80_linear", "rho0.40_curved", "rho0.80_curved")) ||
-    !identical(simulation$sample_sizes, 240L)) {
+    !identical(simulation$sample_sizes, 240L) ||
+    provenance$cssem_version != as.character(utils::packageVersion("cssem")) ||
+    provenance$study_tier != "confirmation" ||
+    provenance$outer_reps != expected_reps ||
+    provenance$inner_reps != expected_inner_reps ||
+    provenance$study_seed != expected_seed ||
+    provenance$confidence_level != .95 ||
+    provenance$minimum_inner_bootstrap_success != .90 ||
+    provenance$workers_requested != 2L ||
+    any(vapply(parts, function(part) {
+      part$simulation$workers != part$provenance$workers_requested
+    }, logical(1))) ||
+    simulation$metadata$confidence_level != provenance$confidence_level ||
+    simulation$metadata$seed != expected_seed ||
+    simulation$metadata$minimum_inner_bootstrap_success !=
+      provenance$minimum_inner_bootstrap_success ||
+    simulation$metadata$absolute_bias_threshold != .10 ||
+    simulation$metadata$coverage_nominal != .95 ||
+    simulation$metadata$coverage_tolerance != .04 ||
+    simulation$metadata$unconditional_failure_max != .05) {
   stop("The combined artifacts do not match the registered confirmation design.",
     call. = FALSE)
 }
@@ -97,7 +122,7 @@ metrics <- summary$metrics[summary$metrics$metric %in% c("bias", "rmse",
   "coverage", "failure", "partial", "convergence", "interval_availability"), , drop = FALSE]
 metrics$tier <- "confirmation"
 metrics$outer_reps <- simulation$reps
-metrics$inner_reps <- expected_inner_reps
+metrics$inner_reps <- provenance$inner_reps
 metrics$seed <- simulation$seed
 metrics$absolute_bias_max <- simulation$metadata$absolute_bias_threshold
 metrics$coverage_nominal <- simulation$metadata$coverage_nominal

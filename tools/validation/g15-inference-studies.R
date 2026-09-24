@@ -264,6 +264,12 @@ Sys.setenv(CSSEM_G15_RUN_ID = .g15_run_id,
       cssem_version = as.character(utils::packageVersion("cssem")),
       RNGkind = RNGkind(),
       operating_system = unname(Sys.info()[["sysname"]]),
+      study_tier = .g15_config$tier,
+      outer_reps = .g15_config$reps,
+      inner_reps = .g15_config$inner_reps,
+      study_seed = .g15_seed,
+      confidence_level = .g15_level,
+      minimum_inner_bootstrap_success = .g15_thresholds$minimum_inner_bootstrap_success,
       workers_requested = .g15_config$workers
     )
     saveRDS(list(simulation = simulation, diagnostics = audit_table,
