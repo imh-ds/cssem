@@ -1,8 +1,10 @@
 # G15 simulation evidence for G4 inference
 
-**Status:** screening complete; confirmation is running. The runner and
-predeclared design are committed. No acceptance threshold will be retuned from
-the observed results.
+**Status:** screening complete; the confirmation workflow is ready in GitHub
+Actions and awaits a run. A local confirmation attempt was stopped after
+1,064 of 2,000 outer-job audit rows; those partial records were not summarized
+or used as evidence. No acceptance threshold will be retuned from the observed
+screening results.
 
 ## Registered design
 
@@ -21,6 +23,14 @@ error variance `(1 - reliability) / reliability`. Reliability is either `0.40`
 or `0.80`; `Z` and `Y` are directly observed. This produces four conditions:
 low/high predictor reliability crossed with a linear/curved nuisance effect.
 Each condition uses `n = 240`.
+Both tiers use study seed `150415`; generator and analysis seeds are assigned
+from the complete scheduled replication grid before any shard is selected, so
+sharding preserves the single-run schedule. Screening used R `4.6.0`, cssem
+`0.5.0`, RNG kind `Mersenne-Twister/Inversion/Rejection`, and 8 PSOCK workers.
+The Actions confirmation uses 20 matrix shards with 2 PSOCK workers per shard.
+Each shard artifact records the registered tier, outer and inner replication
+counts, seed, confidence level, minimum bootstrap success rate, thresholds,
+runtime versions, RNG kind, operating system, and requested workers.
 
 The independent targets are the latent structural path `0.50` and the
 observed-score linear projection path
@@ -37,9 +47,11 @@ the scenario declaration; it does not inspect an estimator result.
 The package pipeline declares all three variables as manifest constructs,
 supplies the simulated reliability to the EIV correction, fits the focal
 `X -> Y` edge as linear, and lets `associate()` select the nuisance `Z` shape.
+`fit_states()` uses three measurement folds; `associate()` uses two structural
+repeats, three spline degrees of freedom, and unrestricted shadow scope.
 Intervals use `contrast()` over row-resampled locked manifest scores, with
-percentile bounds at 95%. The fixed-selection interval holds the point-fit
-shapes constant; the repeat-selection interval reruns shape selection in each
+percentile bounds at 95%. The fixed-selection interval holds point-fit shapes
+constant; the repeat-selection interval reruns shape selection in each
 bootstrap draw. Both the corrected latent-path contrast and naive
 observed-score contrast are retained. At least 90% of inner draws must succeed
 for an interval to be available. Outer fit/analysis failures and unavailable
@@ -85,16 +97,28 @@ estimate), so screening does not establish the registered coverage gate. It
 was used only to check the ledger, callback output, inner-draw availability,
 and shape-selection behavior before confirmation.
 
-The confirmation tier is now running the registered 500 outer replications
-and 199 inner draws per condition. Final bias, conditional/unconditional
-coverage, Monte Carlo intervals, failures, partial analyses, and availability
-will be recorded after it completes. No confirmation result is available yet.
+The confirmation tier is configured as a manually triggered GitHub Actions
+workflow: [G15 inference confirmation](../.github/workflows/g15-inference-confirmation.yaml).
+Its 20 shards each run a deterministic subset of the registered 500 outer
+replications and 199 inner draws per condition. The combine job checks that all
+20 shards arrived, runtime provenance agrees, and every scenario, sample size,
+replication, and estimand is present exactly once. It computes the study
+summary only after those checks pass. The previous local attempt reached 1,064
+outer-job audit rows, with 199/199 successful draws in both interval modes for
+those rows, but was stopped before the estimator ledger and summary were saved;
+the partial audits are excluded from the calibration results. Final bias,
+conditional/unconditional coverage, Monte Carlo intervals, failures, partial
+analyses, and availability remain pending the Actions run.
 
-The runner writes ignored replication-level `.rds` files and a tracked
-aggregate CSV at
+The screening runner writes ignored replication-level `.rds` files and a
+tracked aggregate CSV at
 [`tests/internal/validation_results/g15-inference-coverage.csv`](../tests/internal/validation_results/g15-inference-coverage.csv).
-The reproducible runner is
-[`tools/validation/g15-inference-studies.R`](../tools/validation/g15-inference-studies.R).
+After a complete Actions run, the raw replication ledger, summary, selection
+audit, runtime provenance, and aggregate CSV are uploaded as the
+`g15-inference-confirmation-results` artifact. The shard runner is
+[`tools/validation/g15-inference-studies.R`](../tools/validation/g15-inference-studies.R);
+the completeness check and summary step is
+[`tools/validation/combine-g15-inference-shards.R`](../tools/validation/combine-g15-inference-shards.R).
 
 ## G6 outer-metric coverage gate
 
@@ -102,7 +126,12 @@ The reproducible runner is
 outer test partition. It has no confidence bounds. The held-out folds also
 overlap in their training sets, so treating fold-level metrics as independent
 observations would not provide a calibrated interval for a declared
-sample-size-specific target. No justified interval method for the G6 outer
-metrics is established by this study. G6 coverage is therefore unavailable and
-G15's sample-size planner remains gated; the study-specific simulation and
-summary APIs do not by themselves provide a sample-size recommendation.
+sample-size-specific target. Bootstrapping pooled out-of-fold rows would hold
+the fold-specific fitted models fixed and would not capture training/selection
+variability for the sample-size target. A repeated-study simulation estimates
+operating characteristics for its declared generator and estimator; it does
+not create an interval for one `validate_outer()` result. No justified interval
+method for the G6 outer metrics is established. G6 coverage is therefore
+unavailable and G15's sample-size planner remains gated; the study-specific
+simulation and summary APIs do not by themselves provide a sample-size
+recommendation.

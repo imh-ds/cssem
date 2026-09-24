@@ -15,9 +15,10 @@ artifact-backed support reporting, and aligned method/migration documentation;
 its validated scope and remaining suite failures are recorded below. G14 now
 has a scoped causal-graph audit and an independent-truth validation runner;
 assumption verification and broader calibration remain limited. G15 now has a
-callback-based simulation and summary workflow; sample-size planning remains
-gated. The other unchecked entries are proposed work. Existing defect
-reproductions and fixes belong in
+callback-based simulation and summary workflow plus a manually triggered,
+sharded Actions confirmation pipeline; its confirmation results are pending,
+and sample-size planning remains gated. The other unchecked entries are
+proposed work. Existing defect reproductions and fixes belong in
 [bugs.md](bugs.md); this document covers missing capabilities, incomplete user
 workflows, and methodological extensions.
 
@@ -88,7 +89,7 @@ correctness concerns.
 | G12 | P2 | Implemented (scoped) | Structural, moderation, evidence, and convergence plots | `18d0d87` |
 | G13 | P1 | Implemented (scoped) | Complete examples, provenance, and support reporting | `c1e0676`, `b8933dc`, `142c79e`, `8ec7621`, `12ede00`, `20dbcf8`, `822d2dd`, `9256f07`, `7e2771f`, `04d2621`, `b2d25e4` |
 | G14 | P1 | Implemented (scoped) | Causal assumptions and validation contract | `8adba22`, `8d7874a`, `02c4617`, `67dbc78` |
-| G15 | P2 | Partial (core workflow implemented) | Study-specific simulation and sample-size planning | `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`, `f9f984c`, `0620bbc` |
+| G15 | P2 | Partial (core workflow implemented) | Study-specific simulation and sample-size planning | `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`, `f9f984c`, `0620bbc`, `2ab7311`, `e4077fa`, `0abe9e8`, `50b6b7f`, `f3d13a0`, `72cf6ac` |
 | G16 | P3 | Deliberate limits | Expanded construct and structural model classes |
 
 ## Proposed work
@@ -280,8 +281,9 @@ confidence intervals. The G15 screening tier ran 100 replications per
 condition with 50 fixed/repeated-selection bootstrap draws; absolute bias was
 `0.0001` to `0.0162` and observed coverage was `0.88` to `0.95`. Its Monte Carlo
 intervals are too wide to establish the registered coverage target, so it is
-only an operational screen; the 500-replication confirmation is in progress
-(see [`validation-g15.md`](validation-g15.md)).
+only an operational screen; the 500-replication confirmation is ready as a
+manual Actions workflow and has not yet run there. The interrupted local attempt
+is excluded (see [`validation-g15.md`](validation-g15.md)).
 
 **Tracking commits:** `b9e2fbe`, `d8990fc`, `43f8595`, `a6b87ea`, `f4df370`.
 
@@ -1019,23 +1021,27 @@ implemented by the caller and independently validated.
 
 G4's predeclared reliability and shape-selection screening study has completed;
 its 100-replication results check runner behavior but do not establish
-calibration. The registered 500-replication confirmation is in progress; see
-[`validation-g15.md`](validation-g15.md) for the independent targets, thresholds,
-scope, and results as they become available.
+calibration. The registered 500-replication confirmation is ready as a manual
+GitHub Actions workflow with deterministic shards and a completeness gate. An
+incomplete local attempt was stopped and excluded; no confirmation results are
+available until the Actions run completes. See
+[`validation-g15.md`](validation-g15.md) for the independent targets,
+thresholds, scope, and current evidence.
 
 The sample-size planner is **not implemented**. It remains gated on a defensible
 G6 uncertainty method for whole-pipeline outer metrics and adequate independent
 validation. Current outer-validation RMSE, MAE, and R-squared are point metrics;
 overlapping folds cannot be treated as independent interval observations.
 
-**Acceptance remaining:** confirmation must report whether each registered
-bias, coverage, failure, and inner-bootstrap availability target passes with its
-Monte Carlo uncertainty. A future planner must recommend only tested sample
-sizes, include the assumed design and Monte Carlo uncertainty, and keep failed
-fits and unavailable intervals in the decision denominator.
+**Acceptance remaining:** run the Actions workflow and report whether each
+registered bias, coverage, failure, and inner-bootstrap availability target
+passes with its Monte Carlo uncertainty. A future planner must recommend only
+tested sample sizes, include the assumed design and Monte Carlo uncertainty,
+and keep failed fits and unavailable intervals in the decision denominator.
 
 **Tracking commits:** `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`, `f9f984c`,
-`0620bbc`; G6 point-metric contract: `2ab7311`.
+`0620bbc`, `2ab7311`, `e4077fa`, `0abe9e8`, `50b6b7f`, `f3d13a0`,
+`72cf6ac`.
 
 ### [ ] G16. Broader construct and structural classes: optional research
 

@@ -255,7 +255,7 @@ expect_lt(abs(mean(beta) - .30), 4 / sqrt(120 * length(beta)))
 
 - [x] **Step 3: Run a screening tier and inspect failures.** Execute 100 outer study replications per scenario with 50 inner bootstrap draws. Save the raw replication table to the ignored validation-results directory and check that truth, estimate basis, selection mode, and interval statuses are interpretable before running confirmation. Do not commit raw replication-level records.
 
-- [ ] **Step 4: Run confirmation and compute Monte Carlo uncertainty.** Execute 500 outer study replications per scenario with 199 inner bootstrap draws after the screening design and thresholds are frozen. Calculate coverage with conditional and unconditional denominators, bias with MCSE, failure rates with Wilson intervals, and report the exact seed, sample sizes, bootstrap mode, pipeline components, and threshold decisions. Any missed coverage/bias/failure target stays in the report; do not relabel it as passed.
+- [ ] **Step 4: Run confirmation in GitHub Actions and compute Monte Carlo uncertainty.** Do not run the registered confirmation locally. Dispatch [the G15 Actions workflow](../../../.github/workflows/g15-inference-confirmation.yaml) for 500 outer study replications per scenario and 199 inner bootstrap draws. Its 20 deterministic shards preserve the seed map from the complete study schedule, and its combine job must validate shard completeness and runtime provenance before summarizing. Calculate coverage with conditional and unconditional denominators, bias with MCSE, and failure rates with Wilson intervals; report the exact runtime versions, seed, sample sizes, bootstrap mode, pipeline components, and threshold decisions. Any missed coverage/bias/failure target stays in the report; do not relabel it as passed. A prior local attempt was stopped after 1,064 of 2,000 outer-job audit rows and produced no final ledger or summary; exclude those partial records.
 
 - [ ] **Step 5: Record G4 evidence and commit it.** Write the scenario conditions, estimands, target formulas, results, MC uncertainty, and limitations into `docs/validation-g15.md`; retain the machine-readable results in `tests/internal/validation_results/`. Update the G4 note in `docs/gaps.md` only to describe observed evidence. Commit the script, report, artifact, and doc change as `test: report G4 bootstrap coverage simulations`.
 
@@ -283,11 +283,16 @@ expect_length(intersect(c("lower", "upper", "conf_low", "conf_high"),
 
 - [x] **Step 3: Run the G6 gate only for a justified method.** If a method passes Step 2, execute its predeclared independent coverage study through `study_spec()` and store the full denominator and MC interval. Require the predeclared G6 accuracy, coverage, and failure-rate thresholds to pass with the stated uncertainty; merely obtaining simulation output does not close the gate. If no method passes Step 2, record `coverage = unavailable`, cite the point-metric-only `validate_outer()` contract, leave G6 Partial, and keep the G15 planner unexported. Do not replace this step with an ordinary t interval over dependent folds.
 
-- [ ] **Step 4: Commit the G6 gate result.** Commit the test, validation report, and exact G6 documentation change as `test: record G6 outer metric coverage gate`.
+- [x] **Step 4: Commit the G6 gate result.** Commit the test, validation report, and exact G6 documentation change as `test: record G6 outer metric coverage gate` (test: `2ab7311`; report and documentation: `0abe9e8`).
 
 ### Task 8: Add the sample-size planner only after the gate passes
 
 **Execution precondition:** Do not execute this task unless Task 7 records that the G4/G6 gate passed or the user explicitly approves a documented scope revision.
+
+**Status:** skipped as required by the execution stop condition. Task 7 found
+G6 outer-metric coverage unavailable, so adding `plan_sample_size()` would
+recommend sample sizes without the approved uncertainty contract. Keep the
+symbol absent from `NAMESPACE` and the R source.
 
 **Files:**
 - Modify: `R/study-summary.R`

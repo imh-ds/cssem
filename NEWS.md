@@ -8,11 +8,14 @@
   and retained failure/partial-result accounting. Summaries include bias, RMSE,
   interval width and availability, conditional/unconditional coverage and
   detection, convergence and failure rates, and Monte Carlo uncertainty.
-* Added a G4 reliability/shape-selection bootstrap validation study; its
-  confirmation tier is running. The sample-size planner remains gated because
-  G6 outer-validation metrics currently lack an independently calibrated
+* Added a G4 reliability/shape-selection bootstrap validation study and a
+  manually triggered GitHub Actions workflow that runs its 500-by-199
+  confirmation in 20 deterministic shards. The combine job verifies the full
+  replication grid and runtime provenance before summarizing; confirmation
+  evidence remains pending that Actions run. The sample-size planner remains
+  gated because G6 outer-validation metrics lack an independently calibrated
   uncertainty method. Commits: `486c949`, `9b9345a`, `cb20ccf`, `3f340fb`,
-  `f9f984c`, `0620bbc`.
+  `f9f984c`, `0620bbc`, `50b6b7f`, `f3d13a0`, `72cf6ac`.
 
 ## Causal assumptions and validation contract (2026-09-22)
 
