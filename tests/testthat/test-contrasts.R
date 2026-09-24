@@ -108,3 +108,42 @@ test_that("partially unavailable contrast specifications preserve valid draws", 
   expect_true(all(is.na(result$draws[, "unavailable"])))
   expect_equal(result$successful_replicates, 3L)
 })
+
+test_that("contrast bootstraps resample only the association's retained rows", {
+  # Regression: the contrast bootstrap resampled every fitted row and dropped
+  # the sample ledger, so rows the point association excluded (prior-only
+  # scores) re-entered every replicate (340 point rows vs 400 draw rows).
+  set.seed(74)
+  n <- 240L
+  latent <- matrix(stats::rnorm(n * 2L), n, 2L)
+  item <- function(z) as.integer(cut(.8 * z + stats::rnorm(n, sd = .6), c(-Inf, -.8, 0, .8, Inf)))
+  data <- data.frame(a1 = item(latent[, 1]), a2 = item(latent[, 1]), a3 = item(latent[, 1]),
+    b1 = item(latent[, 2]), b2 = item(latent[, 2]), b3 = item(latent[, 2]))
+  data[1:40, c("a1", "a2", "a3")] <- NA
+  fit <- cssem:::.fit_states_quiet(specify_measurement(A = ordinal("a1", "a2", "a3"),
+    B = ordinal("b1", "b2", "b3"), folds = 3L), data, seed = 3L, iterations = 4L, diagnostics = FALSE)
+  association <- associate(fit, specify_structure(B ~ linear(A), order = c("A", "B")),
+    structural_repeats = 1L, seed = 1L)
+  boot_fit <- cssem:::.association_bootstrap_fit(association)
+  expect_equal(nrow(boot_fit$locked_scores), nrow(association$scores))
+  expect_equal(boot_fit$row_ids, as.integer(association$row_ids))
+
+  context <- list(fit = boot_fit, scores = boot_fit$locked_scores, data = boot_fit$data,
+    indices = seq_len(nrow(boot_fit$locked_scores)), cluster_ids = NULL, seed = 1L,
+    refit = "locked_scores")
+  refit <- cssem:::.bootstrap_association(context, association, "fixed")
+  expect_equal(nrow(refit$scores), nrow(association$scores))
+  expect_equal(unname(coef(refit)), unname(coef(association)), tolerance = 1e-8)
+
+  result <- contrast(association, contrast_spec(list(slope = "edge:B~A")), reps = 5L, seed = 2L)
+  expect_equal(result$successful_replicates, 5L)
+})
+
+test_that("repeated structural folds keep grouped rows together", {
+  # Regression: repeats after the first reshuffled rows individually, so
+  # duplicated bootstrap rows (or cluster members) could straddle folds.
+  groups <- rep(seq_len(30L), each = 3L)
+  folds <- rep(rep(1:3, length.out = 30L), each = 3L)
+  sets <- cssem:::.structural_fold_sets(folds, 4L, 9L, groups = groups)
+  for (set in sets) expect_true(all(tapply(set, groups, function(x) length(unique(x))) == 1L))
+})

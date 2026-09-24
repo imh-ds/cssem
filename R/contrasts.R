@@ -218,8 +218,7 @@ contrast <- function(object, spec, reps = 0L, level = .95, seed = 1L,
         ci_low = NA_real_, ci_high = NA_real_, level = level, stringsAsFactors = FALSE)
     } else {
       bootstrap_names <- names(evaluated$estimates)[is.finite(evaluated$estimates)]
-      boot_fit <- object$fit
-      if (is.null(boot_fit$data)) boot_fit$data <- as.data.frame(boot_fit$locked_scores)
+      boot_fit <- .association_bootstrap_fit(object)
       statistic <- function(context) {
         refit <- .bootstrap_association(context, object, selection)
         values <- .contrast_evaluate_table(parameter_table(refit), spec)$estimates

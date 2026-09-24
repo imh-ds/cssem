@@ -296,16 +296,24 @@ specify_structure <- function(..., order = NULL, families = NULL) {
   names(out) <- names(structure$effects); out
 }
 
-.structural_fold_sets <- function(folds, repeats, seed) {
+# Repeated structural folds. When `groups` is supplied (cluster labels, or the
+# source rows of a bootstrap resample), each repeat assigns whole groups to
+# folds so repeated observations or duplicated rows never straddle a
+# train/test split.
+.structural_fold_sets <- function(folds, repeats, seed, groups = NULL) {
   repeats <- as.integer(repeats)
   if (is.na(repeats) || repeats < 1L) stop("structural_repeats must be at least 1.", call. = FALSE)
   if (!is.numeric(seed) || length(seed) != 1L || !is.finite(seed)) stop("seed must be a finite numeric scalar.", call. = FALSE)
   sets <- vector("list", repeats); sets[[1L]] <- folds
   if (repeats > 1L) {
     k <- length(unique(folds))
+    units <- if (is.null(groups)) NULL else unique(groups)
+    if (!is.null(units) && length(units) < k) units <- NULL
     for (repeat_index in 2:repeats) {
       set.seed(seed + repeat_index)
-      sets[[repeat_index]] <- sample(rep(seq_len(k), length.out = length(folds)))
+      sets[[repeat_index]] <- if (is.null(units))
+        sample(rep(seq_len(k), length.out = length(folds))) else
+        sample(rep(seq_len(k), length.out = length(units)))[match(groups, units)]
     }
   }
   sets
@@ -1094,7 +1102,11 @@ associate <- function(fit, structure, folds = NULL, spline_df = c(3L, 4L), smoot
   folds <- if (is.null(folds)) fit$folds else as.integer(folds)
   if (length(folds) == nrow(fit$locked_scores) && length(folds) != nrow(scores)) folds <- folds[score_complete]
   if (length(folds) != nrow(scores) || length(unique(folds)) < 2L) stop("folds must assign every row to at least two validation folds.", call. = FALSE)
-  fold_sets <- .structural_fold_sets(folds, structural_repeats, seed)
+  fold_groups <- if (!is.null(fit$resample_source_ids)) fit$resample_source_ids else fit$cluster_ids
+  if (!is.null(fold_groups) && length(fold_groups) == length(score_complete) &&
+      length(score_complete) != nrow(scores)) fold_groups <- fold_groups[score_complete]
+  if (!is.null(fold_groups) && length(fold_groups) != nrow(scores)) fold_groups <- NULL
+  fold_sets <- .structural_fold_sets(folds, structural_repeats, seed, groups = fold_groups)
   candidates <- list(); effects <- list(); predictions <- list(); gaps <- list(); models <- list(); contributions <- list(); corrected <- list()
   for (outcome in names(structure$effects)) {
     policies <- structure$effects[[outcome]]; predictors <- names(policies)
