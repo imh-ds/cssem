@@ -56,8 +56,11 @@ diagnostics, and structural robustness, rather than only latent recovery.
 Native structural comparators are appended when their packages are
 available: a full ordinal CB-SEM (\code{lavaan_native}), a PLS-SEM path model
 (\code{seminr_native}), and Croon-corrected factor-score regression via lavaan's
-structural-after-measurement estimator (\code{lavaan_sam}), each scored on the
-same truth-referenced bias and coverage metrics.
+structural-after-measurement estimator (\code{lavaan_sam}, continuous indicators
+with FIML), each scored on the same truth-referenced bias and coverage
+metrics. A categorical local SAM (\code{lavaan_sam_ordinal}, ordered indicators)
+is also appended; it reports point estimates only, because lavaan's standard
+errors for that configuration are not yet reliable.
 }
 \examples{
 structural_comparators <- validate_structure_comparator(

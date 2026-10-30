@@ -63,8 +63,11 @@ validate_comparator <- function(manifest, reps = 3L, seed = 1L,
 #' Native structural comparators are appended when their packages are
 #' available: a full ordinal CB-SEM (`lavaan_native`), a PLS-SEM path model
 #' (`seminr_native`), and Croon-corrected factor-score regression via lavaan's
-#' structural-after-measurement estimator (`lavaan_sam`), each scored on the
-#' same truth-referenced bias and coverage metrics.
+#' structural-after-measurement estimator (`lavaan_sam`, continuous indicators
+#' with FIML), each scored on the same truth-referenced bias and coverage
+#' metrics. A categorical local SAM (`lavaan_sam_ordinal`, ordered indicators)
+#' is also appended; it reports point estimates only, because lavaan's standard
+#' errors for that configuration are not yet reliable.
 #'
 #' @param manifest A structural manifest from
 #'   [structural_manifest()].
@@ -558,8 +561,11 @@ validate_structure_comparator <- function(manifest, reps = 3L,
 # reader will cite, so S2-style bias comparisons must include it. Items are
 # treated as continuous with FIML for missingness because lavaan's local SAM
 # cannot yet compute standard errors for categorical indicators -- which also
-# mirrors how applied users run the correction on Likert data.
-.lavaan_sam_structural <- function(data, model, structure) {
+# mirrors how applied users run the correction on Likert data. With
+# `ordinal = TRUE` the indicators are declared ordered (categorical local SAM).
+# lavaan 0.7.2 returns implausibly small standard errors for that configuration,
+# so only its point estimates are reported and its interval is left empty.
+.lavaan_sam_structural <- function(data, model, structure, ordinal = FALSE) {
   if (!requireNamespace("lavaan", quietly = TRUE))
     return(list(available = FALSE, status = "skipped_not_installed", converged = NA, paths = NULL,
       runtime = NA_real_, version = NA_character_, error_message = NA_character_))
@@ -574,12 +580,17 @@ validate_structure_comparator <- function(manifest, reps = 3L,
     paste(outcome, "~", paste(names(structure$effects[[outcome]]), collapse = " + ")), character(1)), collapse = "\n")
   started <- proc.time()[["elapsed"]]
   tryCatch({
-    fit <- lavaan::sam(paste(measurement, structural, sep = "\n"), data = data,
-      sam.method = "local", std.lv = TRUE, missing = "ml")
+    syntax <- paste(measurement, structural, sep = "\n")
+    fit <- if (ordinal) {
+      indicators <- unlist(lapply(constructs, function(nm) model$constructs[[nm]]$indicators), use.names = FALSE)
+      lavaan::sam(syntax, data = data, sam.method = "local", std.lv = TRUE, ordered = indicators)
+    } else {
+      lavaan::sam(syntax, data = data, sam.method = "local", std.lv = TRUE, missing = "ml")
+    }
     reg <- lavaan::standardizedSolution(fit)
     reg <- reg[reg$op == "~", , drop = FALSE]
     paths <- data.frame(outcome = reg$lhs, predictor = reg$rhs, estimate = reg$est.std,
-      se = reg$se, stringsAsFactors = FALSE)
+      se = if (ordinal) NA_real_ else reg$se, stringsAsFactors = FALSE)
     list(available = TRUE, status = "success", converged = isTRUE(lavaan::lavInspect(fit, "converged")),
       paths = paths, runtime = proc.time()[["elapsed"]] - started,
       version = as.character(utils::packageVersion("lavaan")), error_message = NA_character_)
@@ -814,6 +825,10 @@ validate_structure_comparator <- function(manifest, reps = 3L,
   sam_native <- .lavaan_sam_structural(generated$data, generated$model, generated$structure)
   index <- index + 1L
   rows[[index]] <- .native_structural_rows("lavaan_sam", sam_native, "lavaan", truth_slopes,
+    setting$scenario, setting, job$replication, validation_fit)
+  sam_ordinal <- .lavaan_sam_structural(generated$data, generated$model, generated$structure, ordinal = TRUE)
+  index <- index + 1L
+  rows[[index]] <- .native_structural_rows("lavaan_sam_ordinal", sam_ordinal, "lavaan", truth_slopes,
     setting$scenario, setting, job$replication, validation_fit)
   do.call(rbind, rows)
 }

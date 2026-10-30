@@ -72,6 +72,11 @@ test_that("structural comparator validation returns structural benchmark columns
     "structural_bias", "ci_covers_truth", "shape_correct") %in% names(result)))
   expect_true(all(result$status[result$engine == "lavaan_sam"] %in%
     c("success", "skipped_not_installed", "skipped_no_sam", "error")))
+  # Categorical SAM contributes point estimates only; no interval is reported.
+  sam_ordinal <- result[result$engine == "lavaan_sam_ordinal", , drop = FALSE]
+  expect_true(nrow(sam_ordinal) >= 1L)
+  expect_true(all(sam_ordinal$status %in% c("success", "skipped_not_installed", "skipped_no_sam", "error")))
+  expect_true(all(is.na(sam_ordinal$corrected_ci_low)))
   # The corrected estimate is a CS-SEM capability driven by posterior reliability;
   # score-only proxies report the naive slope and leave the correction empty.
   cssem_rows <- result[result$engine == "cssem_locked" & result$outcome == "Quality" & result$predictor == "Trust", , drop = FALSE]
