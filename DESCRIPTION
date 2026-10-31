@@ -20,9 +20,14 @@ Description: Research implementation of cross-fitted construct-state modeling fo
     effects by default; causal estimands are available only under explicitly
     declared adjustment sets and temporal order.
 Imports:
+    graphics,
+    grDevices,
     MASS,
+    parallel,
     rpart,
-    splines
+    splines,
+    stats,
+    utils
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

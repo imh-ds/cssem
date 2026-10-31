@@ -5,8 +5,9 @@ test_that("validation manifests are deterministic and expose required scenarios"
   expect_true(all(c("diagnostic_clean", "diagnostic_local_dependence") %in% measurement_manifest("diagnostic")$scenario))
   expect_true(all(c("linear", "monotone_increasing", "monotone_decreasing", "smooth_strong", "null", "interaction", "omitted", "downstream") %in% structural$scenario))
   expect_equal(supported_envelope()$minimum_n, 200)
-  evidence <- utils::read.csv(test_path("..", "internal", "validation_results", "supported_envelope.csv"),
-    stringsAsFactors = FALSE)
+  evidence_path <- test_path("..", "internal", "validation_results", "supported_envelope.csv")
+  skip_if_not(file.exists(evidence_path), "internal validation evidence is not part of the built package")
+  evidence <- utils::read.csv(evidence_path, stringsAsFactors = FALSE)
   envelope <- supported_envelope()
   expect_named(envelope, names(evidence))
   expect_equal(envelope, evidence)
@@ -97,6 +98,7 @@ test_that("repo-owned validation scripts use the shared library helper", {
     "inst/scripts/smoke-test.R"
   )
   script_paths <- file.path(testthat::test_path("..", ".."), scripts)
+  skip_if_not(all(file.exists(script_paths)), "repository scripts are only available in a source checkout")
   lines <- lapply(script_paths, readLines, warn = FALSE)
   expect_true(all(vapply(lines, function(x) any(grepl("script-utils.R", x, fixed = TRUE)), logical(1))))
   expect_true(all(vapply(lines, function(x) any(grepl("prefer_workspace_library\\(", x)), logical(1))))
@@ -104,6 +106,7 @@ test_that("repo-owned validation scripts use the shared library helper", {
 
 test_that("workspace library helper is opt-in", {
   script <- file.path(testthat::test_path("..", ".."), "inst", "scripts", "script-utils.R")
+  skip_if_not(file.exists(script), "repository scripts are only available in a source checkout")
   e <- new.env(parent = globalenv())
   source(script, local = e)
 
@@ -130,6 +133,7 @@ test_that("workspace library helper is opt-in", {
 test_that("public docs refer to seminr instead of plspm", {
   files <- c("README.md", "docs/validation.md")
   paths <- file.path(testthat::test_path("..", ".."), files)
+  skip_if_not(all(file.exists(paths)), "README and docs are only available in a source checkout")
   lines <- unlist(lapply(paths, readLines, warn = FALSE))
   expect_false(any(grepl("plspm", lines, fixed = TRUE)))
   expect_true(any(grepl("seminr", lines, fixed = TRUE)))

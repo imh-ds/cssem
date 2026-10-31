@@ -31,6 +31,10 @@ this function; \code{causal_admissible} is true only when those required statuse
 are all explicitly set to \code{"assumed"} as well as the graph checks passing.
 }
 \examples{
+edges <- data.frame(from = c("Age", "Age", "Treatment"),
+  to = c("Treatment", "Outcome", "Outcome"))
+design <- causal_design(edges, "Treatment", "Outcome", adjust = "Age",
+  assumptions = list(no_unmeasured_confounding = "assumed"))
 audit <- validate_causal_design(design)
 audit$checks
 }
