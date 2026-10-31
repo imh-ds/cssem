@@ -35,12 +35,5 @@ train/test row IDs, provenance, and independent-unit counts. Grouped
 assignments retain source labels so leakage can be checked before fitting.
 }
 \description{
-Creates reproducible split assignments for cross-fitting and outer evaluation.
-Integer row IDs are authoritative; row names are retained only as labels.
-}
-\examples{
-\dontrun{
-splits <- make_splits(data.frame(x = rnorm(40)), folds = 4, seed = 2)
-print(splits)
-}
+Create reusable measurement and outer-validation splits
 }

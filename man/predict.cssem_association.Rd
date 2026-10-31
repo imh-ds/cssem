@@ -2,7 +2,7 @@
 % Please edit documentation in R/prediction.R
 \name{predict.cssem_association}
 \alias{predict.cssem_association}
-\title{Predict associational structural outcomes for new observations}
+\title{Predict selected structural outcomes for new observations}
 \usage{
 \method{predict}{cssem_association}(
   object,
@@ -10,35 +10,37 @@
   outcomes = NULL,
   mode = c("observed", "recursive"),
   missing_policy = c("error", "na"),
+  type = c("expected", "probability", "class"),
   ...
 )
 }
 \arguments{
-\item{object}{A \code{cssem_association} object from \code{associate()}.}
+\item{object}{A cssem_association object from associate().}
 
 \item{newdata}{A data frame containing indicators for the required parent
 constructs. Extra columns are ignored.}
 
-\item{outcomes}{Optional character vector of structural outcomes. Defaults to
-all declared structural outcomes.}
+\item{outcomes}{Optional character vector of structural outcomes. Defaults
+to every declared outcome.}
 
-\item{mode}{Prediction mode. \code{"observed"} evaluates outcomes from their
-directly observed parent constructs. \code{"recursive"} predicts unavailable
-endogenous upstream parents when needed.}
+\item{mode}{Prediction mode: "observed" uses direct observed parents;
+"recursive" predicts unavailable endogenous upstream parents when needed.}
 
-\item{missing_policy}{Whether missing required indicator columns stop with an
-error or return unavailable rows with \code{NA} predictions.}
+\item{missing_policy}{Whether missing required columns stop with an error or
+return unavailable rows with NA predictions.}
 
-\item{...}{Reserved for future prediction options.}
+\item{type}{Output scale: \code{"expected"} returns expected category values
+(the unchanged Gaussian behavior), \code{"probability"} returns expected
+values while also retaining per-category probabilities, and \code{"class"}
+returns the most-probable declared category.}
+
+\item{...}{Unused.}
 }
 \value{
-An object of class \code{cssem_prediction} with \code{predictions},
-\code{availability}, and \code{settings} components.
+A cssem_prediction object with prediction and availability tables.
 }
 \description{
-Scores only the direct parent constructs required by the selected
-associational structural models, then evaluates their fitted shape models.
-Requested outcome indicators are not required, preventing target leakage.
-Predictions outside the observed locked-score support are retained and marked
-in the \code{extrapolated} column.
+The selected associational structural models are evaluated on construct
+states scored with the fitted measurement encoders. Requested outcome
+indicators are not required; only direct parent indicators are scored.
 }

@@ -40,6 +40,7 @@ estimated one, is the right correction input.
 Other model specification functions:
 \code{\link[=continuous]{continuous()}},
 \code{\link[=cssem_model]{cssem_model()}},
+\code{\link[=mixed_items]{mixed_items()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_measurement]{specify_measurement()}},
 \code{\link[=specify_structure]{specify_structure()}}

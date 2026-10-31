@@ -2,7 +2,6 @@
 % Please edit documentation in R/outer-validation.R
 \name{validate_outer}
 \alias{validate_outer}
-\alias{print.cssem_outer_validation}
 \title{Validate measurement, structural selection, and held-out prediction together}
 \usage{
 validate_outer(
@@ -21,7 +20,6 @@ validate_outer(
   cluster = NULL,
   design = NULL
 )
-\method{print}{cssem_outer_validation}(x, ...)
 }
 \arguments{
 \item{model}{A \code{cssem_model} object.}
@@ -30,7 +28,7 @@ validate_outer(
 
 \item{data}{A data frame containing all declared measurement indicators.}
 
-\item{splits}{A \code{cssem_splits} object from \code{make_splits()}.}
+\item{splits}{A \code{cssem_splits} object from \code{\link[=make_splits]{make_splits()}}.}
 
 \item{seed}{Base seed for partition fitting and structural selection.}
 
@@ -38,17 +36,15 @@ validate_outer(
 
 \item{tolerance}{Measurement convergence tolerance.}
 
-\item{quadrature}{Latent quadrature nodes passed to \code{fit_states()}.}
+\item{quadrature}{Latent quadrature nodes passed to \code{\link[=fit_states]{fit_states()}}.}
 
 \item{diagnostics}{Whether measurement diagnostics are calculated.}
 
-\item{structural_args}{Named arguments forwarded to \code{associate()}. The
-\code{fit}, \code{structure}, \code{folds}, and \code{missing_policy}
-arguments are controlled by this helper.}
+\item{structural_args}{Named arguments forwarded to \code{\link[=associate]{associate()}}. \code{fit},
+\code{structure}, \code{folds}, and \code{missing_policy} are controlled by this helper.}
 
 \item{measurement_missing_policy}{Missing-indicator policy for training and
-held-out measurement data: \code{"partial"}, \code{"listwise"}, or
-\code{"error"}.}
+held-out measurement data: \code{"partial"}, \code{"listwise"}, or \code{"error"}.}
 
 \item{structural_missing_policy}{Missing locked-score policy for structural
 selection: \code{"complete"} or \code{"error"}.}
@@ -60,24 +56,20 @@ crosses the boundary; grouped split labels are used when omitted.}
 \item{design}{Optional named design metadata. Unsupported survey weights,
 strata, finite-population corrections, replicate weights, and design-based
 standard errors fail explicitly.}
-
-\item{x}{A \code{cssem_outer_validation} object.}
-
-\item{...}{Unused.}
 }
 \value{
 An object of class \code{cssem_outer_validation} containing predictions,
-internal selection metrics, held-out metrics, provenance, and failures. The
-provenance table includes \code{status_detail} when a partition has no observed
-held-out outcomes; split provenance retains source group/time vectors needed to
-recheck grouped and time-ordered constraints, plus row and independent-unit
-counts.
+internal selection metrics, held-out metrics, provenance, and failures.
+The provenance table includes \code{status_detail} when a partition has no
+observed held-out outcomes, plus row and independent-unit counts; split
+provenance retains the source group/time vectors needed to recheck grouped
+and time-ordered constraints.
 }
 \description{
 Fits each outer partition using training rows only. Measurement assignments
-are resolved from \code{make_splits()}, structural shape selection is performed
-by \code{associate()}, and predictions for untouched rows are reported
-separately from internal selection metrics. Held-out predictions require the
-declared outcome indicators; predictor-only prospective scoring remains outside
-this interface (the G7 gap).
+are resolved from \code{\link[=make_splits]{make_splits()}}, structural shape selection is performed by
+\code{\link[=associate]{associate()}}, and predictions for untouched rows are reported separately
+from internal selection metrics. Held-out predictions require the declared
+outcome indicators; predictor-only prospective scoring remains outside this
+interface (see the G7 gap in \code{docs/gaps.md}).
 }

@@ -7,10 +7,12 @@
 mixed_items(...)
 }
 \arguments{
-\item{...}{One or more indicator specifications returned by \code{\link[=ordinal]{ordinal()}} or \code{\link[=continuous]{continuous()}}. Every item name must be unique across the components.}
+\item{...}{One or more indicator specifications returned by \code{\link[=ordinal]{ordinal()}} or
+\code{\link[=continuous]{continuous()}}. Every item name must be unique across the components.}
 }
 \value{
-A mixed indicator specification consumed by \code{\link[=specify_measurement]{specify_measurement()}}.
+A mixed indicator specification consumed by
+\code{\link[=specify_measurement]{specify_measurement()}}.
 }
 \description{
 Combines one or more declarations returned by \code{\link[=ordinal]{ordinal()}} and

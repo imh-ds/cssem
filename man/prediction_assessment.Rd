@@ -14,29 +14,27 @@ prediction_assessment(
 )
 }
 \arguments{
-\item{association}{A \code{cssem_association} object from \code{associate()}.}
+\item{association}{A cssem_association object from associate().}
 
 \item{newdata}{A data frame containing predictor and, when available, target
-indicator columns.}
+indicators.}
 
-\item{outcomes}{Optional character vector of structural outcomes. Defaults to
-all declared structural outcomes.}
+\item{outcomes}{Optional character vector of structural outcomes. Defaults
+to every declared outcome.}
 
-\item{mode}{Prediction mode passed to \code{predict.cssem_association()}.}
+\item{mode}{Prediction mode passed to predict.cssem_association().}
 
-\item{missing_policy}{Missing-input policy passed to
-\code{predict.cssem_association()}.}
+\item{missing_policy}{Missing-input policy passed to predict.cssem_association().}
 
 \item{baseline}{Whether to report a training target-mean baseline or omit it.}
 }
 \value{
-An object of class \code{cssem_prediction_assessment} containing a metrics
-table, row-level predictions, and settings.
+An object of class cssem_prediction_assessment with metrics,
+row-level predictions, and settings.
 }
 \description{
-Compares finite structural predictions with target construct states scored by
-the same fitted measurement encoders. Reports sample size, RMSE, MAE,
-R-squared, calibration intercept and slope, and an optional training
-target-mean baseline. If target indicators are absent, the outcome is reported
-with status \code{"target_unavailable"} rather than silently omitting it.
+Scores the requested structural outcomes on new observations and compares
+finite predictions with target construct states scored by the same fitted
+measurement encoders. Target indicators are used only for assessment; they
+are never used as predictors.
 }

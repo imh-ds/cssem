@@ -4,13 +4,16 @@
 \alias{specify_structure}
 \title{Declare an associational CS-SEM structural model with formulas}
 \usage{
-specify_structure(..., order = NULL)
+specify_structure(..., order = NULL, families = NULL)
 }
 \arguments{
 \item{...}{One formula per declared outcome.}
 
 \item{order}{Optional character vector giving the user-declared temporal
 order of all constructs.}
+
+\item{families}{Optional named list of \code{\link[=structural_outcome]{structural_outcome()}} declarations,
+keyed by endogenous outcome. Omitted outcomes use Gaussian identity.}
 }
 \value{
 An object of class \code{cssem_structure}.
@@ -36,6 +39,7 @@ Other model specification functions:
 \code{\link[=continuous]{continuous()}},
 \code{\link[=cssem_model]{cssem_model()}},
 \code{\link[=manifest]{manifest()}},
+\code{\link[=mixed_items]{mixed_items()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_measurement]{specify_measurement()}}
 }

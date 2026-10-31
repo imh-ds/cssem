@@ -4,31 +4,34 @@
 \alias{validate_causal_design}
 \title{Audit a declared causal design against the backdoor criterion}
 \usage{
-validate_causal_design(design, adjust = NULL,
-  estimand = c("effect", "mediation"))
+validate_causal_design(
+  design,
+  adjust = NULL,
+  estimand = c("effect", "mediation")
+)
 }
 \arguments{
-\item{design}{An object returned by \code{\link{causal_design}()}.}
+\item{design}{An object returned by causal_design().}
 
 \item{adjust}{Optional alternative adjustment set to audit. Defaults to the
-set stored in \code{design}.}
+set stored in design.}
 
-\item{estimand}{Either \code{"effect"} or \code{"mediation"}. Mediation also requires
-\code{no_exposure_induced_mediator_outcome_confounding} to be declared assumed,
-and each mediator on a causal treatment-to-outcome path to be d-separated
-from the outcome given the treatment, the adjustment set, and upstream mediators
-(the \code{mediator_outcome_backdoor} check).}
+\item{estimand}{Either "effect" or "mediation". Mediation also requires
+no_exposure_induced_mediator_outcome_confounding to be declared assumed,
+and each mediator on a causal treatment -> outcome path to be d-separated
+from the outcome given the treatment, the adjustment set, and upstream
+mediators.}
 }
 \value{
-An object of class \code{causal_design_audit} with graph checks, assumption
-states, and separate \code{valid} and \code{causal_admissible} results.
+An object of class causal_design_audit with graph checks, assumption
+states, and separate valid and causal_admissible results.
 }
 \description{
 Checks that the causal arrows form a DAG, that the proposed adjustment set
 contains no treatment descendants, and that it d-separates treatment and
 outcome in the backdoor graph. Declared assumptions remain unverifiable by
-this function; \code{causal_admissible} is true only when those required statuses
-are all explicitly set to \code{"assumed"} as well as the graph checks passing.
+this function; causal_admissible is true only when those required statuses
+are all explicitly set to "assumed" as well as the graph checks passing.
 }
 \examples{
 edges <- data.frame(from = c("Age", "Age", "Treatment"),

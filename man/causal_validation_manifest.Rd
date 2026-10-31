@@ -7,12 +7,12 @@
 causal_validation_manifest(tier = c("screening", "full"))
 }
 \arguments{
-\item{tier}{Either \code{"screening"} for six bounded smoke-test scenarios or
-\code{"full"} for each scenario at three sample sizes.}
+\item{tier}{Either "screening" for six bounded smoke-test scenarios or
+"full" for each scenario at three sample sizes.}
 }
 \value{
-A deterministic data frame with scenario, sample size, estimand, independent
-target, and truth-method columns.
+A deterministic data frame with scenario, sample size, estimand,
+independent target, and truth-method columns.
 }
 \description{
 The manifest includes confounding omitted from adjustment, weak treatment

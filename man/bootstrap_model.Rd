@@ -2,7 +2,7 @@
 % Please edit documentation in R/bootstrap.R
 \name{bootstrap_model}
 \alias{bootstrap_model}
-\title{Run an explicit, reusable resampling over a fitted CS-SEM object}
+\title{Run an explicit, reusable bootstrap over a fitted CS-SEM object}
 \usage{
 bootstrap_model(
   fit,
@@ -21,35 +21,51 @@ bootstrap_model(
 \arguments{
 \item{fit}{A \code{fit_states} object, including the original \code{data}.}
 
-\item{statistic}{A function taking one bootstrap context and returning a named numeric vector (or one-row numeric data frame).}
+\item{statistic}{A function taking one bootstrap context and returning a
+named numeric vector (or one-row numeric data frame).}
 
 \item{reps}{Number of bootstrap replicates.}
 
-\item{level}{Confidence level used by \code{confint()} and \code{summary()}.}
+\item{level}{Confidence level used by \code{\link[=confint]{confint()}} and \code{summary()}.}
 
 \item{seed}{Integer seed used to derive the deterministic replicate seeds.}
 
-\item{refit}{Whether to resample \code{locked_scores} or refit the measurement encoder for each replicate.}
+\item{refit}{Whether to resample \code{locked_scores} or refit the measurement
+encoder for each replicate.}
 
-\item{resample}{Resampling unit. The default \code{"row"} preserves ordinary
-row bootstrap behavior. \code{"cluster"} samples complete independent units
-with replacement and records draw-level unit provenance. This does not fit a
-multilevel SEM.}
+\item{workers}{Number of worker processes. Replicate seeds are deterministic
+across worker counts; values above one require the installed package to be
+available to the workers.}
+
+\item{resume}{An earlier \code{cssem_bootstrap} object with the same \code{seed},
+\code{level}, and \code{refit}, used to continue a partially completed run.}
+
+\item{progress}{Whether to report completion of each replicate with a
+concise message. It does not alter the results.}
+
+\item{resample}{Resampling unit. The default row mode preserves ordinary
+row bootstrap behavior. Cluster mode samples complete independent units
+with replacement and records draw-level unit provenance. This does not
+fit a multilevel SEM.}
 
 \item{cluster}{Optional column name or cluster vector used when
-\code{resample = "cluster"}. If omitted, labels retained on \code{fit} are
-used. Explicit labels are also honored by the point-estimate callback.}
-
-\item{workers}{Number of worker processes. Replicate seeds are deterministic across worker counts; values above one require the installed package to be available to the workers.}
-
-\item{resume}{An earlier \code{cssem_bootstrap} object with the same \code{seed}, \code{level}, and \code{refit}, used to continue a partially completed run.}
-
-\item{progress}{Whether to report completion of each replicate with a concise message. It does not alter the results.}
+\code{resample = "cluster"}. If omitted, labels retained on \code{fit} are used.}
 }
 \value{
-An object of class \code{cssem_bootstrap} containing replicate draws, statuses, failure reasons, summary intervals, and reproducibility metadata. Cluster resampling additionally records the original-unit denominator, distinct source-unit and draw-occurrence counts, rows per draw, source and draw-level IDs, and a \code{cluster_resampling_only} limitation. Measurement-refit callbacks receive source-unit labels in \code{context$cluster_ids}; duplicated draws therefore remain in one measurement fold, while \code{context$draw_cluster_ids} retains draw-occurrence labels.
+An object of class \code{cssem_bootstrap} containing replicate draws,
+statuses, failure reasons, summary intervals, and reproducibility metadata.
+Cluster resampling additionally records the original-unit denominator,
+distinct source-unit and draw-occurrence counts, rows per draw, source and
+draw-level IDs, and a \code{cluster_resampling_only} limitation. In a measurement
+refit, \code{context$cluster_ids} uses source-unit labels so duplicated draws of
+one source unit stay in one measurement fold; \code{context$draw_cluster_ids}
+retains the draw-occurrence labels for provenance.
 }
 \description{
-The statistic callback receives a context for each resampled data set and must return a named numeric vector. The default \code{locked_scores} mode keeps the fitted measurement encoders fixed and resamples their locked scores; \code{measurement} refits the measurement encoder for every replicate. Shape selection and any downstream estimand are controlled by the callback instead of being silently changed by this helper.
+The statistic callback receives a context for each resampled data set and
+must return a named numeric vector. The default \code{locked_scores} mode keeps
+the fitted measurement encoders fixed and resamples their locked scores;
+\code{measurement} refits the measurement encoder for every replicate. Shape
+selection and any downstream estimand are therefore controlled by the
+callback instead of being silently changed by this helper.
 }
-\seealso{\code{\link{fit_states}}, \code{\link[=confint]{confint}}}

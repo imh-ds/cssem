@@ -2,7 +2,10 @@
 \name{compare_models}
 \alias{compare_models}
 \title{Compare two model specifications on one outer split design}
-\usage{compare_models(model_a, structure_a, model_b, structure_b, data, splits, seed = 1L, args_a = list(), args_b = list(), alignment = NULL, ...)}
+\usage{
+compare_models(model_a, structure_a, model_b, structure_b, data, splits,
+  seed = 1L, args_a = list(), args_b = list(), alignment = NULL, ...)
+}
 \arguments{
 \item{model_a,model_b}{\code{cssem_model} objects.}
 \item{structure_a,structure_b}{\code{cssem_structure} objects.}
@@ -14,3 +17,8 @@
 \item{...}{Additional arguments forwarded to both validations.}
 }
 \value{A \code{cssem_model_comparison} retaining both validation objects and provenance.}
+\description{Runs \code{validate_outer()} for two model specifications on the
+same supplied outer split design and compares their held-out predictive
+metrics with \code{compare_outer()}. Reusing one split design keeps the
+comparison paired. The comparison is predictive; it does not compare
+likelihood, global fit, or latent-scale quantities.}
