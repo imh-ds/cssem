@@ -20,12 +20,14 @@
 }
 
 # Total indirect effect of x on y at each moderator level, obtained by fixing the
-# moderator column and decomposing with the supplied models.
+# moderator column and decomposing with the supplied models. Residuals come from
+# the unmodified scores, so each unit keeps its own noise at every level.
 .moderated_conditional <- function(models, scores, order, x, y, paths, moderator, levels, delta) {
   values <- .moderator_values(scores, moderator, levels)
+  residuals <- .node_residuals(models, scores)
   vapply(values, function(value) {
     at_level <- scores; at_level[[moderator]] <- value
-    .decompose_effects(models, at_level, order, x, y, paths, delta)$indirect_total
+    .decompose_effects(models, at_level, order, x, y, paths, delta, residuals)$indirect_total
   }, numeric(1))
 }
 

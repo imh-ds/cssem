@@ -76,10 +76,10 @@ treatment (a post-treatment adjustment would bias the effect), and reports a
 causal-admissibility panel. A \code{causal_under_assumptions} label additionally
 requires a declared \code{temporal_order}; otherwise the effect is reported as an
 adjusted association. Exposure-induced mediator-outcome confounding and
-mediator interactions are not yet modeled. Mediators are propagated at their
-fitted conditional means, so an outcome model that is nonlinear in a mediator
-yields a plug-in approximation rather than an integral over the mediator's
-residual distribution.
+mediator interactions are not yet modeled. Mediators are propagated with each
+respondent's own structural residual, so an outcome model that is nonlinear
+in a mediator is averaged over the mediator's residual distribution under an
+additive-noise model; effects are finite contrasts for a shift of \code{delta}.
 An optional causal design adds a backdoor audit, checks that every analyzed
 treatment-to-outcome path is represented by causal DAG arrows, and requires
 an explicit status for exposure-induced mediator-outcome confounding. These

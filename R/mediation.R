@@ -56,11 +56,36 @@
   unique(edges)
 }
 
-# Predicted outcome vector after shifting x by delta and propagating the shift
-# forward only along the active edges. A node sees a parent's shifted value when
-# the parent->node edge is active and its observed value otherwise, so the active
-# set selects which structural paths transmit the shift.
-.propagate_y <- function(models, scores, order, x, y, delta, active) {
+# Input constructs of an outcome model (interaction predictors contribute their
+# constituents), over which edge-masking applies.
+.model_input_constructs <- function(model) {
+  unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+}
+
+# Each modelled node's structural residual: its value minus the model's fitted
+# value at the same rows' inputs. Propagation adds a unit's own residual back to
+# its fitted value at the shifted inputs, so a shifted node is the unit-level
+# counterfactual of an additive-noise model rather than a conditional mean, and
+# the zero-shift arm reproduces the supplied scores exactly. Computed once from
+# the unmodified scores, so callers that fix a moderator keep each unit's noise.
+.node_residuals <- function(models, scores) {
+  out <- list()
+  for (node in names(models)) {
+    model <- models[[node]]
+    if (is.null(model)) next
+    inputs <- as.data.frame(scores[.model_input_constructs(model)], stringsAsFactors = FALSE)
+    out[[node]] <- scores[[node]] - .predict_shape_model(model, inputs)
+  }
+  out
+}
+
+# Outcome vector after shifting x by delta and propagating the shift forward only
+# along the active edges. A node sees a parent's shifted value when the
+# parent->node edge is active and its baseline value otherwise, so the active set
+# selects which structural paths transmit the shift. Every modelled node is
+# re-evaluated as its fitted value plus its own residual; with delta = 0 this
+# returns the supplied scores, so both arms of a contrast share one basis.
+.propagate_y <- function(models, scores, order, x, y, delta, active, residuals = .node_residuals(models, scores)) {
   baseline <- as.list(scores)
   shifted <- baseline
   shifted[[x]] <- baseline[[x]] + delta
@@ -70,33 +95,33 @@
     # re-predicting it from its own parents would erase the delta before it can
     # propagate (collapsing every effect to zero when x is itself endogenous).
     if (is.null(model) || identical(node, x)) next
-    # Build the frame over the model's input constructs (interaction predictors
-    # contribute their constituents) so edge-masking applies per construct.
-    constructs <- unique(unlist(lapply(names(model$shapes), .predictor_constructs), use.names = FALSE))
+    constructs <- .model_input_constructs(model)
     frame <- as.data.frame(stats::setNames(lapply(constructs, function(construct) {
       if (.edge(construct, node) %in% active) shifted[[construct]] else baseline[[construct]]
     }), constructs), stringsAsFactors = FALSE)
-    shifted[[node]] <- .predict_shape_model(model, frame)
+    shifted[[node]] <- .predict_shape_model(model, frame) + residuals[[node]]
   }
   shifted[[y]]
 }
 
-# Average effect transmitted along a chosen active edge set, expressed per unit
-# of delta. Both intervention arms use the same active edge set: otherwise the
-# shifted arm replaces observed mediators with fitted values while the baseline
-# arm leaves them observed, creating a spurious contrast for nonlinear models.
-.mediation_effect <- function(models, scores, order, x, y, delta, active) {
-  baseline_y <- .propagate_y(models, scores, order, x, y, 0, active)
-  shifted_y <- .propagate_y(models, scores, order, x, y, delta, active)
+# Average effect of a finite shift of delta in x transmitted along a chosen
+# active edge set, expressed per unit of delta (a finite-difference contrast,
+# not a derivative, for nonlinear models). Both arms use the same active edge
+# set and residuals, so their difference contains only the shift's effect.
+.mediation_effect <- function(models, scores, order, x, y, delta, active, residuals = .node_residuals(models, scores)) {
+  baseline_y <- .propagate_y(models, scores, order, x, y, 0, active, residuals)
+  shifted_y <- .propagate_y(models, scores, order, x, y, delta, active, residuals)
   mean(shifted_y - baseline_y, na.rm = TRUE) / delta
 }
 
 # Raw total, direct, total-indirect, and per-path effects for one model set.
 # The per-path vector is aligned with `paths`; direct paths (length two) are
-# returned as NA there and summarized separately.
-.decompose_effects <- function(models, scores, order, x, y, paths, delta) {
+# returned as NA there and summarized separately. The direct effect moves only
+# the x -> y edge with mediators at their baseline values (a natural direct
+# effect); the indirect effect is total minus direct on the same basis.
+.decompose_effects <- function(models, scores, order, x, y, paths, delta, residuals = .node_residuals(models, scores)) {
   all_edges <- .model_edges(models)
-  effect <- function(active) .mediation_effect(models, scores, order, x, y, delta, active)
+  effect <- function(active) .mediation_effect(models, scores, order, x, y, delta, active, residuals)
   total <- effect(all_edges)
   direct <- if (.edge(x, y) %in% all_edges) effect(.edge(x, y)) else 0
   path_eff <- vapply(paths, function(path) if (length(path) > 2L) effect(.path_edges(path)) else NA_real_, numeric(1))
@@ -330,12 +355,15 @@
 #' from `x` to `y` declared in the association's structure. Single, parallel, and
 #' serial mediation are handled uniformly: effects are obtained by simulating an
 #' `x` shift and propagating it through the fitted construct-level effect models,
-#' so nonlinear edges are handled, not only linear paths. Each shifted mediator
-#' is propagated at its fitted conditional mean; when a downstream model is
-#' nonlinear in that mediator, this plug-in approximation does not average over
-#' the mediator's residual distribution and can differ from the interventional
-#' effect. For linear (and additive-linear) mediator-outcome models the two
-#' coincide.
+#' so nonlinear edges are handled, not only linear paths. Each respondent keeps
+#' their own structural residual: a shifted mediator is its fitted value at the
+#' shifted inputs plus that respondent's residual, so a downstream model that is
+#' nonlinear in the mediator is averaged over the mediator's residual
+#' distribution (the unit-level counterfactual of an additive-noise model). The
+#' effect is a finite contrast for a shift of `delta`, not a derivative; for
+#' nonlinear models it depends on `delta`. The direct effect moves only the
+#' `x -> y` edge with mediators at their observed values, and the indirect effect
+#' is total minus direct on the same basis.
 #'
 #' Linear and monotone edges are disattenuated with the same errors-in-variables
 #' correction used by [associate()], recovering the latent-scale indirect
