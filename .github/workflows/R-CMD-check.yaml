@@ -23,7 +23,9 @@ jobs:
           r-version: ${{ matrix.config.r }}
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::roxygen2, any::testthat
+          # extra-packages replaces the action's default of any::rcmdcheck
+          # rather than adding to it, so rcmdcheck must be listed here.
+          extra-packages: any::rcmdcheck, any::roxygen2, any::testthat
           needs: check
           # Bumped to discard a cache that pkgdepends could no longer extract
           # ("unknown archive type"), which took the macOS job down and left
