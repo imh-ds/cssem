@@ -6,6 +6,11 @@ name: Mediation validation simulation
 # shard count changes only wall-clock. The combine job concatenates the shards.
 
 on:
+  # A pushed `mediation-sim-*` tag runs the workflow as defined on that commit,
+  # which allows a run before the file reaches the default branch. Tag runs
+  # use the runner's default of 50 replications.
+  push:
+    tags: ['mediation-sim-*']
   workflow_dispatch:
     inputs:
       reps:
