@@ -200,6 +200,17 @@ test_that("continuous and manifest inputs preserve numeric labels", {
   expect_equal(scored, c(100, 10))
 })
 
+test_that("blank and literal NA text cells are missing values, and huge ordinal codes error", {
+  # F06: read.csv() treats "" and "NA" as missing by default, so the same cells
+  # in a character column are missing values in every scale, not malformed data.
+  expect_equal(.prepare_item(c("10", "", " ", "NA", "20"), "continuous", 1)$y, c(10, NA, NA, NA, 20))
+  expect_equal(.prepare_for_encoder(c("3", "NA"), "manifest", 1, NULL), c(3, NA))
+  expect_equal(.prepare_item(c("1", "", "2", "NA", "3"), "ordinal", 1)$y, c(1L, NA, 2L, NA, 3L))
+  expect_error(.prepare_item(c("10", "n/a"), "continuous", 1), "numeric")
+  # Codes beyond the integer range would otherwise become NA with only a warning.
+  expect_error(.prepare_item(c(1, 2, 3e10), "ordinal", 1), "integer range")
+})
+
 test_that("score_states() returns scores on the locked_scores scale", {
   # Regression: score_states() returned raw posterior means (SD ~ sqrt(reliability))
   # while locked scores are standardized, so coefficients estimated on locked

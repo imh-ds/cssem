@@ -6,8 +6,18 @@
 # destroys the construct without any error. Numeric strings ("1", "2") are
 # unambiguous and are converted; anything else must arrive as an ordered factor
 # (whose level order the user declared) or as integer codes.
+# Text cells that read.csv() treats as missing by default (an empty or blank
+# string, or the literal "NA") are missing values in every scale, rather than
+# malformed data.
+.text_missing <- function(x) {
+  if (!is.character(x)) return(x)
+  x[!is.na(x) & trimws(x) %in% c("", "NA")] <- NA_character_
+  x
+}
+
 .as_ordinal_codes <- function(x) {
   if (!is.character(x)) return(x)
+  x <- .text_missing(x)
   numeric_x <- suppressWarnings(as.numeric(x))
   unparsed <- is.na(numeric_x) & !is.na(x)
   if (any(unparsed))
@@ -24,6 +34,13 @@
   non_integer <- is.finite(numeric_x) & abs(numeric_x - round(numeric_x)) > 1e-8
   if (any(non_finite))
     stop("Ordinal indicators must have finite whole-number category codes.", call. = FALSE)
+  # as.integer() turns codes beyond the integer range into NA with only a
+  # warning, which would silently drop those responses.
+  out_of_range <- is.finite(numeric_x) & abs(numeric_x) > .Machine$integer.max
+  if (any(out_of_range))
+    stop("Ordinal category codes must lie within the integer range; found ",
+      format(numeric_x[which(out_of_range)[1L]], scientific = TRUE),
+      ". Recode the categories as small whole numbers.", call. = FALSE)
   if (any(non_integer))
     stop("Ordinal indicators must have whole-number category codes (e.g. 1, 2, 3); found a non-integer value (",
       signif(numeric_x[which(non_integer)[1L]], 6),
@@ -34,6 +51,7 @@
 
 .as_numeric_values <- function(x, scale) {
   if (is.factor(x)) x <- as.character(x)
+  x <- .text_missing(x)
   numeric_x <- tryCatch(suppressWarnings(as.numeric(x)),
     error = function(e) stop(sprintf("%s inputs must be numeric values.", scale), call. = FALSE))
   unparsed <- if (is.character(x)) is.na(numeric_x) & !is.na(x) else rep(FALSE, length(numeric_x))

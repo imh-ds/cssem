@@ -34,6 +34,7 @@
 #'   default `"partial"` retains rows and lets each observed item contribute to
 #'   the measurement posterior. `"listwise"` excludes rows missing any declared
 #'   indicator before fitting. `"error"` rejects any missing declared indicator.
+#'   See the Missing data section.
 #' @param split Optional explicit measurement split. Supply a `cssem_splits`
 #'   object from [make_splits()] or an integer fold assignment with one value
 #'   per input row. Explicit assignments are retained in the fitted object's
@@ -49,6 +50,20 @@
 #' @param retain_data Whether to retain the original training frames and raw
 #'   row-aligned cluster labels in the fitted object. Set to `FALSE` to keep
 #'   locked scores and score-only workflows while omitting those raw inputs.
+#' @section Missing data:
+#' Under `missing_policy = "partial"`, a respondent missing some items of a
+#' multi-item construct is scored from the observed items' likelihood terms;
+#' this is not imputation. A respondent missing every item of a construct
+#' receives the prior mean (a score near zero) and is counted as `prior_only` in
+#' [sample_accounting()]; [associate()] excludes such rows from structural
+#' fitting under its default `"complete"` policy. A missing manifest value has
+#' no score (`NA`) and is likewise excluded structurally. In text columns, empty
+#' or blank strings and the literal string `"NA"` are read as missing, as
+#' [utils::read.csv()] does by default; any other non-numeric text in a
+#' continuous or manifest column, or an ordinal code that is fractional or
+#' outside the integer range, is an error. [score_states()] applies the same
+#' rules to new records.
+#'
 #' @return An object of class `fit_states` containing locked scores, full-data
 #'   encoders for future scoring, diagnostics, and measurement metadata.
 #' @examples
@@ -425,6 +440,10 @@ respondent_information <- function(fit) {
 #' `fit$locked_scores` for analyses of the estimation sample.
 #'
 #' @param fit A `fit_states` object.
+#' @details Missing responses follow the rules in the Missing data section of
+#'   [fit_states()]: partially observed constructs are scored from their observed
+#'   items, a construct with no observed items receives the prior mean, and a
+#'   missing manifest value is `NA`.
 #' @param new_data A data frame whose columns exactly match all model indicators
 #'   in their declared order.
 #' @return A data frame of construct scores on the `locked_scores` scale.

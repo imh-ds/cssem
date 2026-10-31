@@ -38,6 +38,20 @@ scoring, and prediction available. Bootstrap refits and row-dependent
 measurement diagnostics need the original rows and therefore require
 `retain_data = TRUE`.
 
+Missing responses under the default `"partial"` policy:
+
+| Case | Locked or new-record score | Structural stage (`associate()`, `"complete"`) |
+|---|---|---|
+| Some items of a multi-item construct missing | Posterior from the observed items | Retained |
+| Every item of a construct missing | Prior mean (near zero); counted `prior_only` | Excluded |
+| A manifest value missing | `NA` | Excluded |
+
+In text columns, empty or blank strings and the literal `"NA"` are read as
+missing, as `read.csv()` does by default. Other non-numeric text in a
+continuous or manifest column, and ordinal codes that are fractional, non-finite,
+or outside the integer range, are errors rather than silent coercions.
+`score_states()` applies the same rules to new records.
+
 Per-respondent posterior widths and latent-state draws are exposed as
 experimental research outputs. They are not calibrated confidence intervals
 and are not part of the release-validation evidence. Likewise,

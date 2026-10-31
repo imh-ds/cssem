@@ -22,6 +22,12 @@ standardizes the result with the same centering and scaling used for
 estimates refer to. This is intended for new observations; use
 \code{fit$locked_scores} for analyses of the estimation sample.
 }
+\details{
+Missing responses follow the rules in the Missing data section of
+\code{\link[=fit_states]{fit_states()}}: partially observed constructs are scored from their observed
+items, a construct with no observed items receives the prior mean, and a
+missing manifest value is \code{NA}.
+}
 \examples{
 # score_states(fit, new_survey_rows)
 }
