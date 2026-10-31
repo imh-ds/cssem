@@ -111,7 +111,7 @@ test_that("the DML estimand requires an adjustment set", {
 test_that("the AME estimand recovers the average derivative under a nonlinear dose-response", {
   fixture <- .causal_ame_fixture()
   ame <- causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
-    temporal_order = c("C", "X", "Y"))
+    temporal_order = c("C", "X", "Y"), disattenuate = FALSE)
   pl <- causal_effect(fixture$association, "X", "Y", adjust = "C", estimand = "adjusted_dml",
     temporal_order = c("C", "X", "Y"))
   expect_identical(ame$estimand, "adjusted_ame")
@@ -124,6 +124,57 @@ test_that("the AME estimand recovers the average derivative under a nonlinear do
   expect_true(is.finite(ame$ci_low) && is.finite(ame$ci_high) && ame$ci_low < ame$ci_high)
   expect_output(print(ame), "average marginal effect")
   expect_output(print(ame), "avg marginal effect")
+})
+
+test_that("the AME's causal label requires a treatment compatible with its Riesz correction", {
+  # F04: (X - m(C)) / Var(X | C) is the average derivative's Riesz representer
+  # only for a Gaussian, homoskedastic treatment given C. The skewed fixture is
+  # still estimated (the outcome model carries it) but is not labelled causal.
+  skewed <- causal_effect(.causal_ame_fixture()$association, "X", "Y", adjust = "C",
+    estimand = "adjusted_ame", temporal_order = c("C", "X", "Y"))
+  expect_identical(skewed$riesz_diagnostic$status, "questionable")
+  expect_gt(abs(skewed$riesz_diagnostic$skewness), .5)
+  expect_identical(skewed$label, "adjusted_association")
+  expect_identical(skewed$label_reason, "riesz_assumption_unmet")
+  expect_output(print(skewed), "Riesz diagnostic")
+
+  set.seed(9); n <- 3000
+  C <- stats::rnorm(n); X <- 0.6 * C + stats::rnorm(n, sd = .8)
+  Y <- 0.3 * X + 0.2 * X^2 + 0.7 * C + stats::rnorm(n, sd = .5)
+  gaussian <- structure(list(scores = data.frame(X = X, C = C, Y = Y), folds = sample(rep_len(1:5, n)),
+    reliability = stats::setNames(c(.75, .85, .85), c("X", "C", "Y")), full_models = list(),
+    structure = cssem_structure(list(Y = c("X", "C")), order = c("C", "X", "Y"))), class = "cssem_association")
+  fit <- causal_effect(gaussian, "X", "Y", adjust = "C", estimand = "adjusted_ame", temporal_order = c("C", "X", "Y"),
+    disattenuate = FALSE)
+  expect_identical(fit$riesz_diagnostic$status, "consistent")
+  expect_identical(fit$label, "causal_under_assumptions")
+  expect_lt(abs(fit$adjusted_effect - mean(0.3 + 0.4 * X)), .04)
+  # Partially linear and linear estimands carry no Riesz diagnostic.
+  expect_null(causal_effect(gaussian, "X", "Y", adjust = "C", temporal_order = c("C", "X", "Y"))$riesz_diagnostic)
+})
+
+test_that("the AME is disattenuated by the linear attenuation ratio", {
+  # F04: with Gaussian classical error in the treatment, the score-scale average
+  # derivative is attenuated by the same factor as the adjusted linear slope.
+  set.seed(12); n <- 6000
+  C <- stats::rnorm(n); X <- 0.6 * C + stats::rnorm(n, sd = .8)
+  Y <- 0.3 * X + 0.2 * X^2 + 0.7 * C + stats::rnorm(n, sd = .5)
+  observed <- X + stats::rnorm(n, sd = sqrt(stats::var(X) * (1 / .8 - 1)))
+  association <- structure(list(scores = data.frame(X = observed, C = C, Y = Y), folds = sample(rep_len(1:5, n)),
+    reliability = c(X = .8, C = 1, Y = 1), full_models = list(),
+    structure = cssem_structure(list(Y = c("X", "C")), order = c("C", "X", "Y"))), class = "cssem_association")
+  truth <- 0.3 + 0.4 * mean(X)
+  naive <- causal_effect(association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
+    temporal_order = c("C", "X", "Y"), disattenuate = FALSE)
+  corrected <- causal_effect(association, "X", "Y", adjust = "C", estimand = "adjusted_ame",
+    temporal_order = c("C", "X", "Y"))
+  expect_false(naive$disattenuated)
+  expect_true(corrected$disattenuated)
+  expect_gt(corrected$attenuation_ratio, 1.2)
+  expect_gt(abs(naive$adjusted_effect - truth), .05)
+  expect_lt(abs(corrected$adjusted_effect - truth), .03)
+  expect_equal(corrected$robustness_value, naive$robustness_value)
+  expect_output(print(corrected), "disattenuated by linear attenuation ratio")
 })
 
 test_that("the AME estimand requires an adjustment set and routes through an edge", {
@@ -244,6 +295,32 @@ test_that("causal_effect prints the reason for a non-causal label", {
     "no declared temporal order")
   expect_output(print(skeleton("causal_under_assumptions", TRUE, .8)),
     "Causal under assumptions")
+})
+
+test_that("a flexible estimand with a non-finite estimate names that reason, not weak identification", {
+  # A9 review note: an unstable flexible estimate was labelled non-causal but
+  # printed "weak identification" even when identification strength was high.
+  unstable <- structure(list(
+    treatment = "X", outcome = "Y", adjust = "C", estimand = "adjusted_dml",
+    claim_type = "total (adjusted)", unadjusted = .5, adjusted_naive = .3,
+    adjusted_effect = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
+    disattenuated = FALSE, stable = FALSE, bootstrap = 0L, n = 300L,
+    temporal_order_declared = TRUE, identification_strength = .8,
+    treatment_r2 = .2, outcome_r2 = .2, robustness_value = NA_real_,
+    reliability_sensitivity = NULL, label = "adjusted_association",
+    label_reason = "unstable_flexible_estimate", status = "adjusted_association"),
+    class = "causal_effect")
+  printed <- capture.output(print(unstable))
+  expect_true(any(grepl("flexible estimate or its standard error is not finite", printed, fixed = TRUE)))
+  expect_false(any(grepl("weak identification", printed, fixed = TRUE)))
+})
+
+test_that("causal_effect records why a label is not causal", {
+  fx <- .causal_fixture()
+  order <- c("C", "X", "Y")
+  expect_identical(causal_effect(fx, "X", "Y", adjust = "C", temporal_order = order)$label_reason, "none")
+  expect_identical(causal_effect(fx, "X", "Y", adjust = "C")$label_reason, "no_temporal_order")
+  expect_identical(causal_effect(fx, "X", "Y", temporal_order = order)$label_reason, "no_adjustment_set")
 })
 
 test_that("route builds a Path Routing Table with honest defaults", {

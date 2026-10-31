@@ -38,13 +38,25 @@ cross-fitted doubly-robust average marginal effect (average derivative
 \verb{E[d/dx E[Y | X = x, C]]}): unlike the partially-linear estimand it does not
 assume a constant slope, so it is the right summary when the treatment effect
 is nonlinear in the treatment. Both flexible estimands are computed on the
-denoised construct states and are not disattenuated.}
+denoised construct states; \code{"adjusted_ame"} is then disattenuated when
+\code{disattenuate = TRUE} (see that argument). The average
+derivative's influence-function correction assumes the treatment is
+Gaussian with constant variance given the adjustment set, an outcome model
+additive in treatment and confounder splines, and a treatment density that
+vanishes at the edges of its support; a \code{riesz_diagnostic} reports the
+treatment residuals' skewness, excess kurtosis, and heteroskedasticity, and
+a causal label additionally requires that diagnostic to be \code{"consistent"}.}
 
 \item{temporal_order}{Optional character vector asserting the temporal order
 of the constructs; required (with \code{adjust}) for a causal label.}
 
-\item{disattenuate}{Whether to disattenuate using the association reliability
-(\code{"adjusted_linear"} only).}
+\item{disattenuate}{Whether to disattenuate using the association
+reliability. Applies to \code{"adjusted_linear"} and \code{"adjusted_ame"}. The
+average derivative is rescaled by the linear attenuation ratio (corrected
+divided by naive adjusted coefficient): under Gaussian classical error in
+the treatment and a treatment that is Gaussian given the adjustment set,
+the score-scale average derivative is attenuated by exactly that factor.
+\code{"adjusted_dml"} is not disattenuated.}
 
 \item{eiv_bootstrap}{Percentile-bootstrap resamples for the interval
 (\code{"adjusted_linear"} only; the flexible estimands use the analytic

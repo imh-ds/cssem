@@ -84,15 +84,46 @@
     nuisance_diagnostics = nuisance_diagnostics)
 }
 
+# Thresholds for the Riesz-representer diagnostic below. Under a Gaussian,
+# homoskedastic treatment residual the sample skewness and excess kurtosis have
+# standard errors near sqrt(6/n) and sqrt(24/n), so at n >= 200 these bounds sit
+# beyond about three standard errors; the heteroskedasticity bound is a share of
+# squared-residual variance explained by the fitted treatment mean.
+.RIESZ_MAX_ABS_SKEW <- 0.5
+.RIESZ_MAX_ABS_EXCESS_KURTOSIS <- 1
+.RIESZ_MAX_HETEROSKEDASTICITY_R2 <- 0.05
+
+# Whether the treatment residual looks Gaussian and homoskedastic, the
+# conditions under which (X - m(C)) / Var(X | C) is the average derivative's
+# Riesz representer (minus the derivative of the log conditional density).
+.riesz_diagnostic <- function(x_residual, predicted_x) {
+  keep <- is.finite(x_residual) & is.finite(predicted_x)
+  r <- x_residual[keep]; m <- predicted_x[keep]
+  if (length(r) < 10L || stats::sd(r) <= 0) return(list(skewness = NA_real_, excess_kurtosis = NA_real_,
+    heteroskedasticity_r2 = NA_real_, status = "unavailable"))
+  z <- (r - mean(r)) / stats::sd(r)
+  skewness <- mean(z^3); excess_kurtosis <- mean(z^4) - 3
+  hetero <- if (stats::sd(m) > 0) summary(stats::lm(I(r^2) ~ m))$r.squared else 0
+  ok <- abs(skewness) <= .RIESZ_MAX_ABS_SKEW && abs(excess_kurtosis) <= .RIESZ_MAX_ABS_EXCESS_KURTOSIS &&
+    hetero <= .RIESZ_MAX_HETEROSKEDASTICITY_R2
+  list(skewness = skewness, excess_kurtosis = excess_kurtosis, heteroskedasticity_r2 = hetero,
+    status = if (ok) "consistent" else "questionable")
+}
+
 # Cross-fitted doubly-robust average marginal effect (average derivative):
 # E[d/dx E[Y | X = x, C]], the mean slope of the causal dose-response. Unlike the
 # partially-linear estimand it does not assume a constant slope, so it is correct
-# when the treatment effect is nonlinear in X. The efficient influence function
-# adds a Riesz-representer correction (X - m_X(C)) / Var(X | C) times the outcome
-# residual to the fitted derivative; its empirical spread gives the interval. The
-# outcome model is additive in a treatment spline and confounder splines, so the
-# derivative is read off the treatment spline by finite difference. Estimated on
-# the denoised construct states; not disattenuated (correction over-corrects here).
+# when the treatment effect is nonlinear in X. The influence-function correction
+# adds (X - m_X(C)) / Var(X | C) times the outcome residual to the fitted
+# derivative; its empirical spread gives the interval. That term is the Riesz
+# representer only when X given C is Gaussian with constant variance (and the
+# treatment density vanishes at the boundary of its support); otherwise
+# consistency rests on the outcome model alone. `.riesz_diagnostic()` reports
+# whether the cross-fitted treatment residuals are compatible with that
+# assumption. The outcome model is additive in a treatment spline and
+# confounder splines, so the derivative is read off the treatment spline by
+# finite difference. Estimated on the denoised construct states; not
+# disattenuated (correction over-corrects here).
 .dml_average_derivative <- function(scores, outcome, treatment, adjust, folds, spline_df = 5L, step = 1e-3) {
   n <- nrow(scores)
   confounders <- paste(sprintf("splines::ns(%s, df = %d)", adjust, spline_df), collapse = " + ")
@@ -119,6 +150,7 @@
     score[test] <- derivative + riesz * (scores[[outcome]][test] - fitted_y)
   }
   identification <- .flexible_identification(scores, treatment, x_residual)
+  riesz <- .riesz_diagnostic(x_residual, scores[[treatment]] - x_residual)
   keep <- is.finite(score) & is.finite(x_residual) & is.finite(outcome_residual)
   score <- score[keep]; m <- length(score)
   nuisance_diagnostics <- list(method = "cross_fitted_spline_nuisance",
@@ -128,13 +160,13 @@
   if (m < 2L) return(list(estimate = NA_real_, se = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
     df = m - spline_df * (length(adjust) + 1L) - 1L,
     identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
-    stable = FALSE, nuisance_diagnostics = nuisance_diagnostics))
+    stable = FALSE, nuisance_diagnostics = nuisance_diagnostics, riesz_diagnostic = riesz))
   estimate <- mean(score); se <- stats::sd(score) / sqrt(m)
   stable <- is.finite(estimate) && is.finite(se) && identification$strength >= .10
   list(estimate = estimate, se = se, ci_low = estimate - 1.96 * se, ci_high = estimate + 1.96 * se,
        df = m - spline_df * (length(adjust) + 1L) - 1L,
        identification_strength = identification$strength, treatment_r2 = identification$treatment_r2,
-       stable = stable, nuisance_diagnostics = nuisance_diagnostics)
+       stable = stable, nuisance_diagnostics = nuisance_diagnostics, riesz_diagnostic = riesz)
 }
 
 #' Estimate a declared causal effect on locked construct states
@@ -165,11 +197,23 @@
 #'   `E[d/dx E[Y | X = x, C]]`): unlike the partially-linear estimand it does not
 #'   assume a constant slope, so it is the right summary when the treatment effect
 #'   is nonlinear in the treatment. Both flexible estimands are computed on the
-#'   denoised construct states and are not disattenuated.
+#'   denoised construct states; `"adjusted_ame"` is then disattenuated when
+#'   `disattenuate = TRUE` (see that argument). The average
+#'   derivative's influence-function correction assumes the treatment is
+#'   Gaussian with constant variance given the adjustment set, an outcome model
+#'   additive in treatment and confounder splines, and a treatment density that
+#'   vanishes at the edges of its support; a `riesz_diagnostic` reports the
+#'   treatment residuals' skewness, excess kurtosis, and heteroskedasticity, and
+#'   a causal label additionally requires that diagnostic to be `"consistent"`.
 #' @param temporal_order Optional character vector asserting the temporal order
 #'   of the constructs; required (with `adjust`) for a causal label.
-#' @param disattenuate Whether to disattenuate using the association reliability
-#'   (`"adjusted_linear"` only).
+#' @param disattenuate Whether to disattenuate using the association
+#'   reliability. Applies to `"adjusted_linear"` and `"adjusted_ame"`. The
+#'   average derivative is rescaled by the linear attenuation ratio (corrected
+#'   divided by naive adjusted coefficient): under Gaussian classical error in
+#'   the treatment and a treatment that is Gaussian given the adjustment set,
+#'   the score-scale average derivative is attenuated by exactly that factor.
+#'   `"adjusted_dml"` is not disattenuated.
 #' @param eiv_bootstrap Percentile-bootstrap resamples for the interval
 #'   (`"adjusted_linear"` only; the flexible estimands use the analytic
 #'   orthogonal-score / influence-function interval).
@@ -273,10 +317,27 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     identification_strength <- fit_flexible$identification_strength
     treatment_r2 <- fit_flexible$treatment_r2
     nuisance_diagnostics <- fit_flexible$nuisance_diagnostics
+    riesz_diagnostic <- fit_flexible$riesz_diagnostic
     disattenuated <- FALSE; stable <- isTRUE(fit_flexible$stable)
+    attenuation_ratio <- NA_real_
+    # Average derivative on error-laden scores: rescale by the linear
+    # attenuation ratio of the same adjusted regression. The ratio is applied
+    # only when the linear correction is stable and finite, and at least one.
+    if (estimand == "adjusted_ame" && isTRUE(disattenuate) && !is.null(association$reliability) &&
+        !all(is.na(association$reliability))) {
+      linear <- .eiv_adjusted(scores, outcome, treatment, adjust, association$reliability)
+      ratio <- linear$corrected / linear$naive
+      if (isTRUE(linear$stable) && is.finite(ratio) && ratio >= 1) {
+        attenuation_ratio <- ratio
+        # Rescaling leaves the t statistic, and so the robustness value, unchanged.
+        adjusted_effect <- adjusted_effect * ratio; interval <- interval * ratio
+        disattenuated <- TRUE
+      }
+    }
     robustness_value <- .robustness_value(fit_flexible$estimate / fit_flexible$se, fit_flexible$df)
     reliability_sensitivity <- NULL
   } else {
+    riesz_diagnostic <- NULL; attenuation_ratio <- NA_real_
     reliability <- if (isTRUE(disattenuate)) association$reliability else NULL
     if (!is.null(reliability) && all(is.na(reliability))) reliability <- NULL
     disattenuated <- !is.null(reliability)
@@ -320,6 +381,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   has_adjust <- length(adjust) > 0L
   has_order <- !is.null(temporal_order) || !is.null(design)
   estimand_stable <- !flexible || isTRUE(stable)
+  riesz_ok <- is.null(riesz_diagnostic) || identical(riesz_diagnostic$status, "consistent")
   design_admissible <- is.null(design) || isTRUE(design_audit$causal_admissible)
   overlap_status <- if (!is.finite(identification_strength) || identification_strength < .10) "weak" else
     if (identification_strength < .20) "limited" else "adequate"
@@ -328,8 +390,17 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
       "linear_adjustment_residual_variance_ratio",
     residual_variance_ratio = identification_strength, status = overlap_status,
     scope = "Continuous-treatment residual variation is a support proxy, not a positivity proof.")
-  label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable && design_admissible) "causal_under_assumptions"
+  label <- if (has_adjust && has_order && identification_strength >= .10 && estimand_stable && design_admissible && riesz_ok) "causal_under_assumptions"
     else if (has_adjust) "adjusted_association" else "unadjusted_association"
+  # The first failed condition, in the order the label checks them, so printers
+  # and routing state the actual reason a declared effect is not causal.
+  label_reason <- if (identical(label, "causal_under_assumptions")) "none"
+    else if (!has_adjust) "no_adjustment_set"
+    else if (!design_admissible) "design_audit_unmet"
+    else if (!has_order) "no_temporal_order"
+    else if (!is.finite(identification_strength) || identification_strength < .10) "weak_identification"
+    else if (!estimand_stable) "unstable_flexible_estimate"
+    else "riesz_assumption_unmet"
 
   result <- structure(list(treatment = treatment, outcome = outcome, adjust = adjust, estimand = estimand,
     association = association,
@@ -340,7 +411,8 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
     identification_strength = identification_strength, treatment_r2 = treatment_r2, outcome_r2 = outcome_r2,
     robustness_value = robustness_value, reliability_sensitivity = reliability_sensitivity,
     overlap_diagnostic = overlap_diagnostic, nuisance_diagnostics = nuisance_diagnostics,
-    design_audit = design_audit, label = label, status = label), class = "causal_effect")
+    riesz_diagnostic = riesz_diagnostic, attenuation_ratio = attenuation_ratio,
+    design_audit = design_audit, label = label, label_reason = label_reason, status = label), class = "causal_effect")
   result$provenance_record <- .cssem_provenance_association_result("causal_effect", causal_call,
     settings = list(treatment = treatment, outcome = outcome, adjust = as.character(adjust),
       estimand = estimand, temporal_order = temporal_order, disattenuate = isTRUE(disattenuate),
@@ -352,6 +424,24 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
   result
 }
 
+# Plain-language interpretation of a causal_effect's label and its reason.
+.causal_label_text <- function(effect) {
+  reason <- effect$label_reason
+  if (is.null(reason)) reason <- if (identical(effect$label, "causal_under_assumptions")) "none"
+    else if (identical(effect$label, "unadjusted_association")) "no_adjustment_set"
+    else if (!is.null(effect$design_audit) && !isTRUE(effect$design_audit$causal_admissible)) "design_audit_unmet"
+    else if (!isTRUE(effect$temporal_order_declared)) "no_temporal_order" else "weak_identification"
+  switch(reason,
+    none = "Causal under assumptions",
+    no_adjustment_set = "Unadjusted association (not causal: no adjustment set)",
+    design_audit_unmet = "Adjusted association (not causal: design assumptions or graph audit unmet)",
+    no_temporal_order = "Adjusted association (not causal: no declared temporal order)",
+    weak_identification = sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
+      effect$identification_strength),
+    unstable_flexible_estimate = "Adjusted association (not causal: flexible estimate or its standard error is not finite)",
+    riesz_assumption_unmet = "Adjusted association (not causal: treatment residuals depart from the Gaussian, constant-variance assumption of the average-derivative correction)")
+}
+
 #' Print a declared causal effect
 #'
 #' @param x A `causal_effect` object.
@@ -360,13 +450,7 @@ causal_effect <- function(association, treatment, outcome, adjust = character(0)
 #' @export
 print.causal_effect <- function(x, ...) {
   cat(sprintf("CS-SEM effect: %s -> %s  (n = %d)\n", x$treatment, x$outcome, x$n))
-  interpretation <- if (identical(x$label, "causal_under_assumptions")) "Causal under assumptions"
-    else if (identical(x$label, "unadjusted_association")) "Unadjusted association (not causal: no adjustment set)"
-    else if (!is.null(x$design_audit) && !isTRUE(x$design_audit$causal_admissible))
-      "Adjusted association (not causal: design assumptions or graph audit unmet)"
-    else if (!isTRUE(x$temporal_order_declared)) "Adjusted association (not causal: no declared temporal order)"
-    else sprintf("Adjusted association (not causal: weak identification, strength %.2f)",
-      x$identification_strength)
+  interpretation <- .causal_label_text(x)
   cat("Interpretation: ", interpretation, "\n", sep = "")
   cat("Adjustment set: ", if (length(x$adjust)) paste(x$adjust, collapse = ", ") else "(none)", "\n")
   flexible <- x$estimand %in% c("adjusted_dml", "adjusted_ame")
@@ -376,7 +460,8 @@ print.causal_effect <- function(x, ...) {
     adjusted_ame = "adjusted_ame (average marginal effect; doubly-robust average derivative)",
     "adjusted_linear (disattenuated, linear adjustment)")
   cat("Estimand:       ", estimand_label, "\n\n", sep = "")
-  basis <- if (flexible) "flexible-adjusted, not disattenuated" else if (isTRUE(x$disattenuated)) "disattenuated" else "naive"
+  basis <- if (flexible && isTRUE(x$disattenuated)) sprintf("flexible-adjusted, disattenuated by linear attenuation ratio %.3f", x$attenuation_ratio)
+    else if (flexible) "flexible-adjusted, not disattenuated" else if (isTRUE(x$disattenuated)) "disattenuated" else "naive"
   format_effect <- function(effect, low, high) if (is.na(low)) sprintf("% .3f", effect) else sprintf("% .3f  [% .3f, % .3f]", effect, low, high)
   cat(sprintf("  unadjusted effect     % .3f  (confounded if the adjustment set matters)\n", x$unadjusted))
   if (ame) cat(sprintf("  linear-adjusted       % .3f  (constant-slope estimand)\n", x$adjusted_naive))
@@ -393,6 +478,10 @@ print.causal_effect <- function(x, ...) {
     cat(sprintf("  nuisance diagnostics     %s  (treatment RMSE %.3f; outcome RMSE %.3f)\n",
       x$nuisance_diagnostics$method, x$nuisance_diagnostics$treatment_rmse,
       x$nuisance_diagnostics$outcome_rmse))
+  if (!is.null(x$riesz_diagnostic) && !identical(x$riesz_diagnostic$status, "unavailable"))
+    cat(sprintf("  Riesz diagnostic         %s  (treatment residual skewness %.2f, excess kurtosis %.2f, heteroskedasticity R^2 %.3f)\n",
+      x$riesz_diagnostic$status, x$riesz_diagnostic$skewness, x$riesz_diagnostic$excess_kurtosis,
+      x$riesz_diagnostic$heteroskedasticity_r2))
   if (is.finite(x$robustness_value)) cat(sprintf("  robustness value        %.2f  (an unmeasured confounder explaining %.0f%% of residual variance in both treatment and outcome would null the effect)\n",
     x$robustness_value, 100 * x$robustness_value))
   if (x$identification_strength < .10) cat("  WARNING: treatment is largely explained by the adjustment set; the effect is weakly identified.\n")
