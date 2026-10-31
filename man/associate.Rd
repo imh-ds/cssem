@@ -21,7 +21,9 @@ associate(
   respondent_weighting = c("none", "information"),
   preset = c("default", "exploratory"),
   level = 0.95,
-  missing_policy = c("complete", "error")
+  missing_policy = c("complete", "error"),
+  fixed_shapes = NULL,
+  constraints = NULL
 )
 }
 \arguments{
@@ -70,14 +72,6 @@ the corrected estimate is omitted rather than reported uncorrected.}
 \item{eiv_bootstrap}{Number of percentile-bootstrap replicates for the
 corrected-estimate interval. Zero disables the interval.}
 
-\item{level}{Confidence level for the corrected-estimate interval. This is
-independent of the structural shape-selection error rate.}
-
-\item{missing_policy}{How missing locked scores are handled. The default
-\code{"complete"} excludes rows with any non-finite or prior-only score from
-structural fitting and records them in \code{sample_accounting()}. \code{"error"}
-rejects such rows before fitting.}
-
 \item{respondent_weighting}{Experimental. \code{"information"} applies
 inverse-variance respondent weighting from the posterior SD. It is
 \code{"none"} by default: because posterior width is score-dependent, weighting
@@ -86,6 +80,22 @@ validation, so it is not recommended for confirmatory estimates.}
 
 \item{preset}{Runtime preset. Use \code{"exploratory"} for lighter-weight
 structural selection defaults while iterating locally.}
+
+\item{level}{Confidence level for the corrected-estimate interval. This is
+independent of the structural shape-selection error rate.}
+
+\item{missing_policy}{How missing locked scores are handled. The default
+\code{"complete"} excludes rows with any non-finite or prior-only score from
+structural fitting and records them in \code{\link[=sample_accounting]{sample_accounting()}}. \code{"error"}
+rejects such rows before fitting.}
+
+\item{fixed_shapes}{Optional named list of selected shape vectors used to
+refit an existing structural shape selection without searching again.}
+
+\item{constraints}{Optional \code{\link[=cssem_constraint]{cssem_constraint()}} declaration. Constraints
+apply only to selected linear locked-score edges; EIV overrides,
+information weighting, interactions, and nonlinear selected shapes are
+rejected explicitly.}
 }
 \value{
 An object of class \code{cssem_association}.

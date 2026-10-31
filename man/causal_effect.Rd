@@ -58,7 +58,7 @@ for \code{"adjusted_ame"}) for the flexible-estimand nuisances.}
 
 \item{seed}{Bootstrap seed.}
 
-\item{design}{Optional \code{\link{causal_design}()} for graph and assumption auditing.
+\item{design}{Optional \code{\link[=causal_design]{causal_design()}} for graph and assumption auditing.
 When supplied, a causal label additionally requires an admissible backdoor
 design and all required assumptions to be explicitly declared assumed.}
 }
@@ -66,9 +66,9 @@ design and all required assumptions to be explicitly declared assumed.}
 An object of class \code{causal_effect}. It includes an optional
 \code{design_audit}, an \code{overlap_diagnostic} with a continuous-treatment
 residual-variance support proxy, and \code{nuisance_diagnostics} (cross-fitted
-RMSE for flexible estimands; linear fit quality for adjusted linear). The
-support proxy is not a positivity test, and declared assumptions are not
-verified by the function.
+RMSE for flexible estimands; linear fit quality for adjusted linear).
+The support proxy is not a positivity test, and declared assumptions are
+not verified by the function.
 }
 \description{
 Estimates the effect of a \code{treatment} construct on an \code{outcome} construct
@@ -79,6 +79,9 @@ adjusted-disattenuated estimates, an identification and sensitivity panel, and
 an explicit causal-admissibility label. A causal label requires both an
 adjustment set and a declared temporal order; otherwise the effect is reported
 as an association.
+When a causal design is supplied, the label additionally requires the
+declared DAG to satisfy the backdoor criterion and every required assumption
+to be declared assumed. These assumption declarations remain unverifiable.
 }
 \examples{
 # causal_effect(association, "Satisfaction", "Loyalty",

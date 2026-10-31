@@ -23,8 +23,8 @@ route(
 
 \item{representational}{A list of \code{c(from, to)} pairs marked representational.}
 
-\item{temporal_order}{Optional temporal order; required for causal edges unless each
-causal edge carries a \code{\link{causal_design}()}.}
+\item{temporal_order}{Optional temporal order; required for causal edges
+unless every causal edge carries an attached causal design.}
 
 \item{eiv_bootstrap}{Bootstrap resamples for causal-edge intervals.}
 
@@ -36,14 +36,14 @@ with status \code{"causal"} only when \code{\link[=causal_effect]{causal_effect(
 \code{causal_under_assumptions}; when identification fails it is routed
 \code{"causal_weak"}, which keeps the declaration, estimand, and adjustment set
 while reporting that the edge is not an established causal pathway.
-When a causal design is supplied and its graph or required assumption
-declarations are not admissible, the edge is routed as
-\code{"causal_inadmissible"} and its interpretation remains associational.
+With a causal design, graph or assumption checks that are not admissible
+use status \code{causal_inadmissible} and retain an associational interpretation.
 }
 \description{
 Assigns every declared structural edge a status and reports its allowed
 interpretation. Edges default to \code{associational}; edges listed in \code{causal}
-(which require an adjustment set and a declared \code{temporal_order}) are estimated
+(which require an adjustment set and either a declared \code{temporal_order} or
+an attached causal design) are estimated
 with \code{\link[=causal_effect]{causal_effect()}}, while \code{predictive} and \code{representational} edges
 are flagged as not for structural interpretation.
 }

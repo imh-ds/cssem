@@ -4,7 +4,7 @@
 \alias{cssem_structure}
 \title{Declare an associational CS-SEM structural model}
 \usage{
-cssem_structure(effects, order = NULL)
+cssem_structure(effects, order = NULL, families = NULL)
 }
 \arguments{
 \item{effects}{A named list of outcomes. Each value is either a non-empty
@@ -12,6 +12,9 @@ character vector of predictors or a named list of \code{\link[=cssem_effect]{css
 
 \item{order}{Optional character vector giving the user-declared temporal
 order of all constructs.}
+
+\item{families}{Optional named list of \code{\link[=structural_outcome]{structural_outcome()}} declarations,
+keyed by endogenous outcome. Omitted outcomes use Gaussian identity.}
 }
 \value{
 An object of class \code{cssem_structure}.

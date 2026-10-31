@@ -4,13 +4,19 @@
 \alias{causal_design}
 \title{Declare a causal graph, adjustment set, and identification assumptions}
 \usage{
-causal_design(edges, treatment, outcome, adjust = character(0),
-  assumptions = list(), nodes = NULL)
+causal_design(
+  edges,
+  treatment,
+  outcome,
+  adjust = character(0),
+  assumptions = list(),
+  nodes = NULL
+)
 }
 \arguments{
-\item{edges}{A data frame with \code{from} and \code{to} construct names and an optional
-\code{type} column containing \code{"causal"} or \code{"associational"}. If omitted,
-\code{type} defaults to \code{"causal"}. Associational links are displayed in the design but
+\item{edges}{A data frame with from and to construct names and an optional
+type column containing "causal" or "associational". If omitted, type
+defaults to "causal". Associational links are displayed in the design but
 are not interpreted as directed DAG edges.}
 
 \item{treatment, outcome}{Single treatment and outcome construct names.}
@@ -19,25 +25,26 @@ are not interpreted as directed DAG edges.}
 constructs. An empty vector is allowed but cannot usually satisfy the
 backdoor criterion.}
 
-\item{assumptions}{Named list of statuses for \code{consistency},
-\code{no_unmeasured_confounding}, \code{positivity}, \code{measurement_validity},
-\code{temporal_order}, and \code{no_exposure_induced_mediator_outcome_confounding}.
-Each status is \code{"assumed"}, \code{"not_assessed"}, or \code{"violated"}; it may also
-be a list with \code{status} and optional \code{evidence} fields. Unspecified
-assumptions are recorded as \code{"not_assessed"}.}
+\item{assumptions}{Named list of statuses for consistency,
+no_unmeasured_confounding, positivity, measurement_validity,
+temporal_order, and no_exposure_induced_mediator_outcome_confounding.
+Each status is "assumed", "not_assessed", or "violated"; it may also
+be a list with status and optional evidence fields. Unspecified
+assumptions are recorded as "not_assessed".}
 
 \item{nodes}{Optional complete vector of construct names. If omitted, names
-are inferred from edge endpoints and the treatment, outcome, and adjustment set.}
+are inferred from edge endpoints and the treatment, outcome, and
+adjustment set.}
 }
 \value{
-An object of class \code{cssem_causal_design} containing nodes, typed
+An object of class cssem_causal_design containing nodes, typed
 edges, assumptions, and a deterministic topological order for causal arrows.
 }
 \description{
-\code{causal_design()} stores causal arrows separately from associational links,
+causal_design() stores causal arrows separately from associational links,
 records the analyst's assumption statuses, and provides the graph against
-which \code{\link{validate_causal_design}()} applies the sufficient backdoor criterion.
-An \code{"assumed"} status is a declaration; it is never verified from data.
+which validate_causal_design() applies the sufficient backdoor criterion.
+An "assumed" status is a declaration; it is never verified from data.
 }
 \examples{
 edges <- data.frame(from = c("Age", "Age", "Treatment"),

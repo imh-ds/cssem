@@ -39,8 +39,10 @@ interval coverage.
 }
 \description{
 Fits CS-SEM, decomposes the mediation effect, and compares the naive and
-disattenuated indirect effects against the known latent-scale truth, with
-bootstrap-interval coverage. Establishes the workflow that the publication
+disattenuated indirect effects against the population counterfactual
+indirect effect implied by the generating equations, with bootstrap-interval
+coverage. The independent sample-level target and the package's own sample
+oracle are reported alongside it. Establishes the workflow that the publication
 benchmark (with native PLS-SEM and CB-SEM mediation) will extend.
 }
 \examples{

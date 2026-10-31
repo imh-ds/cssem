@@ -1,14 +1,45 @@
 # Deterministic moderated-mediation stress-test scenarios. A moderator W acts on
-# either the b-path (M -> Y) or the a-path (X -> M) via a declared product
+# the b-path (M -> Y), the a-path (X -> M), or both, via a declared product
 # interaction; ordinal indicator blocks add measurement error set by `loading`.
-# The known latent-scale index of moderated mediation is the target the
-# disattenuated estimate must recover.
+# The target is the population index of moderated mediation computed from the
+# true equations (latent-generators.R); the independent sample-level target
+# and the package's own sample oracle are reported alongside it.
+
+.moderated_mediation_generator <- function(scenario) {
+  nodes <- switch(scenario,
+    b_path = list(M = function(s) .5 * s$X,
+      Y = function(s) .2 * s$X + .4 * s$M + .1 * s$W + .4 * s$M * s$W),
+    a_path = list(M = function(s) .5 * s$X + .1 * s$W + .4 * s$X * s$W,
+      Y = function(s) .2 * s$X + .5 * s$M),
+    both_paths = list(M = function(s) .5 * s$X + .1 * s$W + .3 * s$X * s$W,
+      Y = function(s) .2 * s$X + .4 * s$M + .1 * s$W + .3 * s$M * s$W),
+    stop("Unknown moderated mediation scenario: ", scenario, call. = FALSE)
+  )
+  list(exogenous = c("X", "W"), nodes = nodes, noise_sd = .5)
+}
+
+# Population conditional indirect effects at fixed moderator levels (W is
+# standard normal in the population, so levels are in its SD units) and the
+# index of moderated mediation, cached per scenario.
+.moderated_mediation_population <- function(scenario, levels = c(-1, 0, 1), delta = 1) {
+  .generator_cached(paste("moderated", scenario, paste(levels, collapse = ","), delta), function() {
+    generator <- .moderated_mediation_generator(scenario)
+    draw <- .generator_draw(generator, .population_draws)
+    constants <- .generator_constants(generator, draw)
+    conditional <- vapply(levels, function(level) .generator_effects(generator, draw, constants, "X", "Y",
+      delta, fixed = list(W = level))[["indirect_total"]], numeric(1))
+    list(constants = constants,
+      truth = list(conditional = conditional, index = .moderated_index(conditional, levels, 1)))
+  })
+}
 
 .moderated_mediation_structure <- function(scenario) {
   linear <- function(predictors) stats::setNames(lapply(predictors, function(p) .build_effect("linear")), predictors)
   switch(scenario,
     b_path = .build_structure(list(M = linear("X"), Y = linear(c("X", "M", "W", "M:W"))), order = c("X", "W", "M", "Y")),
     a_path = .build_structure(list(M = linear(c("X", "W", "X:W")), Y = linear(c("X", "M"))), order = c("X", "W", "M", "Y")),
+    both_paths = .build_structure(list(M = linear(c("X", "W", "X:W")), Y = linear(c("X", "M", "W", "M:W"))),
+      order = c("X", "W", "M", "Y")),
     stop("Unknown moderated mediation scenario: ", scenario, call. = FALSE)
   )
 }
@@ -64,32 +95,21 @@
 }
 
 .moderated_mediation_validation_data <- function(scenario, n, loading = .80, seed = 1L, items = 4L, missing = .02) {
-  set.seed(seed); standardize <- function(v) as.numeric(scale(v))
-  X <- standardize(stats::rnorm(n)); W <- standardize(stats::rnorm(n))
-  states <- switch(scenario,
-    b_path = {
-      M <- standardize(.5 * X + stats::rnorm(n, sd = .5))
-      Y <- standardize(.2 * X + .4 * M + .1 * W + .4 * (M * W) + stats::rnorm(n, sd = .5))
-      list(X = X, W = W, M = M, Y = Y)
-    },
-    a_path = {
-      M <- standardize(.5 * X + .1 * W + .4 * (X * W) + stats::rnorm(n, sd = .5))
-      Y <- standardize(.2 * X + .5 * M + stats::rnorm(n, sd = .5))
-      list(X = X, W = W, M = M, Y = Y)
-    },
-    stop("Unknown moderated mediation scenario: ", scenario, call. = FALSE)
-  )
+  generator <- .moderated_mediation_generator(scenario)
+  population <- .moderated_mediation_population(scenario)
+  set.seed(seed)
+  latent <- .generator_states(generator, n, population$constants)
   structure <- .moderated_mediation_structure(scenario)
-  prefixes <- stats::setNames(letters[seq_along(states)], names(states))
+  prefixes <- stats::setNames(letters[seq_along(latent)], names(latent))
   data <- do.call(cbind, unname(Map(function(state, prefix)
-    .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
+    .validation_items(state, prefix, loading, missing, items = items), latent, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
-    list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
-  latent <- as.data.frame(states)
-  truth <- .moderated_mediation_truth(latent, structure, "W", c(-1, 0, 1))
+    list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(latent))
+  sample_target <- .moderated_mediation_truth(latent, structure, "W", c(-1, 0, 1))
   list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure, states = latent,
-       truth = truth, sample_oracle = .moderated_mediation_sample_oracle(latent, structure, "W", c(-1, 0, 1)),
-       truth_method = attr(truth, "method"))
+       truth = population$truth, truth_method = "population_counterfactual",
+       sample_target = sample_target, sample_target_method = attr(sample_target, "method"),
+       sample_oracle = .moderated_mediation_sample_oracle(latent, structure, "W", c(-1, 0, 1)))
 }
 
 .moderated_mediation_validation_one <- function(job) {
@@ -110,7 +130,8 @@
   ci <- disattenuated$index$ci
   covers <- if (!is.finite(ci[[1L]]) || !is.finite(ci[[2L]])) NA else true_index >= ci[[1L]] && true_index <= ci[[2L]]
   data.frame(scenario = setting$scenario, replication = job$replication, n = setting$n, loading = setting$loading,
-    truth_method = generated$truth_method, sample_oracle_index = sample_oracle_index,
+    truth_method = generated$truth_method, sample_target_method = generated$sample_target_method,
+    sample_target_index = generated$sample_target$index, sample_oracle_index = sample_oracle_index,
     true_index = true_index, naive_index = naive$index$estimate, disattenuated_index = disattenuated$index$estimate,
     naive_abs_bias = abs(naive$index$estimate - true_index), disattenuated_abs_bias = abs(disattenuated$index$estimate - true_index),
     naive_sample_oracle_abs_error = abs(naive$index$estimate - sample_oracle_index),
@@ -133,7 +154,7 @@ conditional_indirect_effect_manifest <- function(tier = c("screening", "full")) 
     n = c(500L, 500L, 600L), loading = c(.80, .80, .60), items = c(6L, 6L, 6L),
     stringsAsFactors = FALSE
   ))
-  grid <- expand.grid(scenario = c("b_path", "a_path"), n = c(500L, 800L), loading = c(.60, .80),
+  grid <- expand.grid(scenario = c("b_path", "a_path", "both_paths"), n = c(500L, 800L), loading = c(.60, .80),
     items = 6L, KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
   grid[, c("scenario", "n", "loading", "items")]
 }
@@ -141,9 +162,9 @@ conditional_indirect_effect_manifest <- function(tier = c("screening", "full")) 
 #' Run deterministic moderated mediation validation simulations
 #'
 #' Fits CS-SEM and compares the naive and disattenuated index of moderated
-#' mediation against the known latent-scale truth, with bootstrap-interval
-#' coverage. The moderator acts on the b-path or a-path via a declared
-#' interaction.
+#' mediation against the population index implied by the generating equations,
+#' with bootstrap-interval coverage. The moderator acts on the b-path, the
+#' a-path, or both via declared interactions.
 #'
 #' @param manifest A manifest from
 #'   [conditional_indirect_effect_manifest()].

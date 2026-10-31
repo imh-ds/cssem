@@ -8,7 +8,7 @@ validate_causal(manifest, reps = 3L, seed = 1L, bootstrap = 100L)
 }
 \arguments{
 \item{manifest}{A scenario data frame returned by
-\code{\link{causal_validation_manifest}()}.}
+\code{\link[=causal_validation_manifest]{causal_validation_manifest()}}.}
 
 \item{reps}{Positive integer replications per manifest row.}
 
@@ -20,10 +20,10 @@ linear and mediation intervals. Flexible effect estimands use their
 influence-function intervals.}
 }
 \value{
-One row per replication with independent truth, estimate, signed and absolute
-bias, interval coverage when available, causal label, graph and adjustment
-admissibility, overlap proxy, nuisance diagnostics, runtime, and any failure
-text. Unavailable intervals remain NA.
+One row per replication with independent truth, estimate, signed and
+absolute bias, interval coverage when available, causal label, graph and
+adjustment admissibility, overlap proxy, nuisance diagnostics, runtime,
+and any failure text. Unavailable intervals remain NA.
 }
 \description{
 Evaluates causal-effect estimates against fixed analytic or structural

@@ -1,0 +1,83 @@
+name: Mediation validation simulation
+
+# Manually-triggered Monte Carlo run of the mediation (Study 5) and
+# moderated-mediation (Study 6) comparator harnesses, scored against population
+# counterfactual targets. Sharded by replication; seed-deterministic, so the
+# shard count changes only wall-clock. The combine job concatenates the shards.
+
+on:
+  # A pushed `mediation-sim-*` tag runs the workflow as defined on that commit,
+  # which allows a run before the file reaches the default branch. Tag runs
+  # use the runner's default of 50 replications.
+  push:
+    tags: ['mediation-sim-*']
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: "Replications per cell"
+        required: false
+        default: "50"
+
+env:
+  NSHARDS: "30"
+
+jobs:
+  shard:
+    name: mediation shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::lavaan, any::seminr
+      - name: Install cssem
+        shell: bash
+        run: R CMD INSTALL --no-multiarch .
+      - name: Run mediation shard
+        env:
+          SIM_SHARD: ${{ matrix.shard }}
+          SIM_NSHARDS: ${{ env.NSHARDS }}
+          SIM_REPS: ${{ github.event.inputs.reps }}
+          SIM_OUTDIR: sim-out
+        run: Rscript inst/scripts/run-mediation-shard.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sim-mediation-${{ matrix.shard }}
+          path: sim-out/
+          if-no-files-found: error
+          retention-days: 90
+
+  combine:
+    name: combine shards
+    needs: [shard]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+      - name: Download all shard artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: sim-artifacts
+          pattern: sim-mediation-*
+      - name: Combine
+        env:
+          SIM_INDIR: sim-artifacts
+          SIM_OUTDIR: sim-combined
+        run: Rscript inst/scripts/combine-mediation-shards.R
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mediation-combined-results
+          path: sim-combined/
+          retention-days: 90

@@ -1,12 +1,12 @@
 # Rigorous moderated-mediation benchmark: score the CS-SEM disattenuated index of
 # moderated mediation against native PLS-SEM (seminr composite + two-stage
 # interaction) and native CB-SEM (seminr reflective + product-indicator latent
-# interaction, via lavaan) on a shared task with a known latent-scale truth. The
+# interaction, via lavaan) on a shared task with a known population target. The
 # CS-SEM naive index is included to show the attenuation the correction removes.
 
 # seminr measurement and structural models for a scenario, using composites for
 # PLS-SEM and reflective constructs for CB-SEM. The moderated path differs by
-# scenario: the b-path (M -> Y) or the a-path (X -> M).
+# scenario: the b-path (M -> Y), the a-path (X -> M), or both.
 .moderated_seminr_models <- function(items, scenario, reflective) {
   constructor <- if (reflective) seminr::reflective else seminr::composite
   method <- if (reflective) seminr::product_indicator else seminr::two_stage
@@ -21,21 +21,30 @@
     mm <- do.call(seminr::constructs, c(base, list(interaction)))
     sm <- seminr::relationships(seminr::paths(from = "X", to = "M"),
       seminr::paths(from = c("X", "M", "W", "M*W"), to = "Y"))
-  } else {
+  } else if (scenario == "a_path") {
     interaction <- seminr::interaction_term(iv = "X", moderator = "W", method = method)
     mm <- do.call(seminr::constructs, c(base, list(interaction)))
     sm <- seminr::relationships(seminr::paths(from = c("X", "W", "X*W"), to = "M"),
       seminr::paths(from = c("X", "M"), to = "Y"))
+  } else {
+    interactions <- list(seminr::interaction_term(iv = "X", moderator = "W", method = method),
+      seminr::interaction_term(iv = "M", moderator = "W", method = method))
+    mm <- do.call(seminr::constructs, c(base, interactions))
+    sm <- seminr::relationships(seminr::paths(from = c("X", "W", "X*W"), to = "M"),
+      seminr::paths(from = c("X", "M", "W", "M*W"), to = "Y"))
   }
   list(measurement_model = mm, structural_model = sm)
 }
 
-# Index of moderated mediation from a fitted path-coefficient matrix: the product
-# of the two coefficients whose product carries the indirect effect's dependence
-# on the moderator (a * b_MW for b-path moderation; b_XW * b for a-path).
+# Index of moderated mediation from a fitted path-coefficient matrix: the
+# change in the conditional indirect effect per unit of W, half the difference
+# between W = +1 and W = -1. That is a * b_MW for b-path moderation, a_XW * b
+# for a-path moderation, and their sum when both paths are moderated.
 .moderated_index_from_paths <- function(path_coef, scenario) {
-  if (scenario == "b_path") path_coef["X", "M"] * path_coef["M*W", "Y"]
-  else path_coef["X*W", "M"] * path_coef["M", "Y"]
+  switch(scenario,
+    b_path = path_coef["X", "M"] * path_coef["M*W", "Y"],
+    a_path = path_coef["X*W", "M"] * path_coef["M", "Y"],
+    both_paths = path_coef["X", "M"] * path_coef["M*W", "Y"] + path_coef["X*W", "M"] * path_coef["M", "Y"])
 }
 
 .moderated_mediation_seminr <- function(generated, scenario, items, bootstrap, seed) {
@@ -90,9 +99,11 @@
   truth <- generated$truth$index
   rows <- list()
 
+  max_iterations <- if (is.null(job$max_iterations)) job$iterations else job$max_iterations
   cssem_elapsed <- system.time({
-    model <- generated$model; model$folds <- job$folds
-    fit <- .fit_states_quiet(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    validation_fit <- .validation_fit(generated$model, generated$data, job$seed, job$folds,
+      job$iterations, max_iterations, FALSE)
+    fit <- validation_fit$fit
     association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
     disattenuated <- conditional_indirect_effect(association, "X", "Y", "W", eiv_bootstrap = job$eiv_bootstrap, seed = job$seed, disattenuate = TRUE)
@@ -111,7 +122,11 @@
   rows[[4L]] <- .moderated_comparator_row("lavaan_native", setting, job$replication, truth,
     lavaan_result$estimate, lavaan_result$ci_low, lavaan_result$ci_high, lavaan_result$runtime, lavaan_result$status)
 
-  cbind(do.call(rbind, rows), items = items, row.names = NULL)
+  cbind(do.call(rbind, rows), items = items,
+    truth_method = generated$truth_method, sample_target_method = generated$sample_target_method,
+    sample_target_index = generated$sample_target$index,
+    measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
+    row.names = NULL)
 }
 
 #' Run the moderated mediation benchmark against native CB-SEM and PLS-SEM
@@ -119,8 +134,8 @@
 #' Scores the CS-SEM disattenuated index of moderated mediation against native
 #' PLS-SEM (seminr, composite with a two-stage interaction) and native CB-SEM
 #' (seminr reflective with a product-indicator latent interaction) on a shared
-#' task with a known latent-scale truth, reporting absolute bias and interval
-#' coverage. The CS-SEM naive index is included to show the attenuation the
+#' task, reporting absolute bias and interval coverage against the population
+#' index implied by the generating equations. The CS-SEM naive index is included to show the attenuation the
 #' correction removes. Optional comparators are skipped when their packages are
 #' absent.
 #'
@@ -130,6 +145,8 @@
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
 #' @param iterations Measurement iterations.
+#' @param max_iterations Measurement iterations for a single refit when the
+#'   first fit does not converge.
 #' @param structural_repeats Repeated structural CV assignments for selection.
 #' @param eiv_bootstrap Bootstrap resamples for the CS-SEM index interval.
 #' @param seminr_bootstrap Bootstrap resamples for the PLS-SEM interval.
@@ -145,7 +162,8 @@
 #' unique(results$engine)
 #' @export
 validate_conditional_indirect_effect_comparator <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
-                                                                iterations = 8L, structural_repeats = 3L,
+                                                                iterations = 8L, max_iterations = iterations,
+                                                                structural_repeats = 3L,
                                                                 eiv_bootstrap = 200L, seminr_bootstrap = 200L,
                                                                 workers = 1L) {
   .preserve_seed()
@@ -155,8 +173,8 @@ validate_conditional_indirect_effect_comparator <- function(manifest, reps = 3L,
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {
     index <- index + 1L
     jobs[[index]] <- list(setting = as.list(manifest[scenario_index, , drop = FALSE]), replication = replication,
-      seed = seed + index, folds = folds, iterations = iterations, structural_repeats = structural_repeats,
-      eiv_bootstrap = eiv_bootstrap, seminr_bootstrap = seminr_bootstrap)
+      seed = seed + index, folds = folds, iterations = iterations, max_iterations = max_iterations,
+      structural_repeats = structural_repeats, eiv_bootstrap = eiv_bootstrap, seminr_bootstrap = seminr_bootstrap)
   }
   do.call(rbind, .validation_map(jobs, .moderated_mediation_comparator_one, workers))
 }

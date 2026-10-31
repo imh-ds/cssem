@@ -251,6 +251,10 @@ causal_design <- function(edges, treatment, outcome, adjust = character(0),
 #' @return An object of class causal_design_audit with graph checks, assumption
 #'   states, and separate valid and causal_admissible results.
 #' @examples
+#' edges <- data.frame(from = c("Age", "Age", "Treatment"),
+#'   to = c("Treatment", "Outcome", "Outcome"))
+#' design <- causal_design(edges, "Treatment", "Outcome", adjust = "Age",
+#'   assumptions = list(no_unmeasured_confounding = "assumed"))
 #' audit <- validate_causal_design(design)
 #' audit$checks
 #' @export

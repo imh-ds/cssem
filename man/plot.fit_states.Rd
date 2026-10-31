@@ -4,8 +4,7 @@
 \alias{plot.fit_states}
 \title{Plot CS-SEM measurement diagnostics}
 \usage{
-\method{plot}{fit_states}(x, type = c("scores", "redundancy", "item_loss",
-  "convergence"), ...)
+\method{plot}{fit_states}(x, type = c("scores", "redundancy", "item_loss", "convergence"), ...)
 }
 \arguments{
 \item{x}{A \code{fit_states} object.}

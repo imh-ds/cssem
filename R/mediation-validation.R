@@ -1,9 +1,40 @@
 # Deterministic mediation stress-test scenarios. Latent construct states follow a
-# declared linear single, parallel, or serial mediation structure; ordinal
-# indicator blocks add measurement error whose severity is set by `loading`. The
-# known latent-scale decomposition is the target the disattenuated estimate must
-# recover. This is the lightweight harness; the publication-ready benchmark
-# (including native PLS-SEM and CB-SEM mediation comparators) builds on it.
+# known single, parallel, or serial mediation structure, linear or with a
+# saturating a- or b-path; ordinal indicator blocks add measurement error whose
+# severity is set by `loading`. The target is the population counterfactual
+# decomposition computed from the true equations (latent-generators.R). The
+# independent sample-level target and the package's own sample oracle are
+# reported alongside it. This is the lightweight harness; the publication
+# benchmark (with native PLS-SEM and CB-SEM mediation comparators) builds on it.
+
+.saturating_mediation <- c("saturating_a_path", "saturating_b_path")
+
+# True structural equations for each scenario. The saturating scenarios share
+# the single-mediator graph and replace one path with a tanh.
+.mediation_generator <- function(scenario) {
+  nodes <- switch(scenario,
+    single = list(M = function(s) .50 * s$X, Y = function(s) .30 * s$X + .45 * s$M),
+    parallel = list(M1 = function(s) .50 * s$X, M2 = function(s) -.35 * s$X,
+      Y = function(s) .25 * s$X + .40 * s$M1 + .50 * s$M2),
+    serial = list(M1 = function(s) .50 * s$X, M2 = function(s) .30 * s$X + .55 * s$M1,
+      Y = function(s) .20 * s$X + .25 * s$M1 + .50 * s$M2),
+    saturating_a_path = list(M = function(s) .90 * tanh(1.2 * s$X), Y = function(s) .30 * s$X + .45 * s$M),
+    saturating_b_path = list(M = function(s) .50 * s$X, Y = function(s) .30 * s$X + .90 * tanh(1.2 * s$M)),
+    stop("Unknown mediation scenario: ", scenario, call. = FALSE)
+  )
+  list(exogenous = "X", nodes = nodes, noise_sd = .55)
+}
+
+# Population constants and counterfactual decomposition, cached per scenario.
+.mediation_population <- function(scenario, delta = 1) {
+  .generator_cached(paste("mediation", scenario, delta), function() {
+    generator <- .mediation_generator(scenario)
+    draw <- .generator_draw(generator, .population_draws)
+    constants <- .generator_constants(generator, draw)
+    y <- names(generator$nodes)[[length(generator$nodes)]]
+    list(constants = constants, truth = .generator_effects(generator, draw, constants, "X", y, delta))
+  })
+}
 
 # Build the declared mediation structure, optionally fixing every edge to a
 # linear shape policy. Declaring linear edges reflects confirmatory mediation
@@ -14,6 +45,7 @@
   edge <- function(predictors) {
     if (edge_shape %in% c("linear", "smooth")) stats::setNames(lapply(predictors, function(p) .build_effect(edge_shape)), predictors) else predictors
   }
+  if (scenario %in% .saturating_mediation) scenario <- "single"
   switch(scenario,
     single = .build_structure(list(M = edge("X"), Y = edge(c("X", "M"))), order = c("X", "M", "Y")),
     parallel = .build_structure(list(M1 = edge("X"), M2 = edge("X"), Y = edge(c("X", "M1", "M2"))), order = c("X", "M1", "M2", "Y")),
@@ -24,42 +56,27 @@
 
 .mediation_validation_data <- function(scenario, n, loading = .80, seed = 1L,
                                         items = 4L, missing = .02, edge_shape = "auto") {
+  generator <- .mediation_generator(scenario)
+  population <- .mediation_population(scenario)
   set.seed(seed)
-  standardize <- function(v) as.numeric(scale(v))
-  X <- standardize(stats::rnorm(n))
-  states <- switch(scenario,
-    single = {
-      M <- standardize(.50 * X + stats::rnorm(n, sd = .55))
-      Y <- standardize(.30 * X + .45 * M + stats::rnorm(n, sd = .55))
-      list(X = X, M = M, Y = Y)
-    },
-    parallel = {
-      M1 <- standardize(.50 * X + stats::rnorm(n, sd = .55))
-      M2 <- standardize(-.35 * X + stats::rnorm(n, sd = .55))
-      Y <- standardize(.25 * X + .40 * M1 + .50 * M2 + stats::rnorm(n, sd = .55))
-      list(X = X, M1 = M1, M2 = M2, Y = Y)
-    },
-    serial = {
-      M1 <- standardize(.50 * X + stats::rnorm(n, sd = .55))
-      M2 <- standardize(.30 * X + .55 * M1 + stats::rnorm(n, sd = .55))
-      Y <- standardize(.20 * X + .25 * M1 + .50 * M2 + stats::rnorm(n, sd = .55))
-      list(X = X, M1 = M1, M2 = M2, Y = Y)
-    },
-    stop("Unknown mediation scenario: ", scenario, call. = FALSE)
-  )
+  latent <- .generator_states(generator, n, population$constants)
   structure <- .mediation_structure(scenario, edge_shape)
-  prefixes <- stats::setNames(letters[seq_along(states)], names(states))
+  prefixes <- stats::setNames(letters[seq_along(latent)], names(latent))
   data <- do.call(cbind, unname(Map(function(state, prefix)
-    .validation_items(state, prefix, loading, missing, items = items), states, prefixes)))
+    .validation_items(state, prefix, loading, missing, items = items), latent, prefixes)))
   specifications <- stats::setNames(lapply(prefixes, function(prefix)
-    list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(states))
-  latent <- as.data.frame(states)
-  truth_method <- if (identical(edge_shape, "smooth")) "intervention_integral" else "analytic_linear"
-  truth <- .mediation_truth(latent, structure, method = truth_method)
+    list(indicators = paste0(prefix, seq_len(items)), scales = "ordinal")), names(latent))
+  # The sample-level target integrates fitted smooth edges whenever the truth
+  # or the declared policy is nonlinear; otherwise it is the analytic product.
+  nonlinear <- scenario %in% .saturating_mediation || identical(edge_shape, "smooth")
+  sample_target <- if (nonlinear)
+    .mediation_truth(latent, .mediation_structure(scenario, "smooth"), method = "intervention_integral") else
+    .mediation_truth(latent, structure, method = "analytic_linear")
   sample_oracle <- .mediation_sample_oracle(latent, structure)
   list(data = data, model = .build_measurement(specifications, folds = 5L), structure = structure,
-       states = latent, truth = truth, sample_oracle = sample_oracle,
-       truth_method = attr(truth, "method"))
+       states = latent, truth = population$truth, truth_method = "population_counterfactual",
+       sample_target = sample_target, sample_target_method = attr(sample_target, "method"),
+       sample_oracle = sample_oracle)
 }
 
 # Independent analytic target for a linear mediation DAG. Each directed-path
@@ -184,6 +201,7 @@
   summary <- mediation$summary
   indirect <- summary[summary$component == "indirect_total", , drop = FALSE]
   truth <- generated$truth
+  sample_target <- generated$sample_target
   sample_oracle <- generated$sample_oracle
   # NA when disattenuation was unavailable (a path traverses a selected smooth
   # edge), so coverage is summarized only over reps where it could be assessed.
@@ -192,7 +210,9 @@
       truth[["indirect_total"]] <= indirect$disattenuated_ci_high
   data.frame(
     scenario = setting$scenario, replication = job$replication, n = setting$n, loading = setting$loading,
-    truth_method = generated$truth_method, sample_oracle_indirect = sample_oracle[["indirect_total"]],
+    truth_method = generated$truth_method, sample_target_method = generated$sample_target_method,
+    sample_target_indirect = sample_target[["indirect_total"]],
+    sample_oracle_indirect = sample_oracle[["indirect_total"]],
     true_indirect = truth[["indirect_total"]], naive_indirect = indirect$naive_effect,
     disattenuated_indirect = indirect$disattenuated_effect,
     naive_abs_bias = abs(indirect$naive_effect - truth[["indirect_total"]]),
@@ -228,11 +248,14 @@ indirect_effect_manifest <- function(tier = c("screening", "full", "benchmark"))
     stringsAsFactors = FALSE
   ))
   if (tier == "benchmark") {
-    # Confirmatory mediation grid for the native-comparator benchmark: edges are
-    # declared linear, so every engine estimates the same linear mediation model.
-    grid <- expand.grid(scenario = c("single", "parallel", "serial"), n = c(400L, 800L),
+    # Native-comparator benchmark. Linear scenarios declare linear edges, so
+    # every engine estimates the same linear mediation model. Saturating
+    # scenarios let CS-SEM select each edge's shape, while the native
+    # comparators fit their linear models; all are scored against the same
+    # population counterfactual.
+    grid <- expand.grid(scenario = c("single", "parallel", "serial", .saturating_mediation), n = c(400L, 800L),
       loading = c(.60, .80), items = 4L, KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
-    grid$edge_shape <- "linear"
+    grid$edge_shape <- ifelse(grid$scenario %in% .saturating_mediation, "auto", "linear")
     return(grid[, c("scenario", "n", "loading", "items", "edge_shape")])
   }
   grid <- expand.grid(scenario = c("single", "parallel", "serial"), n = c(400L, 800L),
@@ -244,8 +267,10 @@ indirect_effect_manifest <- function(tier = c("screening", "full", "benchmark"))
 #' Run deterministic mediation validation simulations
 #'
 #' Fits CS-SEM, decomposes the mediation effect, and compares the naive and
-#' disattenuated indirect effects against the known latent-scale truth, with
-#' bootstrap-interval coverage. Establishes the workflow that the publication
+#' disattenuated indirect effects against the population counterfactual
+#' indirect effect implied by the generating equations, with bootstrap-interval
+#' coverage. The independent sample-level target and the package's own sample
+#' oracle are reported alongside it. Establishes the workflow that the publication
 #' benchmark (with native PLS-SEM and CB-SEM mediation) will extend.
 #'
 #' @param manifest A manifest from [indirect_effect_manifest()].

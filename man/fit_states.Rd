@@ -56,21 +56,20 @@ default \code{"partial"} retains rows and lets each observed item contribute to
 the measurement posterior. \code{"listwise"} excludes rows missing any declared
 indicator before fitting. \code{"error"} rejects any missing declared indicator.}
 
-\item{split}{Optional explicit measurement split. Supply a
-\code{cssem_splits} object from \code{make_splits()} or an integer fold
-assignment with one value per input row. Explicit assignments are retained in
-the fitted object's \code{measurement_split} metadata and are filtered
-alongside listwise exclusions.}
+\item{split}{Optional explicit measurement split. Supply a \code{cssem_splits}
+object from \code{\link[=make_splits]{make_splits()}} or an integer fold assignment with one value
+per input row. Explicit assignments are retained in the fitted object's
+\code{measurement_split} metadata and are filtered alongside listwise exclusions.}
 
 \item{cluster}{Optional column name or one-value-per-input-row vector
-identifying repeated observations from the same independent unit. Omitted
-measurement splits are grouped by unit and explicit assignments are checked for
-cluster leakage. This is a cluster-aware resampling contract, not a multilevel
-SEM estimator.}
+identifying repeated observations from the same independent unit. When
+supplied, omitted measurement splits are grouped by unit and explicit
+assignments are checked for cluster leakage. This is a cluster-aware
+resampling contract, not a multilevel SEM estimator.}
 
 \item{design}{Optional named design metadata. Survey weights, strata,
-finite-population corrections, replicate weights, and design-based standard
-errors are unsupported and fail explicitly.}
+finite-population corrections, replicate weights, and design-based
+standard errors are unsupported and fail explicitly.}
 
 \item{retain_data}{Whether to retain the original training frames and raw
 row-aligned cluster labels in the fitted object. Set to \code{FALSE} to keep

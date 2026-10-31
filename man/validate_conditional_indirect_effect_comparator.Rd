@@ -10,6 +10,7 @@ validate_conditional_indirect_effect_comparator(
   seed = 1L,
   folds = 3L,
   iterations = 8L,
+  max_iterations = iterations,
   structural_repeats = 3L,
   eiv_bootstrap = 200L,
   seminr_bootstrap = 200L,
@@ -28,6 +29,9 @@ validate_conditional_indirect_effect_comparator(
 
 \item{iterations}{Measurement iterations.}
 
+\item{max_iterations}{Measurement iterations for a single refit when the
+first fit does not converge.}
+
 \item{structural_repeats}{Repeated structural CV assignments for selection.}
 
 \item{eiv_bootstrap}{Bootstrap resamples for the CS-SEM index interval.}
@@ -45,8 +49,8 @@ coverage.
 Scores the CS-SEM disattenuated index of moderated mediation against native
 PLS-SEM (seminr, composite with a two-stage interaction) and native CB-SEM
 (seminr reflective with a product-indicator latent interaction) on a shared
-task with a known latent-scale truth, reporting absolute bias and interval
-coverage. The CS-SEM naive index is included to show the attenuation the
+task, reporting absolute bias and interval coverage against the population
+index implied by the generating equations. The CS-SEM naive index is included to show the attenuation the
 correction removes. Optional comparators are skipped when their packages are
 absent.
 }

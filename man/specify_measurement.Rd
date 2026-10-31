@@ -8,8 +8,7 @@ specify_measurement(..., folds = 5L, preset = c("default", "exploratory"))
 }
 \arguments{
 \item{...}{Named construct declarations, each an \code{\link[=ordinal]{ordinal()}},
-\code{\link[=continuous]{continuous()}}, \code{\link[=mixed_items]{mixed_items()}},
-or \code{\link[=manifest]{manifest()}} call.}
+\code{\link[=continuous]{continuous()}}, \code{\link[=mixed_items]{mixed_items()}}, or \code{\link[=manifest]{manifest()}} call.}
 
 \item{folds}{Number of cross-fitting folds. Must be at least two.}
 
@@ -36,6 +35,7 @@ Other model specification functions:
 \code{\link[=continuous]{continuous()}},
 \code{\link[=cssem_model]{cssem_model()}},
 \code{\link[=manifest]{manifest()}},
+\code{\link[=mixed_items]{mixed_items()}},
 \code{\link[=ordinal]{ordinal()}},
 \code{\link[=specify_structure]{specify_structure()}}
 }
