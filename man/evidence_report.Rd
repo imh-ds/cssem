@@ -29,7 +29,11 @@ causal-claims section (declared direct and interventional-mediation effects
 with identification and robustness). Every row carries a plain-language verdict
 derived from transparent rules over the raw signals. Unlike the standalone
 \code{effect_ledger()}, edge status is routed in from \code{routing} rather than
-fixed at associational, so a declared causal edge is reported as such.
+fixed at associational, so a declared causal edge is reported as such. For a
+routed causal edge, the surface \code{estimate} is the routed causal effect (its
+claimed estimand, such as a total-effect contrast when the adjustment set
+excludes mediators); \code{estimate_target} names the quantity on every row, and
+\code{structural_estimate} keeps the full outcome model's coefficient.
 }
 \examples{
 # evidence_report(association, fit = fit, routing = routing,
