@@ -10,6 +10,7 @@ validate_indirect_effect_comparator(
   seed = 1L,
   folds = 3L,
   iterations = 8L,
+  max_iterations = iterations,
   structural_repeats = 3L,
   eiv_bootstrap = 200L,
   seminr_bootstrap = 200L,
@@ -28,6 +29,9 @@ validate_indirect_effect_comparator(
 
 \item{iterations}{Measurement iterations.}
 
+\item{max_iterations}{Measurement iterations for a single refit when the
+first fit does not converge.}
+
 \item{structural_repeats}{Repeated structural CV assignments for selection.}
 
 \item{eiv_bootstrap}{Bootstrap resamples for the CS-SEM mediation intervals.}
@@ -38,14 +42,15 @@ validate_indirect_effect_comparator(
 }
 \value{
 A data frame with one row per engine, scenario, and replication
-carrying the indirect estimate, absolute bias against truth, interval, and
-coverage.
+carrying the indirect estimate, absolute bias against truth, interval,
+coverage, and measurement convergence.
 }
 \description{
 Scores the CS-SEM disattenuated indirect effect against native CB-SEM
 (\code{lavaan} latent SEM, delta-method interval) and PLS-SEM (\code{seminr} path
-products, bootstrap interval) on a shared mediation task with a known
-latent-scale truth, reporting absolute bias and interval coverage. The naive
+products, bootstrap interval) on a shared mediation task, reporting absolute
+bias and interval coverage against the population counterfactual indirect
+effect implied by the generating equations. The naive
 CS-SEM indirect effect is included to show the attenuation the correction
 removes. Optional comparators are skipped when their packages are absent.
 }

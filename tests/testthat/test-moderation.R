@@ -94,7 +94,9 @@ test_that("moderated mediation harness recovers the index of moderated mediation
     "naive_abs_bias", "disattenuated_abs_bias", "index_covers_truth",
     "truth_method", "sample_oracle_index", "naive_sample_oracle_abs_error",
     "disattenuated_sample_oracle_abs_error") %in% names(results)))
-  expect_identical(results$truth_method, "analytic_interaction")
+  expect_identical(results$truth_method, "population_counterfactual")
+  expect_identical(results$sample_target_method, "analytic_interaction")
+  expect_true(is.finite(results$sample_target_index))
   # Disattenuation reduces the bias of the index of moderated mediation.
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
 })
@@ -241,4 +243,21 @@ test_that("printing a moderated mediation handles a zero or missing index", {
   expect_output(print(skeleton(NA_real_)), "index of moderated mediation: not available")
   expect_output(print(skeleton(.12)), "strengthens")
   expect_output(print(skeleton(-.12)), "weakens")
+})
+
+test_that("population moderated-mediation targets match the generating equations", {
+  # Both paths moderated: CIE(w) = (.5 + .3w) / sd(M_raw) * (.4 + .3w) / sd(Y_raw),
+  # so the index is a * b_MW + a_XW * b. sd(M_raw) has a closed form; sd(Y_raw)
+  # involves products of correlated terms and is taken from a direct draw.
+  sd_m <- sqrt(.5^2 + .1^2 + .3^2 + .5^2)
+  a <- .5 / sd_m; a_xw <- .3 / sd_m
+  set.seed(11); n <- 400000
+  X <- stats::rnorm(n); W <- stats::rnorm(n)
+  M <- (.5 * X + .1 * W + .3 * X * W + stats::rnorm(n, sd = .5)) / sd_m
+  sd_y <- stats::sd(.2 * X + .4 * M + .1 * W + .3 * M * W + stats::rnorm(n, sd = .5))
+  truth <- cssem:::.moderated_mediation_population("both_paths")$truth
+  expect_equal(truth$index, a * .3 / sd_y + a_xw * .4 / sd_y, tolerance = .02)
+  generated <- cssem:::.moderated_mediation_validation_data("both_paths", 400, seed = 4)
+  expect_identical(generated$truth_method, "population_counterfactual")
+  expect_equal(names(generated$states), c("X", "W", "M", "Y"))
 })

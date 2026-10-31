@@ -1,6 +1,6 @@
 # Rigorous mediation benchmark: score the CS-SEM disattenuated indirect effect
 # against native CB-SEM (lavaan latent SEM) and PLS-SEM (seminr) mediation on a
-# shared task with a known latent-scale truth. CB-SEM disattenuates and should be
+# shared task with a known population counterfactual target. CB-SEM disattenuates and should be
 # near-unbiased; PLS-SEM carries measurement error into composites and attenuates;
 # the CS-SEM naive estimate is included to show the same attenuation without the
 # correction.
@@ -96,9 +96,11 @@
   truth <- generated$truth[["indirect_total"]]
   rows <- list()
 
+  max_iterations <- if (is.null(job$max_iterations)) job$iterations else job$max_iterations
   cssem_elapsed <- system.time({
-    model <- generated$model; model$folds <- job$folds
-    fit <- .fit_states_quiet(model, generated$data, seed = job$seed, iterations = job$iterations, diagnostics = FALSE)
+    validation_fit <- .validation_fit(generated$model, generated$data, job$seed, job$folds,
+      job$iterations, max_iterations, FALSE)
+    fit <- validation_fit$fit
     association <- associate(fit, generated$structure, structural_repeats = job$structural_repeats,
       seed = job$seed, shadow_scope = "temporal")
     mediation <- indirect_effect(association, x, y, eiv_bootstrap = job$eiv_bootstrap, seed = job$seed)
@@ -117,15 +119,21 @@
   rows[[4L]] <- .mediation_comparator_row("seminr_native", setting, job$replication, truth,
     seminr_result$estimate, seminr_result$ci_low, seminr_result$ci_high, seminr_result$runtime, seminr_result$status)
 
-  cbind(do.call(rbind, rows), items = items, edge_shape = edge_shape, row.names = NULL)
+  cbind(do.call(rbind, rows), items = items, edge_shape = edge_shape,
+    truth_method = generated$truth_method, sample_target_method = generated$sample_target_method,
+    sample_target_indirect = generated$sample_target[["indirect_total"]],
+    true_direct = generated$truth[["direct"]], true_total = generated$truth[["total"]],
+    measurement_converged = validation_fit$converged, fit_attempts = validation_fit$attempts,
+    row.names = NULL)
 }
 
 #' Run the mediation benchmark against native CB-SEM and PLS-SEM
 #'
 #' Scores the CS-SEM disattenuated indirect effect against native CB-SEM
 #' (`lavaan` latent SEM, delta-method interval) and PLS-SEM (`seminr` path
-#' products, bootstrap interval) on a shared mediation task with a known
-#' latent-scale truth, reporting absolute bias and interval coverage. The naive
+#' products, bootstrap interval) on a shared mediation task, reporting absolute
+#' bias and interval coverage against the population counterfactual indirect
+#' effect implied by the generating equations. The naive
 #' CS-SEM indirect effect is included to show the attenuation the correction
 #' removes. Optional comparators are skipped when their packages are absent.
 #'
@@ -135,13 +143,15 @@
 #' @param seed Base seed.
 #' @param folds Cross-fitting folds.
 #' @param iterations Measurement iterations.
+#' @param max_iterations Measurement iterations for a single refit when the
+#'   first fit does not converge.
 #' @param structural_repeats Repeated structural CV assignments for selection.
 #' @param eiv_bootstrap Bootstrap resamples for the CS-SEM mediation intervals.
 #' @param seminr_bootstrap Bootstrap resamples for the PLS-SEM interval.
 #' @param workers Independent jobs to run concurrently.
 #' @return A data frame with one row per engine, scenario, and replication
-#'   carrying the indirect estimate, absolute bias against truth, interval, and
-#'   coverage.
+#'   carrying the indirect estimate, absolute bias against truth, interval,
+#'   coverage, and measurement convergence.
 #' @examples
 #' results <- validate_indirect_effect_comparator(
 #'   indirect_effect_manifest("benchmark")[1, ], reps = 1,
@@ -150,7 +160,8 @@
 #' unique(results$engine)
 #' @export
 validate_indirect_effect_comparator <- function(manifest, reps = 3L, seed = 1L, folds = 3L,
-                                                      iterations = 8L, structural_repeats = 3L,
+                                                      iterations = 8L, max_iterations = iterations,
+                                                      structural_repeats = 3L,
                                                       eiv_bootstrap = 200L, seminr_bootstrap = 200L,
                                                       workers = 1L) {
   .preserve_seed()
@@ -160,8 +171,8 @@ validate_indirect_effect_comparator <- function(manifest, reps = 3L, seed = 1L, 
   for (scenario_index in seq_len(nrow(manifest))) for (replication in seq_len(reps)) {
     index <- index + 1L
     jobs[[index]] <- list(setting = as.list(manifest[scenario_index, , drop = FALSE]), replication = replication,
-      seed = seed + index, folds = folds, iterations = iterations, structural_repeats = structural_repeats,
-      eiv_bootstrap = eiv_bootstrap, seminr_bootstrap = seminr_bootstrap)
+      seed = seed + index, folds = folds, iterations = iterations, max_iterations = max_iterations,
+      structural_repeats = structural_repeats, eiv_bootstrap = eiv_bootstrap, seminr_bootstrap = seminr_bootstrap)
   }
   do.call(rbind, .validation_map(jobs, .mediation_comparator_one, workers))
 }

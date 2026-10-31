@@ -190,7 +190,9 @@ test_that("mediation validation harness recovers the latent indirect effect", {
     "naive_abs_bias", "disattenuated_abs_bias", "disattenuated_covers_truth",
     "truth_method", "sample_oracle_indirect", "naive_sample_oracle_abs_error",
     "disattenuated_sample_oracle_abs_error") %in% names(results)))
-  expect_identical(results$truth_method, "analytic_linear")
+  expect_identical(results$truth_method, "population_counterfactual")
+  expect_identical(results$sample_target_method, "analytic_linear")
+  expect_true(is.finite(results$sample_target_indirect))
   expect_lt(results$disattenuated_abs_bias, results$naive_abs_bias)
 })
 
@@ -242,7 +244,9 @@ test_that("the nonlinear mediation truth integrates mediator residuals", {
 test_that("mediation benchmark scores every engine against the latent truth", {
   manifest <- indirect_effect_manifest("benchmark")
   expect_true(all(c("scenario", "n", "loading", "items", "edge_shape") %in% names(manifest)))
-  expect_true(all(manifest$edge_shape == "linear"))
+  linear <- manifest$scenario %in% c("single", "parallel", "serial")
+  expect_true(all(manifest$edge_shape[linear] == "linear"))
+  expect_true(all(manifest$edge_shape[!linear] == "auto"))
   row <- manifest[manifest$scenario == "single" & manifest$loading == .80 & manifest$n == 400L, ]
   results <- validate_indirect_effect_comparator(row, reps = 1, seed = 4026, iterations = 4,
     eiv_bootstrap = 40, seminr_bootstrap = 40)
@@ -302,4 +306,26 @@ test_that("the reported proportion mediated divides the effects that were report
   naive_effect <- indirect_effect(association, x = "X", y = "Y", mediators = "M", disattenuate = FALSE)
   expect_equal(naive_effect$proportion_mediated, naive_effect$proportion_mediated_naive, tolerance = 1e-10)
   expect_identical(naive_effect$proportion_mediated_basis, "naive")
+})
+
+test_that("population mediation targets match the generating equations", {
+  # Closed form for the linear single-mediator generator on the population
+  # metric: a = .5 / sd(M_raw), b = .45 / sd(Y_raw), direct = .3 / sd(Y_raw).
+  sd_m <- sqrt(.5^2 + .55^2)
+  a <- .5 / sd_m
+  sd_y <- sqrt(.3^2 + .45^2 + 2 * .3 * .45 * a + .55^2)
+  truth <- cssem:::.mediation_population("single")$truth
+  expect_equal(unname(truth[["indirect_total"]]), a * .45 / sd_y, tolerance = .01)
+  expect_equal(unname(truth[["direct"]]), .3 / sd_y, tolerance = .01)
+
+  # Building a target must not consume the caller's random stream.
+  set.seed(99); expected <- stats::runif(1)
+  set.seed(99); cssem:::.mediation_population("serial"); expect_identical(stats::runif(1), expected)
+
+  # A saturating b-path makes the population effect differ from the linear
+  # projection that the independent sample target would give a linear model.
+  generated <- cssem:::.mediation_validation_data("saturating_b_path", 400, seed = 3)
+  expect_identical(generated$truth_method, "population_counterfactual")
+  expect_identical(generated$sample_target_method, "intervention_integral")
+  expect_equal(names(generated$states), c("X", "M", "Y"))
 })

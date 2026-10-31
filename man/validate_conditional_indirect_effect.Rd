@@ -40,9 +40,9 @@ biases, and interval coverage.
 }
 \description{
 Fits CS-SEM and compares the naive and disattenuated index of moderated
-mediation against the known latent-scale truth, with bootstrap-interval
-coverage. The moderator acts on the b-path or a-path via a declared
-interaction.
+mediation against the population index implied by the generating equations,
+with bootstrap-interval coverage. The moderator acts on the b-path, the
+a-path, or both via declared interactions.
 }
 \examples{
 results <- validate_conditional_indirect_effect(
