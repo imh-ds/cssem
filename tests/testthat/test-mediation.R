@@ -73,6 +73,24 @@ test_that("nonlinear mediation contrasts use the same propagation baseline", {
   actual <- cssem:::.decompose_effects(models, scores, order, "X", "Y", paths, delta)$total
   expect_equal(actual, expected, tolerance = 1e-8)
   expect_true(is.finite(actual))
+
+  # The zero-shift arm reproduces the supplied scores, whatever the active set.
+  expect_equal(cssem:::.propagate_y(models, scores, order, "X", "Y", 0, active), scores$Y)
+  expect_equal(cssem:::.propagate_y(models, scores, order, "X", "Y", 0, character(0)), scores$Y)
+
+  # As delta shrinks the finite contrast converges to the average derivative of
+  # the fitted chain, d/dx E[f(M)] = E[f'(M)] with dM/dX = 1.
+  effects <- vapply(c(1e-1, 1e-2, 1e-3), function(d)
+    cssem:::.decompose_effects(models, scores, order, "X", "Y", paths, d)$total, numeric(1))
+  eps <- 1e-5
+  inputs <- data.frame(M = scores$M)
+  derivative <- mean((cssem:::.predict_shape_model(models$Y, data.frame(M = scores$M + eps)) -
+    cssem:::.predict_shape_model(models$Y, inputs)) / eps)
+  # The error is first order in delta: shrinking delta 100-fold shrinks it about
+  # 100-fold. (The derivative itself is near zero here, so the check is absolute.)
+  errors <- abs(effects - derivative)
+  expect_lt(errors[[3]], errors[[1]] / 50)
+  expect_lt(errors[[3]], 2e-3)
 })
 
 test_that("an endogenous treatment propagates its own shift", {
@@ -216,10 +234,10 @@ test_that("mediation validation uses an independent analytic truth", {
 })
 
 test_that("the nonlinear mediation truth integrates mediator residuals", {
-  # Regression: the smooth target re-implemented the engine's conditional-mean
-  # propagation, so it could not detect that approximation. With a cubic
-  # outcome, E[f(M)] differs from f(E[M | X]); the residual-preserving target
-  # must track the analytic contrast while the plug-in engine does not.
+  # With a cubic outcome, E[f(M)] differs from f(E[M | X]). The independent
+  # residual-preserving target and the engine, which now propagates each unit's
+  # residual (F02), must both track the analytic contrast; a conditional-mean
+  # plug-in must not.
   set.seed(4028)
   n <- 3000
   X <- stats::rnorm(n); M <- X + stats::rnorm(n, sd = .8)
@@ -233,11 +251,18 @@ test_that("the nonlinear mediation truth integrates mediator residuals", {
   models <- list(X = NULL,
     M = cssem:::.fit_shape_model(latent, "M", c(X = "smooth_df3")),
     Y = cssem:::.fit_shape_model(latent, "Y", c(X = "smooth_df3", M = "smooth_df3")))
-  plug_in <- cssem:::.decompose_effects(models, latent, c("X", "M", "Y"), "X", "Y",
+  engine <- cssem:::.decompose_effects(models, latent, c("X", "M", "Y"), "X", "Y",
     cssem:::.structure_paths(structure, "X", "Y"), delta)$total
+  # A conditional-mean plug-in (residuals set to zero) misses E[f(M)] - f(E[M]).
+  zero <- list(M = rep(0, n), Y = rep(0, n))
+  plug_in <- cssem:::.decompose_effects(models, latent, c("X", "M", "Y"), "X", "Y",
+    cssem:::.structure_paths(structure, "X", "Y"), delta, residuals = zero)$total
 
   expect_identical(attr(truth, "method"), "intervention_integral")
   expect_lt(abs(truth[["total"]] - analytic) / analytic, .10)
+  # The engine propagates each unit's residual, so it tracks the analytic
+  # contrast as the independent target does; the plug-in does not.
+  expect_lt(abs(engine - analytic) / analytic, .10)
   expect_gt(abs(plug_in - analytic) / analytic, .25)
 })
 

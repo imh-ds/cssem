@@ -834,6 +834,14 @@ specify_structure <- function(..., order = NULL, families = NULL) {
 # Corrected structural effects for one outcome. Edges whose selected shape is
 # linear, monotone, or product are disattenuated; smooth edges are reported but
 # not yet corrected (closed-form errors-in-variables for splines is out of scope).
+#
+# The corrected coefficient subtracts predictor error only, so on standardized
+# scores it targets beta * sqrt(rho_Y / rho_p) (Section 3.9 of the JSS paper).
+# Rescaling it by sqrt(rho_p / rho_Y) gives the coefficient on standardized
+# latent states, beta. Standardized posterior-mean scores have the same second
+# moments as standardized classical proxies (Var = 1, cross-covariances scaled
+# by sqrt(rho_a rho_b)), so the rescaling holds for both. It is not defined for
+# product terms, whose latent counterpart is not standardized.
 .corrected_effects <- function(scores, outcome, selected_shapes, reliability, replicates, seed,
                                weights = NULL, posterior_var = NULL, level = .95, family = NULL) {
   predictors <- names(selected_shapes)
@@ -841,7 +849,9 @@ specify_structure <- function(..., order = NULL, families = NULL) {
   if (family$family != "gaussian") {
     return(do.call(rbind, lapply(predictors, function(p) data.frame(
       outcome = outcome, predictor = p, naive_estimate = NA_real_, corrected_estimate = NA_real_,
-      predictor_reliability = NA_real_, corrected_ci_low = NA_real_, corrected_ci_high = NA_real_,
+      predictor_reliability = NA_real_, outcome_reliability = NA_real_, latent_standardized_estimate = NA_real_,
+      latent_standardized_ci_low = NA_real_, latent_standardized_ci_high = NA_real_,
+      corrected_ci_low = NA_real_, corrected_ci_high = NA_real_,
       eiv_applicable = FALSE, eiv_stable = NA, eiv_n = nrow(scores), eiv_rank = NA_integer_,
       eiv_condition_number = NA_real_, eiv_corrected_condition_number = NA_real_, eiv_singular = NA,
       correction_shrink = NA_real_, correction_strength = NA_real_, reliability_floor_applied = NA,
@@ -854,14 +864,21 @@ specify_structure <- function(..., order = NULL, families = NULL) {
   boot <- if (any(applicable)) .eiv_bootstrap(scores, outcome, predictors, reliability, replicates, seed,
     weights, posterior_var, level) else NULL
   diagnostic <- fit$diagnostics
+  outcome_reliability <- if (outcome %in% names(reliability) && is.finite(reliability[[outcome]]) &&
+    reliability[[outcome]] > 0) unname(reliability[[outcome]]) else NA_real_
   do.call(rbind, lapply(predictors, function(p) {
     ci <- if (!is.null(boot) && applicable[[p]] && any(is.finite(boot[, p])))
       stats::quantile(boot[, p], c((1 - level) / 2, (1 + level) / 2), na.rm = TRUE, names = FALSE) else c(NA_real_, NA_real_)
+    predictor_reliability <- if (.is_interaction(p)) prod(reliability[.interaction_terms(p)]) else unname(reliability[[p]])
+    scale_latent <- if (.is_interaction(p) || !is.finite(predictor_reliability) || !is.finite(outcome_reliability))
+      NA_real_ else sqrt(predictor_reliability / outcome_reliability)
+    corrected <- if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_
     data.frame(outcome = outcome, predictor = p,
       naive_estimate = if (applicable[[p]]) unname(fit$naive[[p]]) else NA_real_,
-      corrected_estimate = if (applicable[[p]]) unname(fit$corrected[[p]]) else NA_real_,
-      predictor_reliability = if (.is_interaction(p))
-        prod(reliability[.interaction_terms(p)]) else unname(reliability[[p]]),
+      corrected_estimate = corrected,
+      predictor_reliability = predictor_reliability, outcome_reliability = outcome_reliability,
+      latent_standardized_estimate = corrected * scale_latent,
+      latent_standardized_ci_low = ci[[1L]] * scale_latent, latent_standardized_ci_high = ci[[2L]] * scale_latent,
       corrected_ci_low = ci[[1L]], corrected_ci_high = ci[[2L]],
       eiv_applicable = applicable[[p]], eiv_stable = applicable[[p]] && isTRUE(fit$stable),
       eiv_n = diagnostic$n, eiv_rank = diagnostic$rank,

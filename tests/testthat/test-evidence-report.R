@@ -44,6 +44,16 @@ test_that("evidence report composes constructs, effects, and causal claims", {
   # every mediating path stays open and the estimand is a total-effect contrast.
   expect_equal(nrow(report$causal_claims), 1L)
   expect_identical(report$causal_claims$type, "total (adjusted)")
+  # F05: the surface row of a routed causal edge carries the claimed estimate,
+  # labelled with its estimand, and keeps the structural coefficient separately.
+  expect_equal(causal_edge$estimate, report$causal_claims$effect)
+  expect_match(causal_edge$estimate_target, "causal effect: total (adjusted)", fixed = TRUE)
+  expect_true(is.finite(causal_edge$structural_estimate))
+  others <- report$effects[report$effects$path != "Quality→Loyalty", ]
+  expect_true(all(others$estimate_target == "structural coefficient"))
+  expect_equal(others$estimate, others$structural_estimate)
+  printed <- utils::capture.output(print(report))
+  expect_true(any(grepl("Quality→Loyalty: causal effect", printed, fixed = TRUE)))
 })
 
 test_that("a smooth edge (no scalar estimate) is scored on contribution", {

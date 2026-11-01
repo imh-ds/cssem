@@ -54,7 +54,8 @@ defaults while iterating on a live project.}
 \item{missing_policy}{How declared indicator missingness is handled. The
 default \code{"partial"} retains rows and lets each observed item contribute to
 the measurement posterior. \code{"listwise"} excludes rows missing any declared
-indicator before fitting. \code{"error"} rejects any missing declared indicator.}
+indicator before fitting. \code{"error"} rejects any missing declared indicator.
+See the Missing data section.}
 
 \item{split}{Optional explicit measurement split. Supply a \code{cssem_splits}
 object from \code{\link[=make_splits]{make_splits()}} or an integer fold assignment with one value
@@ -90,6 +91,22 @@ Each returned locked score is predicted by an encoder trained without that
 respondent's fold (manifest constructs are standardized out-of-fold too,
 from training-fold statistics only).
 }
+\section{Missing data}{
+
+Under \code{missing_policy = "partial"}, a respondent missing some items of a
+multi-item construct is scored from the observed items' likelihood terms;
+this is not imputation. A respondent missing every item of a construct
+receives the prior mean (a score near zero) and is counted as \code{prior_only} in
+\code{\link[=sample_accounting]{sample_accounting()}}; \code{\link[=associate]{associate()}} excludes such rows from structural
+fitting under its default \code{"complete"} policy. A missing manifest value has
+no score (\code{NA}) and is likewise excluded structurally. In text columns, empty
+or blank strings and the literal string \code{"NA"} are read as missing, as
+\code{\link[utils:read.csv]{utils::read.csv()}} does by default; any other non-numeric text in a
+continuous or manifest column, or an ordinal code that is fractional or
+outside the integer range, is an error. \code{\link[=score_states]{score_states()}} applies the same
+rules to new records.
+}
+
 \examples{
 data <- simulate_states(n = 80, seed = 1)
 model <- cssem_model(list(

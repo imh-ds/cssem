@@ -47,11 +47,18 @@
   "Supported under assumptions"
 }
 
-# Per-edge effect rows, with causal status merged in from a routing table.
+# Per-edge effect rows, with causal status merged in from a routing table. A
+# routed causal edge reports the routed causal effect (its claimed estimand,
+# for example a total-effect contrast) as its estimate, not the structural
+# coefficient of the full outcome model, which is a different quantity when the
+# adjustment set excludes mediators. The structural coefficient is kept in its
+# own column, and `estimate_target` names what `estimate` is on every row.
 .evidence_effects <- function(association, routing) {
   ledger <- effect_ledger(association)
   parameters <- parameter_table(association)
-  estimate <- ifelse(is.finite(ledger$corrected_estimate), ledger$corrected_estimate, ledger$naive_estimate)
+  structural <- ifelse(is.finite(ledger$corrected_estimate), ledger$corrected_estimate, ledger$naive_estimate)
+  estimate <- structural
+  target <- rep("structural coefficient", nrow(ledger))
   key <- .path_key(ledger$predictor, ledger$outcome)
   parameter_key <- if (nrow(parameters)) .path_key(parameters$predictor, parameters$outcome) else character()
   parameter_row <- match(key, parameter_key)
@@ -68,10 +75,17 @@
     status[routed] <- routing$table$status[match_row[routed]]
     robustness[routed] <- routing$table$robustness_value[match_row[routed]]
     estimand[routed] <- routing$table$estimand[match_row[routed]]
+    for (i in which(routed & key %in% names(routing$causal_effects))) {
+      effect <- routing$causal_effects[[key[[i]]]]
+      estimate[[i]] <- effect$adjusted_effect
+      claim <- if (is.null(effect$claim_type)) "causal" else effect$claim_type
+      target[[i]] <- sprintf("causal effect: %s / %s", claim, effect$estimand)
+    }
   }
   verdict <- vapply(seq_len(nrow(ledger)), function(i)
     .edge_verdict(ledger$selection_frequency[i], estimate[i], ledger$edge_drop_mse_increase[i], ledger$temporal_gap[i], status[i]), character(1))
-  data.frame(path = key, shape = ledger$shape, estimate = estimate, basis = basis, units = units,
+  data.frame(path = key, shape = ledger$shape, estimate = estimate, estimate_target = target,
+    structural_estimate = structural, basis = basis, units = units,
     contribution = ledger$edge_drop_mse_increase, stability = ledger$selection_frequency,
     shadow_gap = ledger$temporal_gap, causal_status = status, estimand = estimand,
     robustness_value = robustness, verdict = verdict, stringsAsFactors = FALSE)
@@ -132,7 +146,11 @@
 #' with identification and robustness). Every row carries a plain-language verdict
 #' derived from transparent rules over the raw signals. Unlike the standalone
 #' `effect_ledger()`, edge status is routed in from `routing` rather than
-#' fixed at associational, so a declared causal edge is reported as such.
+#' fixed at associational, so a declared causal edge is reported as such. For a
+#' routed causal edge, the surface `estimate` is the routed causal effect (its
+#' claimed estimand, such as a total-effect contrast when the adjustment set
+#' excludes mediators); `estimate_target` names the quantity on every row, and
+#' `structural_estimate` keeps the full outcome model's coefficient.
 #'
 #' @param association A `cssem_association` from [associate()].
 #' @param fit Optional `fit_states`; adds the construct evidence section.
@@ -207,19 +225,25 @@ print.evidence_report <- function(x, ...) {
 
   cat("\nEffects (surface)\n")
   cat(sprintf("  %-20s %-10s %-9s %-9s %-9s %-15s %s\n", "path", "shape", "estimate", "stability", "shadowgap", "causal status", "verdict"))
+  causal_rows <- if ("estimate_target" %in% names(x$effects)) which(x$effects$estimate_target != "structural coefficient") else integer()
   for (i in seq_len(nrow(x$effects))) {
     row <- x$effects[i, ]
-    cat(sprintf("  %-20s %-10s %-9s %-9s %-9s %-15s %s\n", row$path, row$shape, num(row$estimate, 2),
+    mark <- if (i %in% causal_rows) "*" else ""
+    cat(sprintf("  %-20s %-10s %-9s %-9s %-9s %-15s %s\n", row$path, row$shape, paste0(num(row$estimate, 2), mark),
       num(row$stability, 2), num(row$shadow_gap, 2), row$causal_status, row$verdict))
+  }
+  for (i in causal_rows) {
+    row <- x$effects[i, ]
+    cat(sprintf("  * %s: %s (structural coefficient %s)\n", row$path, row$estimate_target, num(row$structural_estimate, 2)))
   }
 
   if (!is.null(x$causal_claims)) {
     cat("\nCausal claims\n")
-    cat(sprintf("  %-18s %-26s %-18s %-9s %-6s %s\n", "claim", "type / estimand", "effect", "identif.", "RV", "verdict"))
+    cat(sprintf("  %-14s %-36s %-18s %-9s %-6s %s\n", "claim", "type / estimand", "effect", "identif.", "RV", "verdict"))
     for (i in seq_len(nrow(x$causal_claims))) {
       row <- x$causal_claims[i, ]
       effect <- if (is.finite(row$ci_low)) sprintf("%s [%s, %s]", num(row$effect, 2), num(row$ci_low, 2), num(row$ci_high, 2)) else num(row$effect, 2)
-      cat(sprintf("  %-18s %-26s %-18s %-9s %-6s %s\n", row$claim, paste(row$type, row$estimand, sep = " / "),
+      cat(sprintf("  %-14s %-36s %-18s %-9s %-6s %s\n", row$claim, paste(row$type, row$estimand, sep = " / "),
         effect, num(row$identification, 2), num(row$robustness_value, 2), row$verdict))
     }
   }

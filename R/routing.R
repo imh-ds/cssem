@@ -140,9 +140,6 @@ route <- function(association, causal = list(), predictive = list(), representat
   interpretation <- c(associational = "Adjusted association",
     predictive = "Predictive only (not interpreted)", representational = "Representational (not a structural effect)")
   routed_causal <- c("causal", "causal_weak", "causal_inadmissible")
-  causal_interpretation <- c(causal_under_assumptions = "Causal under assumptions",
-    adjusted_association = "Adjusted association (weak identification)",
-    unadjusted_association = "Unadjusted association")
   rows <- lapply(seq_len(nrow(edges)), function(i) {
     key <- .path_key(edges$from[[i]], edges$to[[i]]); s <- status[[key]]
     if (s %in% routed_causal) {
@@ -152,7 +149,8 @@ route <- function(association, causal = list(), predictive = list(), representat
         effect = effect$adjusted_effect, ci_low = effect$ci_low, ci_high = effect$ci_high,
         robustness_value = effect$robustness_value,
         interpretation = if (identical(s, "causal_inadmissible"))
-          "Adjusted association (causal design audit unmet)" else causal_interpretation[[effect$label]],
+          "Adjusted association (causal design audit unmet)" else
+          sub(" \\(not causal: ", " (", .causal_label_text(effect)),
         stringsAsFactors = FALSE)
     } else {
       data.frame(path = key, status = s, estimand = NA_character_, adjustment_set = NA_character_,

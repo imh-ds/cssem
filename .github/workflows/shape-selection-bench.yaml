@@ -11,6 +11,9 @@ name: Shape-selection confirmation benchmark
 # Seed-deterministic: sharding changes wall-clock only.
 
 on:
+  # A pushed `shape-sim-*` tag runs the workflow as defined on that commit.
+  push:
+    tags: ['shape-sim-*']
   workflow_dispatch:
     inputs:
       blocks:
@@ -29,7 +32,7 @@ jobs:
   bench:
     name: shape shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:

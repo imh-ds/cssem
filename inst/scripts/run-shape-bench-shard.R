@@ -2,8 +2,16 @@
 #
 # Each replication fits the measurement model once and then saves BOTH:
 #   * the shape associate() actually selects (end-to-end, the real rule), and
-#   * the raw evidence that rule consumed: every candidate's per-fold CV losses,
-#     the curvature-test p-value, and the same test on the true latent states.
+#   * the raw evidence that rule consumed: every candidate's per-fold CV losses
+#     and the curvature-test p-value.
+# It also runs the identical selector, with the same seed, on the true latent
+# states (a pseudo-fit with reliability 1), so detection on scores is compared
+# with detection on latent states under one procedure (F09). The classical F
+# test on scores and on latent states is kept for continuity with the earlier
+# artifact.
+#
+# Measurement uses the submission defaults: iterations = 15, with one refit at
+# 30 when the first fit does not converge; the attempt count is recorded.
 #
 # Saving the raw evidence is the point. Re-scoring a different acceptance rule,
 # threshold, or shape label then costs seconds of arithmetic instead of another
@@ -74,12 +82,22 @@ run_job <- function(job) tryCatch({
   ns <- asNamespace("cssem")
   generated <- do.call(ns$.structural_validation_data, ns$.structural_data_args(job$setting, job$seed))
   started <- proc.time()[["elapsed"]]
-  fitted <- ns$.validation_fit(generated$model, generated$data, job$seed, 3L, 8L, 16L, FALSE)
+  fitted <- ns$.validation_fit(generated$model, generated$data, job$seed, 3L, 15L, 30L, FALSE)
   scores <- fitted$fit$locked_scores
   association <- associate(fitted$fit, generated$structure, structural_repeats = 5L,
     seed = job$seed, shadow_scope = "temporal")
   metrics <- association$candidate_metrics
   focal <- metrics[metrics$outcome == "Quality" & metrics$predictor == "Trust" & metrics$selected, , drop = FALSE]
+
+  # Matched benchmark: the same selector on the true latent states.
+  truth <- generated$truth[names(scores)]
+  latent_fit <- ns$.make_pseudo_fit(truth, fitted$fit$folds,
+    reliability = stats::setNames(rep(1, ncol(truth)), names(truth)))
+  latent_association <- associate(latent_fit, generated$structure, structural_repeats = 5L,
+    seed = job$seed, shadow_scope = "temporal")
+  latent_metrics <- latent_association$candidate_metrics
+  latent_focal <- latent_metrics[latent_metrics$outcome == "Quality" & latent_metrics$predictor == "Trust" &
+    latent_metrics$selected, , drop = FALSE]
 
   # Raw evidence for offline re-scoring of any future rule.
   fold_sets <- ns$.structural_fold_sets(fitted$fit$folds, 5L, job$seed)
@@ -99,7 +117,8 @@ run_job <- function(job) tryCatch({
     selection_frequency = focal$selection_frequency[[1L]],
     reliability_trust = unname(fitted$fit$reliability[["Trust"]]),
     reliability_quality = unname(fitted$fit$reliability[["Quality"]]),
-    measurement_converged = fitted$converged,
+    measurement_converged = fitted$converged, fit_attempts = fitted$attempts,
+    latent_selected_shape = latent_focal$shape[[1L]], latent_nonlinearity_p = latent_focal$nonlinearity_p[[1L]],
     # Per-fold losses flattened one column per candidate-by-fold, plus the
     # classical spline test on scores and on the true latent states (the
     # detection ceiling measurement error leaves behind).
