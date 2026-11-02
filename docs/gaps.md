@@ -721,7 +721,7 @@ global likelihood from block losses.
 **Task 4 — design and implement a deliberately narrow constraint contract.**
 
 * Before changing fitting behavior, add
-  `docs/superpowers/specs/2026-09-22-g10-constraints-design.md` that fixes the
+  the G10 constraints design note (kept outside the public repository) that fixes the
   estimand and optimizer: initial
   constraints apply only to selected linear structural coefficients on the
   locked-score scale, use deterministic pooled constrained least squares, and

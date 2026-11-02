@@ -35,7 +35,7 @@ construct without inferring scales from observed values. Item keys reverse an
 indicator's direction before estimation. Cross-fitted construct scores are
 standardized by default. A `manifest()` covariate bypasses the item encoder and
 is standardized by default; use `standardize = FALSE` to retain its observed
-units. See the [workflow vignette](vignettes/cssem-workflow.Rmd) for a complete
+units. See the [workflow vignette](vignettes/cssem_tutorial.Rmd) for a complete
 example including missingness, outer validation, prediction, and a carefully
 qualified optional causal estimand. For a graph-audited causal estimate,
 `causal_design()` records causal versus associational edges and assumption
