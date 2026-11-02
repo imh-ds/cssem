@@ -1,5 +1,7 @@
 # CS-SEM
 
+New here? Start with the [tutorial](docs/tutorial.md), a walk-through from raw survey data to a reported analysis.
+
 CS-SEM v0.5.0 is a research package for cross-fitted construct-state
 measurement and a theory-declared structural layer. It estimates
 one-dimensional manifestation constructs from ordinal, continuous, or mixed

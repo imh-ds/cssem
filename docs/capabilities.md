@@ -30,6 +30,6 @@ installed release artifact. Treat it as a report about registered scenarios
 and metrics, not a universal sample-size formula, a power analysis, or a
 guarantee for a new study.
 
-For the worked analysis, see the [workflow vignette](../vignettes/cssem-workflow.Rmd).
+For the worked analysis, see the [workflow vignette](../vignettes/cssem_tutorial.Rmd).
 For the scope and transformations, see the [method specification](method-spec.md)
 and [associational-structure guide](associational-structure.md).

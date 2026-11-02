@@ -887,7 +887,7 @@ construct; `cssem_provenance()` records calls, resolved settings, software,
 schema/split accounting, and parent links without embedding observations; and
 `fit_states(..., retain_data = FALSE)` supports score-only workflows without
 retaining raw training frames. The deterministic
-[workflow vignette](../vignettes/cssem-workflow.Rmd) renders the measurement,
+[workflow vignette](../vignettes/cssem_tutorial.Rmd) renders the measurement,
 missingness, association, contrast, prediction, outer-validation, provenance,
 and optional causal-estimand path. `supported_envelope()` reads the installed
 release artifact, and [capabilities.md](capabilities.md) links statuses to

@@ -73,4 +73,4 @@ table](capabilities.md) for each status, artifact, and limitation.
 
 For current usage see the [README](../README.md), [method specification](method-spec.md),
 [associational structural guide](associational-structure.md), and [workflow
-vignette](../vignettes/cssem-workflow.Rmd).
+vignette](../vignettes/cssem_tutorial.Rmd).

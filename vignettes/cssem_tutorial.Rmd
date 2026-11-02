@@ -1,8 +1,8 @@
 ---
-title: "A CS-SEM analysis workflow"
+title: "A CS-SEM tutorial: from raw survey data to a reported analysis"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{A CS-SEM analysis workflow}
+  %\VignetteIndexEntry{A CS-SEM tutorial: from raw survey data to a reported analysis}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
