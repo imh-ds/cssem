@@ -7,8 +7,6 @@
 ^local_r_lib$
 ^\.Rproj\.user$
 ^.*\.Rproj$
-^ideation\.md$
-^manuscript$
 ^docs$
 ^tests/internal$
 ^CONTRIBUTING\.md$
@@ -17,3 +15,14 @@
 ^tools$
 ^\.claude$
 ^LICENSE$
+^AGENTS\.md$
+^CLAUDE\.md$
+^outline$
+^paper$
+^_ARCHIVE$
+^wip$
+^manuscript$
+^ideation\.md$
+^profiling$
+^\.superpowers$
+^\.worktrees$

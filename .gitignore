@@ -35,13 +35,3 @@ profiling/
 Thumbs.db
 .vscode/
 .idea/
-
-# Local agent/runtime state
-.agents/
-.codex/
-.superpowers/
-.worktrees/
-
-# Additional files
-ideation.md
-manuscript/
