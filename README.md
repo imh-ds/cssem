@@ -79,3 +79,15 @@ See the [capabilities and evidence table](docs/capabilities.md),
 [associational structural guide](docs/associational-structure.md), and
 [migration table](docs/migration.md). Release scenarios and outputs are under
 [`tests/internal/validation_results/`](tests/internal/validation_results/).
+
+## Repository layout
+
+| Folder | Contents |
+|---|---|
+| `R/`, `man/`, `NAMESPACE`, `DESCRIPTION` | The R package source and documentation. |
+| `tests/` | Unit tests (`testthat/`) and validation walkthroughs with sample data (`internal/`). |
+| `vignettes/` | Workflow and study-planning vignettes. |
+| `inst/` | Shipped data (`extdata/`) and the simulation and validation scripts that the CI workflows call (`scripts/`). |
+| `tools/` | Developer scripts for documentation, testing and validation. |
+| `docs/` | Capabilities, method specification, validation records and migration tables. |
+| `.github/workflows/` | Continuous integration and the simulation and validation workflows. |

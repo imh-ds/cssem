@@ -26,3 +26,4 @@
 ^profiling$
 ^\.superpowers$
 ^\.worktrees$
+^CITATION\.cff$
